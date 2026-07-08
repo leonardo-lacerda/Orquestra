@@ -19,7 +19,11 @@ import * as path from "node:path"
 const CROWN_MARKER = ".orquestra/crown.json"
 const COMMANDS_DIR = ".orquestra-commands"
 
-/** Simple heuristic: does this task look like it has multiple sub-tasks? */
+/** Simple heuristic: does this task look like it has multiple sub-tasks?
+ *  Uses only high-confidence patterns to avoid false positives.
+ *  - Multiple distinct task verbs = likely multiple tasks
+ *  - Numbered/bulleted lists = explicit subtask breakdown
+ */
 function hasMultipleTasks(text: string): boolean {
   const lower = text.toLowerCase().trim()
 
@@ -41,32 +45,11 @@ function hasMultipleTasks(text: string): boolean {
     }
   }
 
-  // Pattern 2: Coordinating conjunctions
-  const coordinatingConjunctions = /\b(e\s+(tamb[ée]m|um|uma|outro|outra)|and\s+(also|a|an|one)|tamb[ée]m\b|also\b|plus\b|al[ée]m\s+(disso|de)|outro\b)/i.test(lower)
-
-  // Pattern 3: Numbered lists or markdown bullets
+  // Pattern 2: Numbered lists or markdown bullets (high confidence)
   const hasNumberedList = /^\s*\d+[.)\]]|^\s*[-*]\s+|^(?:primeira?|segunda?|terceira?|first|second|third)\b/im.test(lower)
 
-  // Pattern 4: Explicit quantity ("3 things", "several files")
-  const hasQuantity = /\b(\d+|v[áa]rios|several|multiple|some)\s*(?:coisas?|things?|tarefas?|tasks?|arquivos?|files?|partes?|parts?)\b/i.test(lower)
-
-  // Pattern 5: File list ("index.html and style.css")
-  const filePattern = /\b\w+\.\w{2,4}\s+(and|e|,)\s+\w+\.\w{2,4}/i.test(lower)
-
-  // Pattern 6: Compound AND between distinct task clauses
-  const andBetweenClauses = /\b(e|and)\b.*\b(e|and)\b/i.test(lower) && /\b(criar|fazer|crie|faça|create|make|build)\b.*\b(e|and)\b/i.test(lower)
-
-  // Pattern 7: Plural nouns suggesting multiple items
-  const hasPluralNouns = /\b(arquivos|files|páginas?|pages?|telas?|screens?|scripts?|modulos?|modules?)\b/i.test(lower)
-
-  const score = (verbCount >= 2 ? 1 : 0) +
-    (coordinatingConjunctions ? 1 : 0) +
-    (hasNumberedList ? 2 : 0) +
-    (hasQuantity ? 2 : 0) +
-    (filePattern ? 2 : 0) +
-    (andBetweenClauses ? 1 : 0)
-
-  return score >= 2 || (verbCount >= 1 && coordinatingConjunctions) || hasPluralNouns
+  // >= 2 distinct task verbs, or 1 verb + an explicit numbered list
+  return verbCount >= 2 || (verbCount >= 1 && hasNumberedList)
 }
 
 /** Send a command to the orchestrator via .orquestra-commands/ */

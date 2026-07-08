@@ -264,6 +264,7 @@ import {
   MAESTRO_LIST,
   MAESTRO_REASSIGN,
   ORQUESTRA_TRACK_WORKER,
+  WORKER_HAS_OUTPUT,
   APP_AUTH_RESTORE,
   APP_AUTH_SIGN_IN,
   APP_AUTH_SIGN_OUT,
@@ -352,6 +353,7 @@ const invokeForwarders = {
   terminalClipboardWrite: makeInvoker<'terminalClipboardWrite'>(TERMINAL_CLIPBOARD_WRITE),
   terminalSetMaestro: makeInvoker<"terminalSetMaestro">(TERMINAL_SET_MAESTRO),
   orquestraTrackWorker: makeInvoker<"orquestraTrackWorker">(ORQUESTRA_TRACK_WORKER),
+  workerHasOutput: makeInvoker<"workerHasOutput">(WORKER_HAS_OUTPUT),
   terminalPipeCreate: makeInvoker<'terminalPipeCreate'>(TERMINAL_PIPE_CREATE),
   terminalPipeDestroy: makeInvoker<'terminalPipeDestroy'>(TERMINAL_PIPE_DESTROY),
 

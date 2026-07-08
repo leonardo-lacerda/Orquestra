@@ -427,6 +427,10 @@ export const MAESTRO_LIST = 'maestro:list'                   // main -> renderer
 export const ORQUESTRA_TRACK_WORKER = "orquestra:trackWorker"  // renderer -> main
 export const MAESTRO_REASSIGN = 'maestro:reassign'           // main -> renderer
 
+// Worker readiness check — return true if the worker terminal has produced
+// output (i.e. the agent inside it has started booting).
+export const WORKER_HAS_OUTPUT = 'orquestra:workerHasOutput' // renderer -> main
+
 // App-level auth (Supabase login for the desktop app itself)
 export const APP_AUTH_RESTORE = 'app-auth:restore'           // renderer -> main (try restore session)
 export const APP_AUTH_SIGN_IN = 'app-auth:signIn'            // renderer -> main

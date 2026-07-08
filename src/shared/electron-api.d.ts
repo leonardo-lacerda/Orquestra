@@ -1111,6 +1111,9 @@ export interface ElectronAPI {
   onMaestroList(callback: (maestroId: string, args: Record<string, never>) => void): () => void
   onMaestroReassign(callback: (maestroId: string, args: { target: string; role: string }) => void): () => void
 
+  /** Check if a worker terminal has produced any output (agent started). */
+  workerHasOutput(workerPtyId: string): Promise<boolean>
+
   // ---------------------------------------------------------------------------
   // App Auth — Supabase login for the desktop app
   // ---------------------------------------------------------------------------

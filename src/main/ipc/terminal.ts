@@ -36,6 +36,7 @@ import {
   MAESTRO_LIST,
   MAESTRO_REASSIGN,
   ORQUESTRA_TRACK_WORKER,
+  WORKER_HAS_OUTPUT,
 } from '../../shared/ipc-channels'
 import { getOrCreateLogger, removeLogger, flushAll as flushAllLoggers, disposeAll as disposeAllLoggers } from './terminalLogger'
 import log from '../logger'
@@ -65,60 +66,123 @@ const terminalPipes: Map<string, Set<string>> = new Map()
 // =============================================================================
 
 const orquestraTerminals = new Set<string>()
-let commandsWatcher: fs.FSWatcher | null = null
+let commandsPollTimer: NodeJS.Timeout | null = null
 
 export function setOrquestraTerminal(terminalId: string, enabled: boolean): void {
-  if (enabled) { orquestraTerminals.add(terminalId) } else { orquestraTerminals.delete(terminalId) }
+  if (enabled) {
+    orquestraTerminals.add(terminalId)
+  } else {
+    orquestraTerminals.delete(terminalId)
+    // Cascading cleanup: close all workers that belong to this orquestrador
+    closeWorkersForOrchestrator(terminalId)
+  }
 }
+
+/** Close all workers tracked under the given orquestrador PTY ID. */
+function closeWorkersForOrchestrator(orchestratorId: string): void {
+  for (const [workerId, tracking] of workerTracking) {
+    if (tracking.orchestratorId === orchestratorId) {
+      const runtime = getRuntimeForTerminal(workerId)
+      if (runtime) {
+        try { runtime.process.kill?.(workerId) } catch { /* already dead */ }
+      }
+      workerTracking.delete(workerId)
+      log.info('[orquestra] cascaded cleanup: worker %s (%s) closed', workerId, tracking.name)
+    }
+  }
+}
+
+// Periodic heartbeat: detect dead workers that weren't properly cleaned up.
+// Uses scanActivity (POSIX ps). On Windows scanActivity returns {} so the
+// heartbeat only fires where the host OS supports process scanning.
+setInterval(async () => {
+  const tracked = Array.from(workerTracking.entries())
+  if (tracked.length === 0) return
+
+  const runtime = getRuntimeForTerminal(tracked[0][0])
+  if (!runtime) return
+
+  const ids = tracked.map(([id]) => id)
+  const activity = await runtime.process.scanActivity(ids).catch(() => null)
+  if (!activity || Object.keys(activity).length === 0) return // no data (Windows or unsupported)
+
+  for (const [workerId, tracking] of tracked) {
+    if (!(workerId in activity)) {
+      log.warn('[orquestra] heartbeat: worker %s (%s) is dead, cleaning up', workerId, tracking.name)
+      onWorkerExit(workerId)
+    }
+  }
+}, 60_000)
 
 export function getOrquestraCliDir(): string {
   const appPath = app.getAppPath()
   return path.join(appPath, 'scripts', 'maestro')
 }
 
+const COMMANDS_POLL_MS = 500
+const PROCESSED_CLEANUP_MS = 5 * 60 * 1000 // clear dedup set every 5 min
+
 export function startOrquestraWatcher(workspacePath: string, ownerWindowId: number): void {
   const commandsDir = path.join(workspacePath, '.orquestra-commands')
   if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
   log.info('[orquestra] watching %s for commands', commandsDir)
 
-  // Use fs.watch (built-in, no external deps)
-  const watcher = fs.watch(commandsDir, { persistent: true }, (eventType: string, filename: string | null) => {
-    if (!filename || !filename.endsWith('.json')) return
-    const filePath = path.join(commandsDir, filename)
-    if (!fs.existsSync(filePath)) return
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8')
-      const payload = JSON.parse(content)
-      log.info('[orquestra] command detected: %s %o', filename, payload)
-      const { cmd, args } = payload
-      switch (cmd) {
-        case 'recruit':
-          sendToWindow(ownerWindowId, MAESTRO_RECRUIT, 'maestro', args)
-          break
-        case 'dismiss':
-          sendToWindow(ownerWindowId, MAESTRO_DISMISS, 'maestro', args)
-          break
-        case 'connect':
-          sendToWindow(ownerWindowId, MAESTRO_CONNECT, 'maestro', args)
-          break
-        case 'list':
-          sendToWindow(ownerWindowId, MAESTRO_LIST, 'maestro', args)
-          break
-        case 'reassign':
-          sendToWindow(ownerWindowId, MAESTRO_REASSIGN, 'maestro', args)
-          break
-      }
-      log.info('[orquestra] dispatched %s to window %d', cmd, ownerWindowId)
-      fs.unlinkSync(filePath)
-    } catch (err) { log.error('[orquestra] error processing %s: %s', filename, err) }
-  })
-  commandsWatcher = watcher
+  // Clean up stale commands from previous crashes
+  try {
+    const stale = fs.readdirSync(commandsDir).filter(f => f.endsWith('.json'))
+    for (const f of stale) {
+      fs.unlinkSync(path.join(commandsDir, f))
+    }
+    if (stale.length > 0) log.info('[orquestra] cleaned %d stale command(s)', stale.length)
+  } catch { /* dir may not exist yet */ }
+
+  // Polling is more reliable than fs.watch — avoids duplicate events (Windows)
+  // and missed events (macOS). Dedup via Set of filenames prevents processing
+  // the same file twice.
+  const processedFiles = new Set<string>()
+
+  const poll = (): void => {
+    let files: string[]
+    try { files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.json')) }
+    catch { return }
+
+    for (const filename of files) {
+      if (processedFiles.has(filename)) continue
+      processedFiles.add(filename)
+
+      const filePath = path.join(commandsDir, filename)
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const payload = JSON.parse(content)
+        log.info('[orquestra] command: %s %o', filename, payload)
+        const { cmd, args } = payload
+        switch (cmd) {
+          case 'recruit':  sendToWindow(ownerWindowId, MAESTRO_RECRUIT, 'maestro', args); break
+          case 'dismiss':  sendToWindow(ownerWindowId, MAESTRO_DISMISS, 'maestro', args); break
+          case 'connect':  sendToWindow(ownerWindowId, MAESTRO_CONNECT, 'maestro', args); break
+          case 'list':     sendToWindow(ownerWindowId, MAESTRO_LIST, 'maestro', args); break
+          case 'reassign': sendToWindow(ownerWindowId, MAESTRO_REASSIGN, 'maestro', args); break
+        }
+        log.info('[orquestra] dispatched %s', cmd)
+        fs.unlinkSync(filePath)
+      } catch (err) { log.error('[orquestra] error processing %s: %s', filename, err) }
+    }
+  }
+
+  commandsPollTimer = setInterval(poll, COMMANDS_POLL_MS)
+
+  // Periodically evict old entries from the dedup set to avoid memory leak
+  const cleanupTimer = setInterval(() => processedFiles.clear(), PROCESSED_CLEANUP_MS)
+  // Store the cleanup timer so it can be cleared on stop
+  ;(commandsPollTimer as unknown as Record<string, unknown>)._cleanupTimer = cleanupTimer
 }
 
 export function stopOrquestraWatcher(): void {
-  if (commandsWatcher) {
-    commandsWatcher.close()
-    commandsWatcher = null
+  if (commandsPollTimer) {
+    clearInterval(commandsPollTimer)
+    const cleanup = (commandsPollTimer as unknown as Record<string, unknown>)._cleanupTimer
+    if (cleanup) clearInterval(cleanup as NodeJS.Timeout)
+    commandsPollTimer = null
   }
 }
 
@@ -150,6 +214,7 @@ const workerTracking: Map<string, {
 
 const WORKER_OUTPUT_LIMIT = 100  // keep last 100 lines
 const WORKER_IDLE_TIMEOUT = 30000 // 30 seconds
+const RESPONSE_QUEUE_MAX = 100   // max pending responses per orchestrator
 const ORQUESTRA_RESULTS_DIR = '.orquestra-results'
 
 /** Write a worker result JSON file so the orquestra.js CLI's `wait` command
@@ -262,7 +327,11 @@ function enqueueResponse(orchestratorId: string, response: WorkerResponse): void
   if (!responseQueues.has(orchestratorId)) {
     responseQueues.set(orchestratorId, [])
   }
-  responseQueues.get(orchestratorId)!.push(response)
+  const queue = responseQueues.get(orchestratorId)!
+  if (queue.length >= RESPONSE_QUEUE_MAX) {
+    queue.shift() // drop oldest to prevent unbounded growth
+  }
+  queue.push(response)
 
   // Try to inject immediately
   processNextResponse(orchestratorId)
@@ -278,7 +347,12 @@ function processNextResponse(orchestratorId: string): void {
   const cr = String.fromCharCode(13)
   const message = '[WORKER\u2192ORQUESTRADOR] Worker "' + response.workerName + '" ' + response.status + ':\n' + response.summary + '\n'
 
-  writeTerminal(orchestratorId, message + cr)
+  // Guard: orchestrator terminal may have been closed since the response was queued
+  try { writeTerminal(orchestratorId, message + cr) }
+  catch (err) {
+    log.warn('[orquestra] orchestrator %s gone, dropping response: %s', orchestratorId, err)
+    return
+  }
   log.info('[orquestra] Injected response from %s into %s', response.workerName, orchestratorId)
 
   // Process next after a delay (don't flood the orchestrator)
@@ -665,6 +739,14 @@ export function registerHandlers(): void {
   // Maestro mode toggle
   ipcMain.handle(ORQUESTRA_TRACK_WORKER, async (_event, workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void> => {
     trackWorker(workerId, orchestratorId, name, role, workspacePath || '')
+  })
+
+  // Worker readiness check — used by useOrquestra to detect when the agent
+  // inside a worker terminal has started producing output (replaces the
+  // hardcoded 8s delay with an adaptive check).
+  ipcMain.handle(WORKER_HAS_OUTPUT, async (_event, workerPtyId: string): Promise<boolean> => {
+    const w = workerTracking.get(workerPtyId)
+    return w !== undefined && w.outputBuffer.length > 0
   })
 
   ipcMain.handle(TERMINAL_SET_MAESTRO, async (_event, terminalId: string, enabled: boolean, workspacePath?: string): Promise<void> => {

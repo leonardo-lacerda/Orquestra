@@ -9,9 +9,34 @@ import { terminalRegistry } from '../lib/terminal/terminalRegistry'
 import { findCanvasNodeForPanel } from '../stores/canvasStore'
 import type { PanelType, Point } from '../../shared/types'
 
+const MAX_AGENT_RETRIES = 20 // 10s max waiting for terminal pty
+const AGENT_POLL_MS = 500
+const MAX_ROLE_WAIT = 15 // 15s max waiting for agent to produce output
+const ROLE_POLL_MS = 1000
+
 function resolveAgentPanelType(agent?: string): PanelType {
   if (agent?.toLowerCase().includes('agent') || agent?.toLowerCase().includes('claude')) return 'agent'
   return 'terminal'
+}
+
+/** Calculate a position for a new worker, offset from the orquestrador node.
+ *  Workers are placed to the right of the orquestrador in a 2-column grid. */
+function workerPosition(maestroId: string, recruitCountRef: React.MutableRefObject<Map<string, number>>, maestroPanelId: string): Point {
+  const count = recruitCountRef.current.get(maestroId) || 0
+  const col = count % 2
+  const row = Math.floor(count / 2)
+
+  // Try to find the orquestrador's canvas position for a smarter offset
+  const orquestrador = findCanvasNodeForPanel(maestroPanelId)
+  if (orquestrador) {
+    const node = orquestrador.store.getState().nodes[orquestrador.nodeId]
+    if (node) {
+      return { x: node.origin.x + 600 + col * 500, y: node.origin.y + row * 350 }
+    }
+  }
+
+  // Fallback: absolute grid
+  return { x: 600 + col * 500, y: 100 + row * 350 }
 }
 
 export function useOrquestra(): void {
@@ -22,7 +47,7 @@ export function useOrquestra(): void {
 
     const unsubs = [
       // --- Recruit ---
-      window.electronAPI.onMaestroRecruit((maestroId, args) => {
+      window.electronAPI.onMaestroRecruit(async (maestroId, args) => {
         const store = useAppStore.getState()
         const ws = store.workspaces[0]
         if (!ws) return
@@ -31,9 +56,10 @@ export function useOrquestra(): void {
         const name = args.name || args.role || 'Worker'
         const agentCmd = args.agent && args.agent !== 'auto' ? args.agent : 'verboo'
 
+        const orchestratorPanelId = terminalRegistry.panelIdForPty(maestroId)
         const count = recruitCountRef.current.get(maestroId) || 0
         recruitCountRef.current.set(maestroId, count + 1)
-        const position: Point = { x: 0, y: 420 * (count + 1) }
+        const position = workerPosition(maestroId, recruitCountRef, orchestratorPanelId || '')
 
         let panelId: string | null = null
         if (panelType === 'agent') {
@@ -47,7 +73,6 @@ export function useOrquestra(): void {
           console.log('[orquestra] Recruited ' + name + ' (' + panelType + '): ' + panelId)
 
           // Add visual orchestration arrow: maestroId (orquestrador PTY) → worker
-          const orchestratorPanelId = terminalRegistry.panelIdForPty(maestroId)
           if (orchestratorPanelId) {
             const orquestrador = findCanvasNodeForPanel(orchestratorPanelId)
             const worker = findCanvasNodeForPanel(panelId)
@@ -63,12 +88,15 @@ export function useOrquestra(): void {
             }
           }
 
-          // Wait for terminal to initialize, then start agent and send role
-          const startAgent = () => {
+          // Wait for terminal to initialize (with max retries)
+          const startAgent = (retries = 0) => {
+            if (retries > MAX_AGENT_RETRIES) {
+              console.error('[orquestra] Failed to start agent: max retries exceeded')
+              return
+            }
             const ptyId = terminalRegistry.ptyIdForPanel(panelId!)
             if (!ptyId) {
-              // Terminal not ready yet, retry in 500ms
-              setTimeout(startAgent, 500)
+              setTimeout(() => startAgent(retries + 1), AGENT_POLL_MS)
               return
             }
             console.log('[orquestra] Terminal ready: ' + name + ' (ptyId: ' + ptyId + ')')
@@ -84,19 +112,31 @@ export function useOrquestra(): void {
             window.electronAPI?.orquestraTrackWorker?.(ptyId, maestroId, name, args.role || '', ws.rootPath || '')
             console.log('[orquestra] Tracking ' + name + ' → ' + maestroId)
 
-            // Send role as prompt after agent initializes (with origin marker)
-            if (args.role) {
-              console.log('[orquestra] Will send role to ' + name + ' in 8s')
-              setTimeout(() => {
-                const cr = String.fromCharCode(13)
-                const markedRole = '[ORQUESTRADOR\u2192WORKER] ' + args.role
-                window.electronAPI?.terminalWrite?.(ptyId, markedRole + cr)
-                console.log('[orquestra] Sent role to ' + name + ': ' + markedRole.slice(0, 60))
-              }, 8000)
+            // Wait for agent to produce output, then send role
+            // Replaces the old hardcoded 8s with an adaptive check.
+            const sendRole = (attempts = 0) => {
+              if (attempts > MAX_ROLE_WAIT) {
+                console.log('[orquestra] Timeout waiting for ' + name + ' output, sending role anyway')
+                // fallback: send role even if no output detected
+              }
+              if (args.role) {
+                window.electronAPI?.workerHasOutput?.(ptyId).then((hasOutput) => {
+                  if (hasOutput || attempts >= MAX_ROLE_WAIT) {
+                    const cr = String.fromCharCode(13)
+                    const markedRole = '[ORQUESTRADOR\u2192WORKER] ' + args.role
+                    window.electronAPI?.terminalWrite?.(ptyId, markedRole + cr)
+                    console.log('[orquestra] Sent role to ' + name + ' after ~' + (attempts * ROLE_POLL_MS / 1000) + 's')
+                  } else {
+                    setTimeout(() => sendRole(attempts + 1), ROLE_POLL_MS)
+                  }
+                })
+              }
             }
+            // Start checking after 2s (minimum agent boot time)
+            setTimeout(() => sendRole(0), 2000)
           }
           // Start polling after 1s
-          setTimeout(startAgent, 1000)
+          setTimeout(() => startAgent(0), 1000)
         }
       }),
 
@@ -139,11 +179,13 @@ export function useOrquestra(): void {
         const store = useAppStore.getState()
         const ws = store.workspaces[0]
         if (!ws) return
-        const terminals = Object.values(ws.panels)
-          .filter((p) => p.type === 'terminal' || p.type === 'agent')
+        // TODO: ideally filter to only tracked workers via IPC, but for now
+        // show all terminals + agents (excluding the maestro terminal itself)
+        const all = Object.values(ws.panels)
+          .filter((p) => (p.type === 'terminal' || p.type === 'agent') && p.id !== terminalRegistry.panelIdForPty(_maestroId))
           .map((p) => p.title + ' (' + p.type + ') [' + p.id + ']')
           .join('\n')
-        console.log('[orquestra] Terminals:\n' + terminals)
+        console.log('[orquestra] Workers:\n' + (all || '(none)'))
       }),
 
       // --- Reassign ---
