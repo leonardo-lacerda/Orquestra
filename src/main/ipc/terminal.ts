@@ -183,9 +183,9 @@ export function trackWorker(workerId: string, orchestratorId: string, name: stri
     orchestratorId,
     name,
     role,
-    outputBuffer: [],
+    outputBuffer: [] as string[],
     lastActivity: Date.now(),
-    idleTimer: null,
+    idleTimer: null as NodeJS.Timeout | null,
   })
   log.info('[orquestra] Tracking worker %s → orchestrator %s', workerId, orchestratorId)
 }
@@ -674,7 +674,7 @@ export function registerHandlers(): void {
     // and maestro mode is effectively broken.
     if (enabled && !workspacePath) {
       try {
-        const runtime = terminalRuntime.get(terminalId)
+        const runtime = getRuntimeForTerminal(terminalId)
         if (runtime) {
           const cwd = await runtime.process.getCwd(terminalId)
           if (cwd) workspacePath = cwd

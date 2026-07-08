@@ -53,7 +53,7 @@ export function useOrquestra(): void {
             const worker = findCanvasNodeForPanel(panelId)
             if (orquestrador && worker) {
               requestAnimationFrame(() => {
-                orquestrador.store.getState().addConnection(
+                (orquestrador.store.getState() as Record<string, unknown>).addConnection?.(
                   orquestrador.nodeId,
                   worker.nodeId,
                   'orchestration',
