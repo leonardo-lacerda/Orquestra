@@ -185,7 +185,8 @@ export function trackWorker(workerId: string, orchestratorId: string, name: stri
     role,
     outputBuffer: [] as string[],
     lastActivity: Date.now(),
-    idleTimer: null as NodeJS.Timeout | null,
+    idleTimer: null as ReturnType<typeof setTimeout> | null,
+    workspacePath,
   })
   log.info('[orquestra] Tracking worker %s → orchestrator %s', workerId, orchestratorId)
 }
