@@ -16,6 +16,7 @@ import {
   DockZoneDropIndicator,
   DragOverlay,
 } from '../drag'
+import WindowChrome from './WindowChrome'
 
 interface MainWindowShellProps {
   renderPanel: (panelId: string) => React.ReactNode
@@ -209,6 +210,7 @@ export default function MainWindowShell({
           ) : null,
         )}
       <DragOverlay />
+      <WindowChrome />
     </div>
   )
 }
