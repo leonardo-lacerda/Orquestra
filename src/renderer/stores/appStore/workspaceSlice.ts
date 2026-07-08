@@ -174,7 +174,7 @@ export function createWorkspaceSlice(set: AppSet, get: AppGet): WorkspaceSliceAc
       } else if (Object.keys(get().workspaces.find((w) => w.id === id)?.panels ?? {}).length === 0) {
         // Opening a never-activated workspace that has a rootPath — the
         // close-then-reopen path (onOpenPath addWorkspace(name, rootPath) → select).
-        // Load its saved .cate/ layout. Runs after the runtime reconnect above so
+        // Load its saved .orquestra/ layout. Runs after the runtime reconnect above so
         // a remote read can't race an unregistered runtime. The zero-panel gate
         // keeps a plain switch-back from reloading a workspace cleared via Close
         // Panels. Guarded + idempotent inside the helper.

@@ -8,7 +8,7 @@
 // and unregisters on unmount.
 //
 // Note: refs (the @e1/@e2 mapping returned by `portal snapshot`) live in main
-// rather than here — main injects `data-cate-ref` attributes onto the DOM
+// rather than here — main injects `data-orquestra-ref` attributes onto the DOM
 // during the snapshot and looks them up directly via executeJavaScript() on
 // subsequent commands.
 // =============================================================================

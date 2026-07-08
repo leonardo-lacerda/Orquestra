@@ -47,7 +47,7 @@ import {
 } from './updateState'
 
 const GITHUB_OWNER = '0-AI-UG'
-const GITHUB_REPO = 'cate'
+const GITHUB_REPO = 'orquestra'
 const RELEASES_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 
@@ -87,7 +87,7 @@ let checkStartedTracked = false
 let availableVersion: string | null = null
 
 /** Whether to persist + evaluate the install-loop record. Only meaningful for a
- *  real packaged install — the dev harness (CATE_DEV_UPDATE) serves a dummy feed
+ *  real packaged install — the dev harness (ORQUESTRA_DEV_UPDATE) serves a dummy feed
  *  that can't actually install, so recording its "pending v99.0.0" would wrongly
  *  nag on the next normal `npm run dev`. */
 let persistInstallState = false
@@ -142,10 +142,10 @@ async function promptManualReinstall(version: string, opts: { offerMove: boolean
     ? ['Download latest', 'Move to Applications', 'Later']
     : ['Download latest', 'Later']
   const detail = opts.offerMove
-    ? 'Cate is running from outside the Applications folder, so it can’t update itself ' +
-      '(macOS blocks self-updates there). Download the latest build, or move Cate into ' +
+    ? 'Orquestra is running from outside the Applications folder, so it can’t update itself ' +
+      '(macOS blocks self-updates there). Download the latest build, or move Orquestra into ' +
       'Applications to enable automatic updates. Your settings and sessions are preserved.'
-    : 'Cate couldn’t finish installing the update automatically. Download and install the ' +
+    : 'Orquestra couldn’t finish installing the update automatically. Download and install the ' +
       'latest build to get the newest version. Your settings and sessions are preserved.'
 
   let response = buttons.length - 1
@@ -315,10 +315,10 @@ function evaluateInstallOutcome(): void {
 
 export function initAutoUpdater(): void {
   // Dev gate. Normally the updater only runs in a packaged build. The dev
-  // harness (CATE_DEV_UPDATE=1, see scripts/dev-update.mjs) opts in so a
+  // harness (ORQUESTRA_DEV_UPDATE=1, see scripts/dev-update.mjs) opts in so a
   // developer can watch the real check → download → downloaded chain against a
   // local feed without cutting a GitHub release.
-  const devUpdate = !app.isPackaged && process.env.CATE_DEV_UPDATE === '1'
+  const devUpdate = !app.isPackaged && process.env.ORQUESTRA_DEV_UPDATE === '1'
   // Register the modal IPC before the gate so renderer invoke() never rejects.
   registerUpdateIpc()
   if (!app.isPackaged && !devUpdate) return

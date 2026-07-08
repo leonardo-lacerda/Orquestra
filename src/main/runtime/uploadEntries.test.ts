@@ -29,8 +29,8 @@ let srcDir = ''
 let destDir = ''
 
 beforeEach(async () => {
-  srcDir = await mkdtemp(path.join(os.tmpdir(), 'cate-upload-src-'))
-  destDir = await mkdtemp(path.join(os.tmpdir(), 'cate-upload-dest-'))
+  srcDir = await mkdtemp(path.join(os.tmpdir(), 'orquestra-upload-src-'))
+  destDir = await mkdtemp(path.join(os.tmpdir(), 'orquestra-upload-dest-'))
 })
 
 afterEach(async () => {
@@ -109,7 +109,7 @@ describe('uploadEntriesToRuntime', () => {
     expect(await readFile(y)).toEqual(Buffer.from('y-contents'))
   })
 
-  test('a top-level symlink resolves via realpath and uploads its target', async () => {
+  test.skipIf(process.platform === 'win32')('a top-level symlink resolves via realpath and uploads its target', async () => {
     // realpath is applied to the dragged path FIRST, so a top-level symlink is
     // followed to its target and DOES get uploaded (under the target's name).
     const real = path.join(srcDir, 'real.txt')
@@ -126,7 +126,7 @@ describe('uploadEntriesToRuntime', () => {
     expect(await readFile(result.created[0])).toEqual(Buffer.from('real-bytes'))
   })
 
-  test('inner symlinks inside an uploaded directory are skipped', async () => {
+  test.skipIf(process.platform === 'win32')('inner symlinks inside an uploaded directory are skipped', async () => {
     const d = path.join(srcDir, 'd')
     await mkdir(d, { recursive: true })
     await writeFile(path.join(d, 'f.txt'), Buffer.from('f-bytes'))

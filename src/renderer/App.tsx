@@ -16,6 +16,7 @@ import { useUIStateStore } from './stores/uiStateStore'
 import { useBrowserStore } from './stores/browserStore'
 import { workspaceDisplayName } from './lib/fs/displayPath'
 import { useFileDropTracker, FileDropOverlay } from './drag/fileDropTarget'
+import { useOrquestra } from "./hooks/useOrquestra"
 import { useProcessMonitor } from './hooks/useProcessMonitor'
 import { Sidebar, RightSidebar } from './sidebar/Sidebar'
 import { renderPanelComponent, PANEL_REGISTRY } from './panels/registry'
@@ -41,6 +42,7 @@ import { createRemoteDropHandler } from './drag/crossWindow'
 import { hydrateReceivedPanel } from './lib/panelTransfer'
 import { useWindowRuntime } from './lib/hooks/useWindowRuntime'
 import { closePanelWithConfirm } from './lib/closePanelWithConfirm'
+import { AuthGate } from './auth/AuthGate'
 import pkg from '../../package.json'
 
 // -----------------------------------------------------------------------------
@@ -73,19 +75,19 @@ const BOOT_BG = new URLSearchParams(window.location.search).get('bg') ?? undefin
 export default function App() {
   const windowParams = getWindowParams()
 
-  // Dock windows get a full docking shell with splits/tabs
-  if (windowParams.type === 'dock') {
-    return (
-      <WindowTypeContext.Provider value="dock">
-        <DockWindowShell workspaceId={windowParams.workspaceId} />
-      </WindowTypeContext.Provider>
-    )
-  }
-
+  // Auth gate protects all window types — login screen until authorized
   return (
-    <WindowTypeContext.Provider value="main">
-      <MainApp />
-    </WindowTypeContext.Provider>
+    <AuthGate>
+      {windowParams.type === 'dock' ? (
+        <WindowTypeContext.Provider value="dock">
+          <DockWindowShell workspaceId={windowParams.workspaceId} />
+        </WindowTypeContext.Provider>
+      ) : (
+        <WindowTypeContext.Provider value="main">
+          <MainApp />
+        </WindowTypeContext.Provider>
+      )}
+    </AuthGate>
   )
 }
 
@@ -125,14 +127,14 @@ function MainApp() {
   // guard. Every window type mounts this; main-only behavior stays below.
   useWindowRuntime()
 
-  // E2E test harness — exposes window.__cateE2E only when launched by Playwright.
+  // E2E test harness — exposes window.__orquestraE2E only when launched by Playwright.
   useEffect(() => {
     if (window.electronAPI?.isE2E) {
       import('./lib/e2eHarness').then((m) => m.installE2EHarness())
     }
   }, [])
 
-  // Resource profiler — wires up FPS/long-task observers only under CATE_PERF=1.
+  // Resource profiler — wires up FPS/long-task observers only under ORQUESTRA_PERF=1.
   useEffect(() => {
     initPerfClient()
   }, [])
@@ -145,6 +147,7 @@ function MainApp() {
 
   // Main-only: terminal/agent activity → status bar + worktree sync.
   useProcessMonitor(selectedWorkspaceId)
+  useOrquestra()
 
   // Sync the OS window title to the active workspace name. On macOS this is
   // what each native tab in the title bar displays, so the user can tell
@@ -152,13 +155,13 @@ function MainApp() {
   useEffect(() => {
     const name = currentWorkspace?.name?.trim()
     // Treat the default "Workspace" placeholder as no real name, so the title
-    // is just "Cate" until the user actually renames the workspace.
-    const title = name && name !== 'Workspace' ? `${name} · Cate` : 'Cate'
+    // is just "Orquestra" until the user actually renames the workspace.
+    const title = name && name !== 'Workspace' ? `${name} · Orquestra` : 'Orquestra'
     window.electronAPI?.windowSetTitle(title).catch(() => { /* noop */ })
   }, [currentWorkspace?.name])
 
   // When the active workspace's workspace.json is detected to have changed on
-  // disk (edited externally while Cate was running), prompt to reload the
+  // disk (edited externally while Orquestra was running), prompt to reload the
   // canvas. The detector (main's autosave guard) fires once per change via
   // WORKSPACE_EXTERNAL_EDIT.
   useEffect(() => {
@@ -277,7 +280,7 @@ function MainApp() {
   }, [centerLayout, selectedWorkspaceId])
 
   // ---------------------------------------------------------------------------
-  // OS-forwarded folder opens — dock drop / "Open With Cate"
+  // OS-forwarded folder opens — dock drop / "Open With Orquestra"
   // ---------------------------------------------------------------------------
   useEffect(() => {
     return window.electronAPI.onOpenPath(async (filePath) => {

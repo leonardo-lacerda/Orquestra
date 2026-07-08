@@ -1,24 +1,24 @@
 // =============================================================================
 // Cross-agent skills — shared types + the target table.
 //
-// Cate installs skills (the open Agent Skills standard: a `SKILL.md` folder with
+// Orquestra installs skills (the open Agent Skills standard: a `SKILL.md` folder with
 // `name`/`description` frontmatter + optional scripts/references/assets) into
-// several coding agents that share a project. Everything Cate writes lands in the
-// opened workspace (each agent's per-target dir) or in Cate's own userData — never
+// several coding agents that share a project. Everything Orquestra writes lands in the
+// opened workspace (each agent's per-target dir) or in Orquestra's own userData — never
 // in another agent's user-home dir.
 //
 // Two homes for a skill:
-//   - saved:     cached in Cate's userData library (skillStore bytes + a
+//   - saved:     cached in Orquestra's userData library (skillStore bytes + a
 //                saved-skills.json entry). A personal library, in no workspace.
 //   - installed: written into a workspace's per-target dir for one agent,
-//                recorded in <ws>/.cate/skills.json. Always explicit.
+//                recorded in <ws>/.orquestra/skills.json. Always explicit.
 // Saving never touches a workspace; a skill reaches a workspace only when the
 // user installs / adds it there.
 // =============================================================================
 
 export type SkillTargetId =
   | 'claude-code'
-  | 'cate-agent'
+  | 'orquestra-agent'
   | 'pi-native'
   | 'opencode'
   | 'codex'
@@ -59,7 +59,7 @@ export interface SkillSource {
   path?: string
 }
 
-/** An install recorded in a workspace's `.cate/skills.json`. */
+/** An install recorded in a workspace's `.orquestra/skills.json`. */
 export interface InstalledSkill {
   skillId: string
   name: string
@@ -70,7 +70,7 @@ export interface InstalledSkill {
   origin: 'local'
 }
 
-/** A skill saved to the user's Cate library. The canonical bytes live in the
+/** A skill saved to the user's Orquestra library. The canonical bytes live in the
  *  userData skill store keyed by `skillId`; this is the metadata used to list it
  *  and to (re)install it into a workspace without re-fetching. */
 export interface SavedSkill {
@@ -98,7 +98,7 @@ export interface SkillTargetInfo {
  *  install matrix). Workspace-relative base dirs live in `src/skills/main/targets.ts`. */
 export const SKILL_TARGETS: readonly SkillTargetInfo[] = [
   { id: 'claude-code', label: 'Claude Code', layout: 'folder', bundledResources: true, nameMatchesDir: true },
-  { id: 'cate-agent', label: 'Cate Agent', layout: 'folder', bundledResources: true, nameMatchesDir: false },
+  { id: 'orquestra-agent', label: 'Orquestra Agent', layout: 'folder', bundledResources: true, nameMatchesDir: false },
   { id: 'pi-native', label: 'Pi', layout: 'folder', bundledResources: true, nameMatchesDir: false },
   { id: 'opencode', label: 'OpenCode', layout: 'folder', bundledResources: true, nameMatchesDir: false },
   { id: 'codex', label: 'Codex', layout: 'folder', bundledResources: true, nameMatchesDir: false },

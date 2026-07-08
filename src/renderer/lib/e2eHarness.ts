@@ -1,5 +1,5 @@
-// E2E test harness — exposes a tiny inspect/seed API on window.__cateE2E
-// when the app is launched with CATE_E2E=1.
+// E2E test harness — exposes a tiny inspect/seed API on window.__orquestraE2E
+// when the app is launched with ORQUESTRA_E2E=1.
 //
 // Why a harness: drag tests need deterministic seed (1-2 nodes at known
 // positions, known zoom) and assertions against canvas-space state. Driving
@@ -40,7 +40,7 @@ export interface SearchSnapshot {
 
 declare global {
   interface Window {
-    __cateE2E?: {
+    __orquestraE2E?: {
       ready: true
       activeCanvasPanelId(): string | null
       createTerminal(point: Point): string
@@ -116,10 +116,10 @@ declare global {
 }
 
 export function installE2EHarness(): void {
-  if (window.__cateE2E) return
+  if (window.__orquestraE2E) return
 
   // Kill CSS transitions/animations under e2e. The windows are hidden (main's
-  // revealWindow is a no-op under CATE_E2E), and a hidden window throttles the
+  // revealWindow is a no-op under ORQUESTRA_E2E), and a hidden window throttles the
   // compositor — so anything animated over time (node enter/exit, drag opacity,
   // layout) would otherwise leave the timing-sensitive specs reading a
   // mid-animation rect. Making every transition instant keeps geometry/visual
@@ -127,7 +127,7 @@ export function installE2EHarness(): void {
   // its final value at the source — see canvasStore/CanvasNode — since those are
   // rAF/timer driven, not pure CSS.)
   const noAnim = document.createElement('style')
-  noAnim.setAttribute('data-cate-e2e-no-animations', '')
+  noAnim.setAttribute('data-orquestra-e2e-no-animations', '')
   noAnim.textContent =
     '*, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation-duration: 0s !important; animation-delay: 0s !important; }'
   document.head.appendChild(noAnim)
@@ -228,10 +228,10 @@ export function installE2EHarness(): void {
     if (!ws) return []
     // The primary worktree is keyed by the workspace root; synthesize a path if
     // the e2e workspace has none so useWorktrees has a stable join key.
-    const rootPath = ws.rootPath || `/private/tmp/cate-e2e-wt-${wsId}`
+    const rootPath = ws.rootPath || `/private/tmp/orquestra-e2e-wt-${wsId}`
     const metas: WorktreeMeta[] = specs.map((s, i) => ({
       id: `wt-e2e-${i}`,
-      path: i === 0 ? rootPath : `${rootPath}/.cate-wt/feature-${i}`,
+      path: i === 0 ? rootPath : `${rootPath}/.orquestra-wt/feature-${i}`,
       color: s.color,
       label: s.label,
     }))
@@ -359,7 +359,7 @@ export function installE2EHarness(): void {
     }
   }
 
-  window.__cateE2E = {
+  window.__orquestraE2E = {
     ready: true,
     activeCanvasPanelId,
     createTerminal,

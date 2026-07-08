@@ -7,7 +7,7 @@
 //   • ExtensionDialog   — in-panel renderer for extension_ui_request select /
 //     confirm / input / editor (the only modal-like surface, lives inside the
 //     panel per the "no modal dialogs for auth" guidance). Requests from the
-//     bundled cate-ask-user extension carry a structured envelope in their title
+//     bundled orquestra-ask-user extension carry a structured envelope in their title
 //     and render as a dedicated AskUserCard instead of the generic dialog.
 //   • ImageChips / ImageAttachButton — image attachment helpers
 //   • ThinkingLevelPicker — reasoning level dropdown
@@ -19,7 +19,7 @@ import {
   Image as ImageIcon,
   X,
 } from '@phosphor-icons/react'
-import { CateLogo } from '../../renderer/ui/CateLogo'
+import { OrquestraLogo } from '../../renderer/ui/OrquestraLogo'
 import { Tooltip } from '../../renderer/ui/Tooltip'
 import type {
   AgentExtensionUIRequest,
@@ -109,14 +109,14 @@ export function ExtensionWidget({
 
 
 // -----------------------------------------------------------------------------
-// ask_user card (cate-ask-user extension)
+// ask_user card (orquestra-ask-user extension)
 // -----------------------------------------------------------------------------
 
 // Kept in sync with ASK_USER_MARKER in
-// src/agent/extensions/cate-ask-user/index.ts. The extension prefixes its input
+// src/agent/extensions/orquestra-ask-user/index.ts. The extension prefixes its input
 // `title` with this marker immediately followed by a JSON envelope (no
 // surrounding whitespace — pi trims the title).
-const ASK_USER_MARKER = 'cate-ask-user:'
+const ASK_USER_MARKER = 'orquestra-ask-user:'
 
 interface AskUserOption { label: string; description?: string }
 interface AskUserQuestion {
@@ -209,10 +209,10 @@ function AskUserCard({
     <div className="rounded-lg border border-agent/40 bg-surface-3/90 backdrop-blur px-3 py-3 space-y-3">
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 rounded-md bg-agent/15 flex items-center justify-center shrink-0">
-          <CateLogo size={12} className="text-agent-light" />
+          <OrquestraLogo size={12} className="text-agent-light" />
         </div>
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <span className="text-[10.5px] uppercase tracking-wider text-agent-light/80">Cate is asking</span>
+          <span className="text-[10.5px] uppercase tracking-wider text-agent-light/80">Orquestra is asking</span>
           {total > 1 && (
             <span className="text-[10.5px] text-muted">{page + 1} / {total}</span>
           )}
@@ -331,7 +331,7 @@ export function ExtensionDialog({
     return () => clearTimeout(t)
   }, [request.id, request.timeout, onRespond])
 
-  // ask_user requests (from the bundled cate-ask-user extension) carry a
+  // ask_user requests (from the bundled orquestra-ask-user extension) carry a
   // structured envelope and get a dedicated card instead of the generic dialog.
   const askUser = decodeAskUser(request)
   if (askUser) {
@@ -588,7 +588,7 @@ export async function readFileAsImage(file: File): Promise<AgentImageAttachment 
   return { data, mimeType: file.type, fileName: file.name }
 }
 
-/** Read an image FILE PATH (Cate Explorer drag, or an external OS path) as an
+/** Read an image FILE PATH (Orquestra Explorer drag, or an external OS path) as an
  *  attachment. Reads through the runtime-aware filesystem IPC so it works for
  *  remote workspaces; returns null for non-image paths or unreadable files. */
 export async function readPathAsImage(

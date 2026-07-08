@@ -1,5 +1,5 @@
 // E2E: drag & drop from Search results. Uses synthetic HTML5 DragEvents with a
-// shared DataTransfer (the only way to exercise the application/cate-file MIME
+// shared DataTransfer (the only way to exercise the application/orquestra-file MIME
 // payload — Playwright's mouse drag produces an empty dataTransfer). Dispatches
 // dragstart on the real Search row (so SearchResultsTree populates the payload)
 // then drop on the target, exercising the full source→target chain.
@@ -11,13 +11,13 @@ import { launchApp, closeApp, type LaunchResult } from './fixtures/electron-app'
 const REPO_ROOT = path.resolve(__dirname, '..')
 
 async function openSearch(page: Page) {
-  await page.evaluate((root) => window.__cateE2E!.setWorkspaceRoot(root), REPO_ROOT)
-  await page.evaluate(() => window.__cateE2E!.openSidebarView('search'))
+  await page.evaluate((root) => window.__orquestraE2E!.setWorkspaceRoot(root), REPO_ROOT)
+  await page.evaluate(() => window.__orquestraE2E!.openSidebarView('search'))
   const input = page.locator('input[aria-label="Search"]')
   await input.waitFor({ state: 'visible', timeout: 30_000 })
   await input.fill('registerSearchHandlers')
   await expect.poll(
-    async () => page.evaluate(() => window.__cateE2E!.getSearchSnapshot().status),
+    async () => page.evaluate(() => window.__orquestraE2E!.getSearchSnapshot().status),
     { timeout: 30_000 },
   ).toBe('done')
 }
@@ -59,12 +59,12 @@ test.describe('search drag & drop', () => {
   test('dragging a file result onto the canvas opens a floating editor', async () => {
     const page = app.mainWindow
     await openSearch(page)
-    const before = await page.evaluate(() => window.__cateE2E!.nodes().length)
+    const before = await page.evaluate(() => window.__orquestraE2E!.nodes().length)
 
     await dragRowToTarget(page, 'search-file', '[data-canvas-panel-id]')
 
     await expect
-      .poll(async () => page.evaluate(() => window.__cateE2E!.nodes().length), { timeout: 30_000 })
+      .poll(async () => page.evaluate(() => window.__orquestraE2E!.nodes().length), { timeout: 30_000 })
       .toBeGreaterThan(before)
   })
 
@@ -79,19 +79,19 @@ test.describe('search drag & drop', () => {
     await dragRowToTarget(page, 'search-line', '[data-canvas-panel-id]')
 
     await expect
-      .poll(async () => page.evaluate(() => window.__cateE2E!.lastEditorReveal()?.line ?? 0), { timeout: 30_000 })
+      .poll(async () => page.evaluate(() => window.__orquestraE2E!.lastEditorReveal()?.line ?? 0), { timeout: 30_000 })
       .toBe(lineNo)
   })
 
   test('dragging a file result onto the dock center zone opens an editor tab', async () => {
     const page = app.mainWindow
     await openSearch(page)
-    const before = await page.evaluate(() => window.__cateE2E!.editorPaths().length)
+    const before = await page.evaluate(() => window.__orquestraE2E!.editorPaths().length)
 
     await dragRowToTarget(page, 'search-file', '[data-dock-zone="center"]')
 
     await expect
-      .poll(async () => page.evaluate(() => window.__cateE2E!.editorPaths().length), { timeout: 30_000 })
+      .poll(async () => page.evaluate(() => window.__orquestraE2E!.editorPaths().length), { timeout: 30_000 })
       .toBeGreaterThan(before)
   })
 })

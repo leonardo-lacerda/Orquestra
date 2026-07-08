@@ -17,6 +17,8 @@ import CanvasBackgroundImage from './CanvasBackgroundImage'
 import SnapGuides from './SnapGuides'
 import GhostPlacementLayer from './GhostPlacementLayer'
 import PlacementVizOverlay from './placementViz/PlacementVizOverlay'
+import ConnectionLayer from './ConnectionLayer'
+import DrawingLayer from './DrawingLayer'
 import { WorktreeTerritoryLayer } from './worktree'
 import type { Point, PanelType } from '../../shared/types'
 import { openFileAsPanel } from '../lib/fs/fileRouting'
@@ -75,6 +77,13 @@ function injectCanvasInteractingStyle(): void {
     .canvas-interacting.canvas-tool-hand [data-resize-frame-for],
     .canvas-interacting.canvas-tool-hand [data-resize-frame-for] * {
       cursor: grabbing !important;
+    }
+    /* Connection drag in progress — show crosshair everywhere */
+    body.connecting-terminal {
+      cursor: crosshair !important;
+    }
+    body.connecting-terminal * {
+      cursor: crosshair !important;
     }
   `
   document.head.appendChild(style)
@@ -366,8 +375,8 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
   const handleFileDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     // Accept internal drag (file explorer) and OS-level file/folder drops.
     if (
-      e.dataTransfer.types.includes('application/cate-file') ||
-      e.dataTransfer.types.includes('application/cate-spawn') ||
+      e.dataTransfer.types.includes('application/orquestra-file') ||
+      e.dataTransfer.types.includes('application/orquestra-spawn') ||
       e.dataTransfer.types.includes('Files')
     ) {
       e.preventDefault()
@@ -378,7 +387,7 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
   const handleFileDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
     // Spawn drop from the Parallel Work tab — drop a terminal/agent for a
     // worktree at the exact cursor position, tagged with the worktree id.
-    const spawnData = e.dataTransfer.getData('application/cate-spawn')
+    const spawnData = e.dataTransfer.getData('application/orquestra-spawn')
     if (spawnData) {
       e.preventDefault()
       let spec: { panelType?: 'terminal' | 'agent'; cwd?: string; worktreeId?: string } = {}
@@ -402,11 +411,11 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
     }
 
     // Support internal multi-file drops…
-    const multiData = e.dataTransfer.getData('application/cate-files')
-    const singlePath = e.dataTransfer.getData('application/cate-file')
+    const multiData = e.dataTransfer.getData('application/orquestra-files')
+    const singlePath = e.dataTransfer.getData('application/orquestra-file')
     // Optional open-at-line payload (dragging a specific search-result line).
     let lineReveal: { path: string; line: number; column?: number } | null = null
-    const lineRaw = e.dataTransfer.getData('application/cate-file-line')
+    const lineRaw = e.dataTransfer.getData('application/orquestra-file-line')
     if (lineRaw) {
       try { lineReveal = JSON.parse(lineRaw) } catch { /* ignore */ }
     }
@@ -502,7 +511,8 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
         items.push(
           { id: 'new-editor', label: 'New Editor' },
           { id: 'new-browser', label: 'New Browser' },
-          { id: 'new-agent', label: 'New Cate agent' },
+          { id: 'new-agent', label: 'New Orquestra agent' },
+          { id: 'new-orchestration', label: 'New Orchestration' },
           { id: 'new-canvas', label: 'New Canvas' },
           { type: 'separator' as const },
         )
@@ -535,6 +545,7 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
         case 'new-editor': onCreateAtPoint?.('editor', point); break
         case 'new-browser': onCreateAtPoint?.('browser', point); break
         case 'new-agent': onCreateAtPoint?.('agent', point); break
+        case 'new-orchestration': onCreateAtPoint?.('orchestration', point); break
         case 'new-canvas': onCreateAtPoint?.('canvas', point); break
         case 'auto-layout':
           canvasApi.getState().autoLayout()
@@ -626,6 +637,8 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
           />
         )}
         {children}
+        <DrawingLayer />
+        <ConnectionLayer />
         <GhostPlacementLayer />
         {(import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV && <PlacementVizOverlay />}
       </div>

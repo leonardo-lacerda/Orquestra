@@ -50,7 +50,7 @@ const api = () => window.electronAPI
 // The list of repos the curated catalog is crawled from. Linked at the bottom so
 // anyone can PR a missing skill's source repo in (the CI crawler turns this into
 // skills-index.json).
-const SKILL_SOURCES_URL = 'https://github.com/0-AI-UG/cate/blob/main/registry/sources.json'
+const SKILL_SOURCES_URL = 'https://github.com/0-AI-UG/orquestra/blob/main/registry/sources.json'
 
 function matches(entry: SkillEntry, terms: string[]): boolean {
   if (terms.length === 0) return true

@@ -17,7 +17,7 @@ import { promisify } from 'util'
 import fsp from 'fs/promises'
 import path from 'path'
 import { validateCwd, addAllowedRoot, removeAllowedRoot } from '../../main/ipc/pathValidation'
-import { ensureCateGitignore } from '../../main/cateGitignore'
+import { ensureOrquestraGitignore } from '../../main/orquestraGitignore'
 import type { VcsHost } from '../../main/runtime/types'
 
 const execFileP = promisify(execFile)
@@ -119,7 +119,7 @@ export function createVcsCapability(deps: VcsCapabilityDeps): VcsHost {
   async function ensureContainingDir(targetPath: string): Promise<void> {
     const containingDir = path.dirname(targetPath)
     await fsp.mkdir(containingDir, { recursive: true })
-    await ensureCateGitignore(path.dirname(containingDir))
+    await ensureOrquestraGitignore(path.dirname(containingDir))
   }
 
   async function compareUrlFor(git: ReturnType<typeof simpleGit>, branch: string): Promise<string | null> {

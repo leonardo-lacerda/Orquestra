@@ -282,7 +282,7 @@ describe('scrollback IPC async fs round-trip', () => {
   // contract still round-trips: TERMINAL_SCROLLBACK_SAVE persists content (and
   // creates the dir) and TERMINAL_LOG_READ reads it straight back.
   it('save then read returns the same content (dir created on demand)', async () => {
-    logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cate-scrollback-'))
+    logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-scrollback-'))
     // Remove it so the save handler's mkdir(recursive) has to recreate it.
     await fs.rm(logDir, { recursive: true, force: true })
 
@@ -306,7 +306,7 @@ describe('scrollback IPC async fs round-trip', () => {
   // A missing scrollback file falls through (raw-log mock returns ''), so the
   // read handler yields null rather than throwing on the absent file.
   it('read returns null when no scrollback file exists', async () => {
-    logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cate-scrollback-'))
+    logDir = await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-scrollback-'))
     const { TERMINAL_LOG_READ } = await import('../../shared/ipc-channels')
     await import('./terminal').then((m) => m.registerHandlers())
 

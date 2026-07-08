@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/cate-logo.svg" />
-    <img src="assets/cate-logo-light.svg" alt="Cate" width="140" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/orquestra-logo.svg" />
+    <img src="assets/orquestra-logo-light.svg" alt="Orquestra" width="140" />
   </picture>
 </p>
 
@@ -14,18 +14,18 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/0-AI-UG/cate?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/0-AI-UG/cate/actions"><img src="https://img.shields.io/github/actions/workflow/status/0-AI-UG/cate/ci.yml?style=flat-square" alt="CI" /></a>
-  <a href="https://github.com/0-AI-UG/cate/releases"><img src="https://img.shields.io/github/downloads/0-AI-UG/cate/total?style=flat-square" alt="Downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/0-AI-UG/orquestra?style=flat-square" alt="MIT License" /></a>
+  <a href="https://github.com/0-AI-UG/orquestra/actions"><img src="https://img.shields.io/github/actions/workflow/status/0-AI-UG/orquestra/ci.yml?style=flat-square" alt="CI" /></a>
+  <a href="https://github.com/0-AI-UG/orquestra/releases"><img src="https://img.shields.io/github/downloads/0-AI-UG/orquestra/total?style=flat-square" alt="Downloads" /></a>
 </p>
 
 ---
 
 <p align="center">
-  <img src="assets/demo-canvas.gif" alt="Cate demo" width="900" />
+  <img src="assets/demo-canvas.gif" alt="Orquestra demo" width="900" />
 </p>
 
-Cate is a desktop IDE built on an infinite canvas. Spread editors, terminals, browsers, docs, and AI agents across freeform space instead of stacking windows and tabs. Float them, dock them into tabs and splits, or detach them into their own OS windows, and Cate restores the whole layout when you reopen the folder.
+Orquestra is a desktop IDE built on an infinite canvas. Spread editors, terminals, browsers, docs, and AI agents across freeform space instead of stacking windows and tabs. Float them, dock them into tabs and splits, or detach them into their own OS windows, and Orquestra restores the whole layout when you reopen the folder.
 
 **Getting started:** open a folder and it becomes a workspace. Right-click to add panels, press `Cmd+K` for the command palette, drag panels onto the dock to build tabs and splits. No config files.
 
@@ -35,9 +35,9 @@ Download a prebuilt release. Don't build from source for daily use.
 
 | Platform | Formats | Link |
 |----------|---------|------|
-| macOS | DMG, ZIP (`arm64`, `x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
-| Windows | NSIS installer, ZIP (`x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
-| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
+| macOS | DMG, ZIP (`arm64`, `x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
+| Windows | NSIS installer, ZIP (`x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
+| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
 
 ## What's inside
 
@@ -89,8 +89,8 @@ For contributors. Use the release above otherwise.
 Fresh clone, one command sets everything up (installs dependencies and builds the local runtime daemon):
 
 ```bash
-git clone https://github.com/0-AI-UG/cate.git
-cd cate
+git clone https://github.com/0-AI-UG/orquestra.git
+cd orquestra
 bun run setup
 ```
 
@@ -118,7 +118,7 @@ src/
 └── shared/     # IPC channels and shared types
 ```
 
-Cate runs all IPC through a context-isolated preload bridge. Filesystem access is scoped to registered workspace roots, browser panels disable node integration, and terminals can't spawn outside approved directories.
+Orquestra runs all IPC through a context-isolated preload bridge. Filesystem access is scoped to registered workspace roots, browser panels disable node integration, and terminals can't spawn outside approved directories.
 
 **Stack:** Electron 41, React 18, Zustand 5, Monaco 0.52, xterm.js 5.5 + node-pty 1.0, Tailwind 3.4, electron-vite, electron-builder, electron-updater, Sentry. PDFs and DOCX via pdf.js and mammoth, git via simple-git, file watching via chokidar. The agent runtime is `@earendil-works/pi`.
 
@@ -128,11 +128,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Release-by-release history lives in the 
 
 ## Star history
 
-<a href="https://www.star-history.com/#0-AI-UG/cate&Date">
+<a href="https://www.star-history.com/#0-AI-UG/orquestra&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/cate&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/cate&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=0-AI-UG/cate&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
   </picture>
 </a>
 

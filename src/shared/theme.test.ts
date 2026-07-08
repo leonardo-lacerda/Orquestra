@@ -4,7 +4,7 @@ import path from 'path'
 import { validateTheme, APP_COLOR_KEYS, TERMINAL_ANSI_KEYS } from './theme'
 import { BUILT_IN_THEMES } from './themes'
 
-const SKILL_DIR = path.join(process.cwd(), 'skills', 'cate-theme')
+const SKILL_DIR = path.join(process.cwd(), 'skills', 'orquestra-theme')
 
 describe('built-in themes', () => {
   for (const t of BUILT_IN_THEMES) {
@@ -29,7 +29,7 @@ describe('built-in themes', () => {
   })
 })
 
-describe('cate-theme skill schema parity', () => {
+describe('orquestra-theme skill schema parity', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(SKILL_DIR, 'theme.schema.json'), 'utf-8'))
 
   it('schema app properties exactly match APP_COLOR_KEYS', () => {

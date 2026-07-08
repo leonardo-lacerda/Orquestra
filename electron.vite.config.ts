@@ -1,6 +1,6 @@
 import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
 
 // Bake the Sentry DSN at build time from the SENTRY_DSN env var. End users
 // of a packaged build don't have that env var, so the value must be inlined.
@@ -17,6 +17,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: ['@earendil-works/pi-ai', '@earendil-works/pi-agent-core', '@earendil-works/pi-coding-agent'] })],
     build: {
       outDir: 'dist/main',
+      reportCompressedSize: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts')
@@ -28,6 +29,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: ['@earendil-works/pi-ai', '@earendil-works/pi-agent-core', '@earendil-works/pi-coding-agent'] })],
     build: {
       outDir: 'dist/preload',
+      reportCompressedSize: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts')
@@ -38,15 +40,30 @@ export default defineConfig({
   renderer: {
     root: '.',
     define: sentryDefine,
-    // Don't let the dev server watch .cate/ — it holds Cate's own project state
-    // and, now, git worktrees (full repo checkouts under .cate/worktrees). When
-    // developing Cate-on-Cate, creating a worktree there would otherwise drop a
+    // Don't let the dev server watch .orquestra/ — it holds Orquestra's own project state
+    // and, now, git worktrees (full repo checkouts under .orquestra/worktrees). When
+    // developing Orquestra-on-Orquestra, creating a worktree there would otherwise drop a
     // duplicate index.html/tsconfig.json into the watched tree and force a full
     // HMR reload. (Merged with Vite's built-in .git/node_modules ignores.)
     server: {
       watch: {
-        ignored: ['**/.cate/**'],
+        ignored: ['**/.orquestra/**', '**/node_modules/**'],
       },
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        '@phosphor-icons/react',
+        'zustand',
+        'monaco-editor',
+        '@xterm/xterm',
+        '@xterm/addon-fit',
+        '@xterm/addon-webgl',
+        '@xterm/addon-search',
+        '@xterm/addon-serialize',
+        '@xterm/addon-web-links',
+      ],
     },
     build: {
       outDir: 'dist/renderer',

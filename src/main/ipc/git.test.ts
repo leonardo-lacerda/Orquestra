@@ -14,11 +14,11 @@ describe('createBranch', () => {
   let repoDir: string
 
   beforeEach(async () => {
-    repoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cate-git-'))
+    repoDir = await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-git-'))
     const git = simpleGit(repoDir)
     await git.init()
-    await git.addConfig('user.name', 'Cate Tests')
-    await git.addConfig('user.email', 'cate@example.com')
+    await git.addConfig('user.name', 'Orquestra Tests')
+    await git.addConfig('user.email', 'orquestra@example.com')
     await fs.writeFile(path.join(repoDir, 'README.md'), 'base\n', 'utf8')
     await git.add('README.md')
     await git.commit('initial')

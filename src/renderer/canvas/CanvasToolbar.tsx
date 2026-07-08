@@ -15,8 +15,12 @@ import {
   Cursor,
   Hand,
   X,
+  Rectangle,
+  ArrowRight,
+  Pen,
+  TextT,
 } from '@phosphor-icons/react'
-import { CateLogo } from '../ui/CateLogo'
+import { OrquestraLogo } from '../ui/OrquestraLogo'
 import Minimap from './Minimap'
 import WorktreeToolbarMenu from './WorktreeToolbarMenu'
 import { useCanvasStoreApi } from '../stores/CanvasStoreContext'
@@ -204,6 +208,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const toggleMinimapOpen = useUIStore((s) => s.toggleMinimapOpen)
   const activeTool = useUIStore((s) => s.activeTool)
   const setActiveTool = useUIStore((s) => s.setActiveTool)
+  const activeDrawingTool = useUIStore((s) => s.activeDrawingTool)
+  const setActiveDrawingTool = useUIStore((s) => s.setActiveDrawingTool)
   const toggleToolKey = useShortcutStore((s) => displayString(s.shortcuts.toggleTool))
   const newBrowserKey = useShortcutStore((s) => displayString(s.shortcuts.newBrowser))
   const newEditorKey = useShortcutStore((s) => displayString(s.shortcuts.newEditor))
@@ -278,6 +284,45 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             >
               <Hand size={18} />
             </ModeButton>
+            <ModeButton
+              onClick={() => setActiveTool(activeTool === 'draw' ? 'select' : 'draw')}
+              title="Draw tool for annotations"
+              active={activeTool === 'draw'}
+            >
+              <Pen size={18} />
+            </ModeButton>
+            {activeTool === 'draw' && (
+              <>
+                <ModeButton
+                  onClick={() => setActiveDrawingTool('rect')}
+                  title="Rectangle"
+                  active={activeDrawingTool === 'rect'}
+                >
+                  <Rectangle size={16} />
+                </ModeButton>
+                <ModeButton
+                  onClick={() => setActiveDrawingTool('arrow')}
+                  title="Arrow"
+                  active={activeDrawingTool === 'arrow'}
+                >
+                  <ArrowRight size={16} />
+                </ModeButton>
+                <ModeButton
+                  onClick={() => setActiveDrawingTool('line')}
+                  title="Line"
+                  active={activeDrawingTool === 'line'}
+                >
+                  <Minus size={16} />
+                </ModeButton>
+                <ModeButton
+                  onClick={() => setActiveDrawingTool('text')}
+                  title="Text"
+                  active={activeDrawingTool === 'text'}
+                >
+                  <TextT size={16} />
+                </ModeButton>
+              </>
+            )}
 
             {/* Parallel worktrees — drop-up: focus a worktree's spatial lens,
                 open a terminal in one, or start a new parallel branch. */}
@@ -298,8 +343,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             <ToolbarButton onClick={onNewEditor} title={`Editor (${newEditorKey})`} size="panel">
               <FileText size={18} />
             </ToolbarButton>
-            <ToolbarButton onClick={onNewAgent} title="Cate agent" size="panel">
-              <CateLogo size={18} />
+            <ToolbarButton onClick={onNewAgent} title="Orquestra agent" size="panel">
+              <OrquestraLogo size={18} />
             </ToolbarButton>
 
             {/* Divider */}

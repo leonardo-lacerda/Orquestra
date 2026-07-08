@@ -7,7 +7,7 @@
 //   - API-key (openai, google, groq, etc.) — { type: 'api_key', key }
 //
 // Provider logins are not project-specific, so this file is global: one shared
-// auth.json under cate's userData (see agentDir.sharedAuthPath). After any write
+// auth.json under orquestra's userData (see agentDir.sharedAuthPath). After any write
 // we fire `onChange` so AgentManager can push the update into open workspaces.
 //
 // NOTE: This module imports from pi-ai (pure ESM). electron-vite should handle

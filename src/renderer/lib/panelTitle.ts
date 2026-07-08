@@ -1,6 +1,6 @@
 // Make an agent/shell-derived tab title unique within a workspace. Some agents
 // only surface their cwd (e.g. codex → the folder name), so two panels in the
-// same directory compute the identical title ("Codex · cate"). Append the lowest
+// same directory compute the identical title ("Codex · orquestra"). Append the lowest
 // " N" (N≥2) that no other panel is currently showing so duplicates stay
 // distinguishable.
 //

@@ -45,7 +45,7 @@ async function showUnresponsiveDialog(win: BrowserWindow): Promise<void> {
   try {
     const { response } = await dialog.showMessageBox(win, {
       type: 'warning',
-      title: 'Cate is not responding',
+      title: 'Orquestra is not responding',
       message: 'This window has become unresponsive.',
       detail: 'You can keep waiting in case it recovers, or force it to reload. Reloading discards any in-progress, unsaved work in this window.',
       buttons: ['Keep Waiting', 'Reload'],

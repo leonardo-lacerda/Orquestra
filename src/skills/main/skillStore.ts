@@ -1,5 +1,5 @@
 // =============================================================================
-// Global skill cache — Cate's userData copy of GLOBAL skills only.
+// Global skill cache — Orquestra's userData copy of GLOBAL skills only.
 //
 // Workspace installs are NOT cached (they fetch from GitHub, or copy from an
 // existing local install of the same skill). Only skills promoted to "global"

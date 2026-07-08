@@ -225,8 +225,17 @@ export function validatePath(filePath: string, ownerWindowId?: number, scopeId?:
   if (!filePath || typeof filePath !== 'string') {
     throw new Error('Access denied: invalid path')
   }
+  // Reject null bytes — the OS already does, but catching early prevents
+  // confusing errors downstream.
+  if (filePath.includes('\0')) {
+    throw new Error('Access denied: null byte in path')
+  }
 
-  const normalized = path.resolve(filePath)
+  let normalized = path.resolve(filePath)
+  // On Windows, strip \\?\ and \\.\ prefixes that bypass path normalization
+  if (process.platform === 'win32') {
+    normalized = normalized.replace(/^\\\\\?\\/, '').replace(/^\\\\.\\/, '')
+  }
   if (isWithinAllowedRoots(normalized, scopeId)) {
     return normalized
   }

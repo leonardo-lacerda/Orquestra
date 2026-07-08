@@ -6,7 +6,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-browser-test-'))
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-browser-test-'))
 vi.mock('electron', () => {
   const electron = { app: { getPath: () => userData } }
   return { ...electron, default: electron }
@@ -50,7 +50,7 @@ describe('history', () => {
   })
 
   test('ignores the new-tab sentinel and blank urls', () => {
-    store.recordBrowserVisit('cate://newtab', 'New Tab')
+    store.recordBrowserVisit('orquestra://newtab', 'New Tab')
     store.recordBrowserVisit('about:blank', '')
     store.recordBrowserVisit('', '')
     expect(store.getBrowserHistory()).toHaveLength(0)

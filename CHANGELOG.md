@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Cate will be documented in this file.
+All notable changes to Orquestra will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
@@ -35,7 +35,7 @@ Polish release: grid snapping on the canvas, steadier sidebar and window handlin
 - **Git decorations in the file tree**: VS Code-style status colors so you can read a file's git state at a glance. (#205)
 - **More terminal controls**: a text-contrast setting and an Option-as-Meta toggle for macOS keyboards. (#206, #192)
 - **New themes**: Clay Light and Clay Dark, plus Visual Studio Light and Dark, the One Dark Pro family, and One Light. (#210, #196)
-- **One .cate gitignore**: a single `.cate/.gitignore` now covers session, agent, and worktree files. (#218)
+- **One .orquestra gitignore**: a single `.orquestra/.gitignore` now covers session, agent, and worktree files. (#218)
 - **Usage analytics for agent messages**: anonymous, opt-in tracking of how many messages are sent to agents. It records only the message kind, its length, and whether images were attached, never the message text, and you can turn it off in settings. (#244)
 
 ### Changed
@@ -49,7 +49,7 @@ Polish release: grid snapping on the canvas, steadier sidebar and window handlin
 
 - **Deferred workspace activation**: activating a deferred workspace no longer wipes the canvas, and browser logins persist across sessions. (#220, #235)
 - **Chat scroll position**: the agent chat keeps its place across refocus, with a new scroll-to-bottom button. (#233)
-- **Shared-project reload loop**: two copies of Cate open on the same project no longer loop on reload. (#229)
+- **Shared-project reload loop**: two copies of Orquestra open on the same project no longer loop on reload. (#229)
 - **Empty file tree on new workspaces**: the explorer retries its initial load, and nested folders refresh to match disk. (#212, #219)
 - **Popover position and selectable replies**: chat input popovers stay correctly placed at any zoom, and chat replies can be selected. (#199, #189)
 - **Terminal scroll and file drop**: the terminal keeps its scroll position across dock-tab switches, and external file drops insert a path again. (#202, #200)
@@ -66,11 +66,11 @@ Feature release: unified theming, a redesigned parallel-work flow, clickable ter
 
 - **Unified theming**: a single data-driven theme system covering app chrome, the terminal ANSI palette, and Monaco editor syntax tokens, alongside canvas tools, spatial navigation, and command palette polish. (#174)
 - **Configurable file exclusions**: a new **File Explorer** settings section lets you edit the list of folder/file names hidden from the file explorer, file search, and change watching. The list persists across sessions, applies to every project, and updates open explorers live without a relaunch. Includes a "Restore defaults" action. (#155)
-- **Redesigned parallel work**: a reworked tab, drag-to-canvas, PR support, and worktrees stored in `.cate`. (#182)
+- **Redesigned parallel work**: a reworked tab, drag-to-canvas, PR support, and worktrees stored in `.orquestra`. (#182)
 - **Open file paths from the terminal**: Cmd+Click a file path in the terminal to open it in the editor. (#180)
 - **Clickable terminal links**: links in the terminal are now clickable, with a dialog to choose where to open them. (#178)
 - **Close tab on middle-click**: middle-clicking a tab closes it. (#176)
-- **Reload workspace from disk**: the `.cate` skill can configure the IDE, with a reload-from-disk action. (#170)
+- **Reload workspace from disk**: the `.orquestra` skill can configure the IDE, with a reload-from-disk action. (#170)
 - **Per-workspace pi agent config**: pi agent configuration is scoped per workspace, with accordion provider settings. (#168)
 - **Terminal scroll-speed setting**: a new setting controls xterm scroll sensitivity. (#185)
 
@@ -99,7 +99,7 @@ Patch release focused on agent process detection, parallel-work ergonomics, and 
 - **Broader agent detection**: the terminal now recognizes more coding agents as running, including Antigravity CLI, Forge Code, and node-script based agents (detected via `ps -o args`), in addition to the existing set.
 - **Agent-aware terminal tabs**: terminal tabs running an agent show a dedicated icon and title, plus an awaiting-input dot when the agent is waiting on you.
 - **Choose any base branch for worktrees**: when creating a new worktree for parallel work, you can now select any branch as the base instead of being limited to the default.
-- **Project-local workspace state**: workspace layout is now stored in a `.cate/` directory inside the project, so canvas state travels with the repository.
+- **Project-local workspace state**: workspace layout is now stored in a `.orquestra/` directory inside the project, so canvas state travels with the repository.
 - **Rename any panel from the tab menu**: the tab context menu gains a Rename action that works for all panel types, including panels in detached dock windows.
 - **Unified accent palette**: workspaces and canvas regions now share a single consistent accent color palette.
 - **Multilingual README**: added French, Simplified Chinese, and German translations of the README.
@@ -365,7 +365,7 @@ Patch release with two papercut fixes from the v0.3.0 cycle and a file-explorer 
 
 - **Folder double-click no longer opens every direct child as a tab** — folders now ignore double-click; single-click still toggles expansion.
 - **New terminal opens in the picked folder, not `$HOME`** — `setWorkspaceRootPath` only flipped `isRootPathPending` locally and waited for the main-process IPC roundtrip before exposing `rootPath`, so `WelcomePage` spawning a terminal right after picking a folder mounted the panel before the path was readable and the PTY fell back to `os.homedir()`. Now applies `rootPath` (and the derived name) optimistically before the IPC roundtrip.
-- **"Cate crashed unexpectedly" dialog after a clean shutdown** — React 18's `logCaughtError` wraps thrown DOM `Event`s as `"Uncaught [object Event]"`, but the existing renderer filter only matched the bare `"[object Event]"` form, so a single non-Error throw during teardown persisted a crash report and resurfaced the dialog on next launch. Extracted `isNonInformativeMessage()` (also matches `"Uncaught [object Object]"` and the generic `^Uncaught \[object …\]$` shape) and applied it on both the `window` error path and the `ErrorBoundary`.
+- **"Orquestra crashed unexpectedly" dialog after a clean shutdown** — React 18's `logCaughtError` wraps thrown DOM `Event`s as `"Uncaught [object Event]"`, but the existing renderer filter only matched the bare `"[object Event]"` form, so a single non-Error throw during teardown persisted a crash report and resurfaced the dialog on next launch. Extracted `isNonInformativeMessage()` (also matches `"Uncaught [object Object]"` and the generic `^Uncaught \[object …\]$` shape) and applied it on both the `window` error path and the `ErrorBoundary`.
 
 ### Internal
 
@@ -395,7 +395,7 @@ First minor release since the open-source drop. Major focus: unified **Spotlight
 
 ### Fixed
 
-- **Crash-report dialog loop** — `"Cate crashed unexpectedly"` was popping up on every packaged-app launch because `tryUnlink` silently swallowed deletion failures, leaving the report on the pickup path for the next startup. Now atomically renames the pending report into the archive as the *first* step, before parsing or dialog. Cross-device rename falls back to copy+unlink; last-resort delete on failure; all `tryUnlink` failures now log. Renderer side also filters resource-load failures (no more `[object Event]` noise reports) and dev mode skips the dialog entirely.
+- **Crash-report dialog loop** — `"Orquestra crashed unexpectedly"` was popping up on every packaged-app launch because `tryUnlink` silently swallowed deletion failures, leaving the report on the pickup path for the next startup. Now atomically renames the pending report into the archive as the *first* step, before parsing or dialog. Cross-device rename falls back to copy+unlink; last-resort delete on failure; all `tryUnlink` failures now log. Renderer side also filters resource-load failures (no more `[object Event]` noise reports) and dev mode skips the dialog entirely.
 - **Shell fallback with user-visible banner** — when `defaultShellPath` points at a missing or non-executable binary, terminals used to die instantly with a cryptic `execvp(3) failed.` New `resolveShell()` validates the configured path, falls back through a platform chain, and surfaces a yellow banner inside the PTY explaining what happened and where to fix it. Includes `shellResolver.test.ts` (12 tests) covering the fallback paths.
 - **Git monitor crash on unregistered root** — session restore could race ahead of the main-process allowed-roots registration, causing `validateCwd` to throw inside an `ipcMain.on` handler. With no promise boundary, the throw escaped as an uncaught exception and Electron showed a fatal dialog. Now wrapped in try/catch — monitor just doesn't start for the affected workspace, recoverable by re-opening the folder.
 - **Git panel stale branch list** — the monitor only emitted updates when the *current* branch or dirty flag changed, so `git branch -d foo` in an external terminal left the sidebar showing `foo` until the next remount. Now also tracks the full local branch list and emits on any membership change. Three poll calls now run in parallel via a small `runGit` wrapper.

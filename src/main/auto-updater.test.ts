@@ -100,7 +100,7 @@ beforeEach(() => {
   h.getSettingSync.mockReturnValue(false)
   h.dialog.showMessageBox.mockResolvedValue({ response: 1 })
   h.cell.value = { ...DEFAULT_UPDATE_RECORD }
-  delete process.env.CATE_DEV_UPDATE
+  delete process.env.ORQUESTRA_DEV_UPDATE
 })
 
 afterEach(() => {
@@ -108,7 +108,7 @@ afterEach(() => {
 })
 
 describe('initAutoUpdater — config', () => {
-  it('is a no-op in dev (not packaged, no CATE_DEV_UPDATE): no events, no check', async () => {
+  it('is a no-op in dev (not packaged, no ORQUESTRA_DEV_UPDATE): no events, no check', async () => {
     h.app.isPackaged = false
     const { initAutoUpdater } = await loadModule()
     initAutoUpdater()
@@ -175,7 +175,7 @@ describe('initAutoUpdater — config', () => {
 
   it('dev-update mode: wires events, forces dev config, and treats as eligible', async () => {
     h.app.isPackaged = false
-    process.env.CATE_DEV_UPDATE = '1'
+    process.env.ORQUESTRA_DEV_UPDATE = '1'
     h.canSelfUpdate.mockReturnValue(false) // repo checkout is never in /Applications
     const { initAutoUpdater } = await loadModule()
     initAutoUpdater()
@@ -186,7 +186,7 @@ describe('initAutoUpdater — config', () => {
 
   it('dev-update mode: does NOT persist or evaluate install-loop state', async () => {
     h.app.isPackaged = false
-    process.env.CATE_DEV_UPDATE = '1'
+    process.env.ORQUESTRA_DEV_UPDATE = '1'
     seedRecord({ pendingVersion: '1.2.3', attempts: 1 }) // would trip give-up if evaluated
     const { initAutoUpdater } = await loadModule()
     initAutoUpdater()
@@ -349,7 +349,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('update-available', { version: '1.2.3' })
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/0-AI-UG/cate/releases'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/0-AI-UG/orquestra/releases'))
   })
 
   it('prompts at most once per launch', async () => {
@@ -372,7 +372,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('error', new Error('ditto: Couldn’t read PKZip signature'))
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/0-AI-UG/cate/releases'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/0-AI-UG/orquestra/releases'))
   })
 
   it('a bare error with no update found does NOT prompt (e.g. transient check failure)', async () => {

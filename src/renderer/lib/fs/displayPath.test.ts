@@ -19,6 +19,6 @@ describe('workspaceDisplayName', () => {
   })
 
   it('returns the folder name for a remote POSIX locator', () => {
-    expect(workspaceDisplayName('cate-runtime://wsl_Ubuntu/home/foo/proj')).toBe('proj')
+    expect(workspaceDisplayName('orquestra-runtime://wsl_Ubuntu/home/foo/proj')).toBe('proj')
   })
 })

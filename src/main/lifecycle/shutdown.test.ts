@@ -38,7 +38,7 @@ describe('decideQuitPrompt', () => {
   it('prompts a plain quit confirmation when warn-before-quit is on', () => {
     const prompt = decideQuitPrompt({ warnBeforeQuit: true, running: [] })
     expect(prompt).not.toBeNull()
-    expect(prompt!.message).toBe('Quit Cate?')
+    expect(prompt!.message).toBe('Quit Orquestra?')
     expect(prompt!.detail).toBeUndefined()
   })
 

@@ -25,9 +25,9 @@ import { rebuildApplicationMenu } from '../menu'
 import { disableRendererSandbox } from '../featureFlags'
 import { WINDOW_FULLSCREEN_STATE, WINDOW_MAXIMIZE_STATE, SESSION_FLUSH_SAVE } from '../../shared/ipc-channels'
 import { IS_E2E } from './reveal'
-import type { CateWindowParams } from '../../shared/types'
+import type { OrquestraWindowParams } from '../../shared/types'
 
-export function createWindow(params?: CateWindowParams): BrowserWindow {
+export function createWindow(params?: OrquestraWindowParams): BrowserWindow {
   const iconPath = path.join(__dirname, '../../build/icon-1024.png')
   const windowType = params?.type ?? 'main'
   const isDock = windowType === 'dock'
@@ -60,7 +60,7 @@ export function createWindow(params?: CateWindowParams): BrowserWindow {
     show: false,
     minWidth: isDock ? 400 : 800,
     minHeight: isDock ? 300 : 600,
-    title: 'Cate',
+    title: 'Orquestra',
     // macOS: hide the native title bar and draw a themed strip in its place (the
     // macOS native bar can't be tinted to a theme color — only dark/light — so we
     // always use `hiddenInset` and render TitlebarStrip).

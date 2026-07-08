@@ -5,28 +5,28 @@ type P = Record<string, { title: string }>
 
 describe('disambiguateTitle', () => {
   it('leaves a unique title untouched', () => {
-    const panels: P = { a: { title: 'Codex · cate' }, b: { title: 'Claude Code' } }
-    expect(disambiguateTitle('Codex · cate', 'a', panels)).toBe('Codex · cate')
+    const panels: P = { a: { title: 'Codex · orquestra' }, b: { title: 'Claude Code' } }
+    expect(disambiguateTitle('Codex · orquestra', 'a', panels)).toBe('Codex · orquestra')
   })
 
   it('appends " 2" when a sibling already shows the same title', () => {
-    const panels: P = { a: { title: 'Codex · cate' }, b: { title: 'Codex · cate' } }
-    expect(disambiguateTitle('Codex · cate', 'b', panels)).toBe('Codex · cate 2')
+    const panels: P = { a: { title: 'Codex · orquestra' }, b: { title: 'Codex · orquestra' } }
+    expect(disambiguateTitle('Codex · orquestra', 'b', panels)).toBe('Codex · orquestra 2')
   })
 
   it('skips suffixes already in use by siblings', () => {
     const panels: P = {
-      a: { title: 'Codex · cate' },
-      b: { title: 'Codex · cate 2' },
-      c: { title: 'Codex · cate' },
+      a: { title: 'Codex · orquestra' },
+      b: { title: 'Codex · orquestra 2' },
+      c: { title: 'Codex · orquestra' },
     }
-    expect(disambiguateTitle('Codex · cate', 'c', panels)).toBe('Codex · cate 3')
+    expect(disambiguateTitle('Codex · orquestra', 'c', panels)).toBe('Codex · orquestra 3')
   })
 
   it('ignores the panel being titled when checking for collisions', () => {
     // The panel's own current title must not count as a conflict with itself.
-    const panels: P = { a: { title: 'Codex · cate 2' }, b: { title: 'Codex · cate' } }
-    expect(disambiguateTitle('Codex · cate', 'a', panels)).toBe('Codex · cate 2')
+    const panels: P = { a: { title: 'Codex · orquestra 2' }, b: { title: 'Codex · orquestra' } }
+    expect(disambiguateTitle('Codex · orquestra', 'a', panels)).toBe('Codex · orquestra 2')
   })
 
   it('stays stable as each panel re-asserts its base every update', () => {
@@ -34,11 +34,11 @@ describe('disambiguateTitle', () => {
     // the result must settle (one bare, one " 2") and never oscillate.
     const panels: P = { a: { title: '' }, b: { title: '' } }
     const tick = (id: 'a' | 'b') => {
-      panels[id].title = disambiguateTitle('Codex · cate', id, panels)
+      panels[id].title = disambiguateTitle('Codex · orquestra', id, panels)
     }
     for (let i = 0; i < 6; i++) { tick('a'); tick('b') }
     const titles = [panels.a.title, panels.b.title].sort()
-    expect(titles).toEqual(['Codex · cate', 'Codex · cate 2'])
+    expect(titles).toEqual(['Codex · orquestra', 'Codex · orquestra 2'])
   })
 
   it('collapses the suffix once the bases diverge', () => {

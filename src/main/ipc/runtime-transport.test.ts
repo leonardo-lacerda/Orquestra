@@ -141,7 +141,7 @@ describe('buildTransport', () => {
 
   test('reads a key from a QUOTED path (strips the quotes — #335)', async () => {
     setPlatform('darwin')
-    const dir = mkdtempSync(join(tmpdir(), 'cate-key-'))
+    const dir = mkdtempSync(join(tmpdir(), 'orquestra-key-'))
     const keyFile = join(dir, 'id_rsa')
     writeFileSync(keyFile, rsaPem)
     const t = await buildTransport('srv_q', {
@@ -156,7 +156,7 @@ describe('buildTransport', () => {
 
   test('rejects a PuTTY .ppk key with a clear message (#333)', async () => {
     setPlatform('darwin')
-    const dir = mkdtempSync(join(tmpdir(), 'cate-key-'))
+    const dir = mkdtempSync(join(tmpdir(), 'orquestra-key-'))
     const keyFile = join(dir, 'mykey.ppk')
     writeFileSync(keyFile, 'PuTTY-User-Key-File-2: ssh-rsa\nEncryption: none\n')
     await expect(

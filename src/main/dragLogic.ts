@@ -179,7 +179,7 @@ export function pruneClaims(
 // -----------------------------------------------------------------------------
 
 export interface DetachContext {
-  /** True when some Cate window is in macOS native fullscreen — new windows
+  /** True when some Orquestra window is in macOS native fullscreen — new windows
    *  would land in a separate Space (black screen), so we refuse. */
   anyWindowFullscreen: boolean
   /** Cursor position in screen pixels at the moment of the drop. */

@@ -454,9 +454,9 @@ export function registerHandlers(): void {
     setSidebarSession(session)
   })
 
-  // Remote projects (cate-runtime:// workspaces): full restore snapshot +
+  // Remote projects (orquestra-runtime:// workspaces): full restore snapshot +
   // reconnect info, since their tree lives on a runtime and can't use the
-  // local .cate/ project-state files.
+  // local .orquestra/ project-state files.
   ipcMain.handle(REMOTE_PROJECTS_GET, async () => {
     return getRemoteProjects()
   })

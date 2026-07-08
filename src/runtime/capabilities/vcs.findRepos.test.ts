@@ -22,7 +22,7 @@ describe('vcs.findRepos', () => {
     // Use the mkdtemp path as-is (not realpath'd): pathValidation allows paths
     // under path.resolve(os.tmpdir()), and on macOS realpath would rewrite the
     // /var → /private/var symlink and fall outside that allowed prefix.
-    root = await fs.mkdtemp(path.join(os.tmpdir(), 'cate-findrepos-'))
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-findrepos-'))
   })
 
   afterEach(async () => {

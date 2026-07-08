@@ -1,6 +1,6 @@
 // =============================================================================
 // Logger — centralized logging for the main process, backed by electron-log.
-// Writes to ~/Library/Logs/Cate/main.log (macOS) with 5MB rotation.
+// Writes to ~/Library/Logs/Orquestra/main.log (macOS) with 5MB rotation.
 // Renderer processes use electron-log/renderer which sends logs here via IPC.
 // =============================================================================
 

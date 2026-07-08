@@ -1,5 +1,5 @@
 // =============================================================================
-// WindowChrome — the shared overlay chrome every Cate window renders: the Cmd+K
+// WindowChrome — the shared overlay chrome every Orquestra window renders: the Cmd+K
 // command palette, the settings window, the skills + saved-layouts dialogs, and
 // the cross-window drag overlay.
 //

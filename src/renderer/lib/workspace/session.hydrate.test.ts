@@ -3,7 +3,7 @@
 // hydrateWorkspaceFromDiskIfEmpty — the runtime "load saved layout on open" path
 // that fixes close-then-reopen coming up blank. These tests pin the guards (it
 // must be a safe no-op unless the workspace is freshly opened and empty) and the
-// happy path (an empty workspace with a saved .cate/ layout gets it restored).
+// happy path (an empty workspace with a saved .orquestra/ layout gets it restored).
 // =============================================================================
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -84,7 +84,7 @@ function diskState(): { workspace: ProjectWorkspaceFile; session: ProjectSession
 async function freshWorkspace(id: string, rootPath = ROOT): Promise<string> {
   const wsId = useAppStore.getState().addWorkspace('WS', rootPath, id)
   // Let the create's main-sync response settle so its applied WorkspaceInfo
-  // can't later clobber the name hydrate restores from the .cate/ file.
+  // can't later clobber the name hydrate restores from the .orquestra/ file.
   await awaitWorkspaceSync()
   return wsId
 }
@@ -123,7 +123,7 @@ describe('hydrateWorkspaceFromDiskIfEmpty — guards', () => {
 })
 
 describe('hydrateWorkspaceFromDiskIfEmpty — restore', () => {
-  it('loads the saved .cate/ layout into an empty workspace', async () => {
+  it('loads the saved .orquestra/ layout into an empty workspace', async () => {
     const id = await freshWorkspace('ws-restore')
     projectStateLoad.mockResolvedValue(diskState())
 

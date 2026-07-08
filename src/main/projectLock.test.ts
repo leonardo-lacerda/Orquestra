@@ -11,14 +11,14 @@ import {
 
 describe('projectLock', () => {
   let root: string
-  const lockFile = () => path.join(root, '.cate', 'workspace.lock')
+  const lockFile = () => path.join(root, '.orquestra', 'workspace.lock')
   const writeOwner = (pid: number) => {
     fs.mkdirSync(path.dirname(lockFile()), { recursive: true })
     fs.writeFileSync(lockFile(), JSON.stringify({ pid }))
   }
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-lock-'))
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-lock-'))
   })
   afterEach(() => {
     releaseAllProjectLocks()

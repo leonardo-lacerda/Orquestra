@@ -208,7 +208,7 @@
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@keyframes cate-notif-sweep {
+@keyframes orquestra-notif-sweep {
   0%   { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
@@ -219,7 +219,7 @@
    always-on variants). The two stops are themeable via --shimmer-dim/
    --shimmer-bright, letting a parallel-work title shimmer in its worktree color;
    unset, they fall back to muted->primary. */
-.cate-notif-pulse {
+.orquestra-notif-pulse {
   background: linear-gradient(
     90deg,
     var(--shimmer-dim, var(--text-muted, #6b6762)) 40%,
@@ -231,15 +231,15 @@
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  animation: cate-notif-sweep 2s ease-in-out infinite;
+  animation: orquestra-notif-sweep 2s ease-in-out infinite;
 }
 
-@keyframes cate-fade-in {
+@keyframes orquestra-fade-in {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.cate-fade-in {
-  animation: cate-fade-in 0.35s ease-out both;
+.orquestra-fade-in {
+  animation: orquestra-fade-in 0.35s ease-out both;
 }
 
 /* Skill install progress — an indeterminate left-to-right fill on an agent pill
@@ -279,13 +279,13 @@
    transform/opacity animation here is composited every frame and (when layered
    over a backdrop-filter) forces a per-frame blur recompute — a large, sustained
    WindowServer/GPU cost for a tiny indicator. */
-.cate-await-indicator {
+.orquestra-await-indicator {
   position: relative;
   display: inline-block;
   width: 8px;
   height: 8px;
 }
-.cate-await-dot {
+.orquestra-await-dot {
   position: absolute;
   inset: 1px;
   border-radius: 9999px;

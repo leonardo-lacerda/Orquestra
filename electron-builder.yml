@@ -1,17 +1,17 @@
-appId: com.cate.app
-productName: Cate
+appId: com.orquestra.app
+productName: Orquestra
 directories:
   output: release
-# The cate-runtime daemon is NOT bundled in the app. One self-contained
+# The orquestra-runtime daemon is NOT bundled in the app. One self-contained
 # tarball per target is built in CI and uploaded to the GitHub release
 # `v<version>`; on connect the remote pulls its own tarball (with a client-side
 # fallback). See runtimeArtifacts.ts + .github/workflows/release.yml.
 #
 # @earendil-works/pi-coding-agent (the agent runtime, ~271MB) is NO LONGER
-# bundled — it's a devDependency, shipped on demand as the cate-pi tarball and
+# bundled — it's a devDependency, shipped on demand as the orquestra-pi tarball and
 # run by the runtime (local or remote). See build-pi-tarball.mjs + ensurePi.ts.
 # @earendil-works/pi-ai stays a production dependency (authManager uses /oauth
-# for cate's own login flow) and is unpacked here. The @earendil-works glob now
+# for Orquestra's own login flow) and is unpacked here. The @earendil-works glob now
 # only matches pi-ai + pi-agent-core. Its pure-JS SDK closure (AWS/Google/Mistral/
 # OpenAI, zod, yaml, protobufjs, etc.) is NOT unpacked: it loads fine from inside
 # app.asar. Unpacking the whole tree pushed codesign toward EMFILE on macOS
@@ -47,16 +47,16 @@ asarUnpack:
   - "node_modules/sharp/**"
   - "node_modules/pdfjs-dist/**"
 extraResources:
-  # Ship bundled pi extensions (e.g. cate-plan-mode) into the packaged app so
+  # Ship bundled pi extensions (e.g. orquestra-plan-mode) into the packaged app so
   # installPlanModeExtension can copy them into ~/.pi/agent/extensions/ on
   # first use. The src/ tree itself isn't packaged, so we mirror the files
-  # under resources/cate-extensions/.
+  # under resources/orquestra-extensions/.
   - from: src/agent/extensions
-    to: cate-extensions
+    to: orquestra-extensions
     filter:
       - "**/*"
-  # Ship the cate-theme authoring skill so installThemeSkill can copy it into
-  # ~/.claude/skills/cate-theme/ on first launch.
+  # Ship the orquestra-theme authoring skill so installThemeSkill can copy it into
+  # ~/.claude/skills/orquestra-theme/ on first launch.
   - from: skills
     to: skills
     filter:
@@ -77,7 +77,7 @@ extraResources:
 publish:
   provider: github
   owner: 0-AI-UG
-  repo: cate
+  repo: orquestra
   releaseType: release
 mac:
   icon: build/icon.icns
@@ -88,7 +88,7 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: true
   extendInfo:
-    NSMicrophoneUsageDescription: Cate needs microphone access so terminal-based tools (like Claude Code) can record audio for voice input.
+    NSMicrophoneUsageDescription: Orquestra needs microphone access so terminal-based tools (like Claude Code) can record audio for voice input.
   target:
     - target: dmg
       arch:

@@ -13,6 +13,8 @@ import type {
   Rect,
   Size,
   PanelType,
+  TerminalConnection,
+  DrawingElement,
 } from '../../../shared/types'
 import type { PlacementCandidate, PlacementTrace } from '../../canvas/placement'
 
@@ -82,6 +84,12 @@ export interface CanvasStoreState {
   future: CanvasHistoryEntry[]
   /** Interactive ghost placement in progress (null when idle). */
   pendingPlacement: PendingPlacement | null
+  /** Terminal-to-terminal connections for agent orchestration. */
+  connections: Record<string, TerminalConnection>
+  /** Whiteboard drawings on the canvas. */
+  drawings: DrawingElement[]
+  /** Currently selected drawing element (for move/resize). */
+  selectedDrawingId: string | null
 }
 
 export interface CanvasHistoryEntry {
@@ -222,7 +230,24 @@ export interface CanvasStoreActions {
     nodes: Record<CanvasNodeId, CanvasNodeState>,
     viewportOffset: Point,
     zoomLevel: number,
+    connections?: Record<string, TerminalConnection>,
+    drawings?: DrawingElement[],
   ) => void
+
+  // Terminal connections (agent orchestration)
+  addConnection: (sourceNodeId: CanvasNodeId, targetNodeId: CanvasNodeId) => string | null
+  removeConnection: (id: string) => void
+  removeConnectionsForNode: (nodeId: CanvasNodeId) => void
+  getConnections: (nodeId: CanvasNodeId) => TerminalConnection[]
+  loadConnections: (connections: Record<string, TerminalConnection>) => void
+
+  // Canvas drawings (whiteboard)
+  addDrawing: (element: DrawingElement) => void
+  removeDrawing: (id: string) => void
+  updateDrawing: (id: string, updates: Partial<DrawingElement>) => void
+  clearDrawings: () => void
+  loadDrawings: (drawings: DrawingElement[]) => void
+  selectDrawing: (id: string | null) => void
 }
 
 export type CanvasStore = CanvasStoreState & CanvasStoreActions

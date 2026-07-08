@@ -4,6 +4,6 @@
 // =============================================================================
 
 import { createContext } from 'react'
-import type { CateWindowType } from '../../shared/types'
+import type { OrquestraWindowType } from '../../shared/types'
 
-export const WindowTypeContext = createContext<CateWindowType>('main')
+export const WindowTypeContext = createContext<OrquestraWindowType>('main')

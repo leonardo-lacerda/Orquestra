@@ -4,7 +4,7 @@
 //
 //   recent-projects.json   { projects: string[] }            recency-ordered list
 //   sidebar.json           { session: SidebarSession|null }  sidebar order + active
-//   remote-workspaces.json { workspaces: RemoteProjectEntry[] } cate-runtime:// restore snapshots
+//   remote-workspaces.json { workspaces: RemoteProjectEntry[] } orquestra-runtime:// restore snapshots
 //   layouts.json           { layouts: Record<string, unknown> } named saved canvas layouts
 // =============================================================================
 
@@ -16,12 +16,12 @@ import type { SidebarSession, RemoteProjectEntry } from '../shared/types'
 const MAX_RECENT_PROJECTS = 10
 
 // Legacy URI scheme from before the companion→runtime rename. Remote workspaces
-// saved by an older build carry `cate-companion://` locators that the current
+// saved by an older build carry `orquestra-companion://` locators that the current
 // `parseLocator` no longer recognizes (it would silently treat them as bare
 // local paths). We drop those stale entries on load and log a notice telling the
 // user to re-add the connection — there is no automatic migration. This is the
 // only place the old scheme string still appears intentionally.
-const LEGACY_RUNTIME_SCHEME = 'cate-companion://'
+const LEGACY_RUNTIME_SCHEME = 'orquestra-companion://'
 
 function isLegacyRemoteEntry(w: RemoteProjectEntry): boolean {
   return typeof w.locator === 'string' && w.locator.startsWith(LEGACY_RUNTIME_SCHEME)

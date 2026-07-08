@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // =============================================================================
 // build-skills-index.mjs — crawl registry/sources.json and emit the curated
-// skills-index.json that the Cate app fetches. Run by the skills-index GitHub
+// skills-index.json that the Orquestra app fetches. Run by the skills-index GitHub
 // Action (with GITHUB_TOKEN for a 5000/hr rate limit). Mirrors the discovery
 // logic in src/skills/main/githubCrawl.ts (kept standalone so it runs as plain
 // node with no build step).
@@ -19,7 +19,7 @@ const INDEX_PATH = path.join(REPO_ROOT, 'registry', 'skills-index.json')
 const TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ''
 
 function authHeaders() {
-  const h = { Accept: 'application/vnd.github+json', 'User-Agent': 'Cate-skills-index' }
+  const h = { Accept: 'application/vnd.github+json', 'User-Agent': 'Orquestra-skills-index' }
   if (TOKEN) h.Authorization = `Bearer ${TOKEN}`
   return h
 }
@@ -90,7 +90,7 @@ async function ghJson(url) {
 async function rawText(owner, name, ref, p) {
   const segs = p.split('/').map(encodeURIComponent).join('/')
   const res = await fetch(`https://raw.githubusercontent.com/${owner}/${name}/${encodeURIComponent(ref)}/${segs}`, {
-    headers: TOKEN ? { Authorization: `Bearer ${TOKEN}`, 'User-Agent': 'Cate-skills-index' } : { 'User-Agent': 'Cate-skills-index' },
+    headers: TOKEN ? { Authorization: `Bearer ${TOKEN}`, 'User-Agent': 'Orquestra-skills-index' } : { 'User-Agent': 'Orquestra-skills-index' },
   })
   if (!res.ok) throw new Error(`raw ${res.status} for ${p}`)
   return res.text()

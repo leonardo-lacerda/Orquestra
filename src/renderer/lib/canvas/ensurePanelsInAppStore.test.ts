@@ -104,7 +104,7 @@ describe('ensurePanelsInAppStore — rootPath threading', () => {
 describe('ensurePanelsInAppStore — worktree threading', () => {
   const ws = () => useAppStore.getState().workspaces.find((w) => w.id === WS)
   const WT_A: WorktreeMeta = { id: 'wt-a', path: '/repo', color: '#111111', label: 'main' }
-  const WT_B: WorktreeMeta = { id: 'wt-b', path: '/repo/.cate/worktrees/b', color: '#22aa55', label: 'feature' }
+  const WT_B: WorktreeMeta = { id: 'wt-b', path: '/repo/.orquestra/worktrees/b', color: '#22aa55', label: 'feature' }
 
   it('seeds the stub workspace worktrees from the transfer', () => {
     ensurePanelsInAppStore(

@@ -175,10 +175,16 @@ export function installWebContentsSecurity(): void {
       ;(webPreferences as { allowRunningInsecureContent?: boolean }).allowRunningInsecureContent = false
 
       // Allow `window.open()` from webview content so we can track OAuth /
-      // Sign-In popups via Cate's popup registry. The setWindowOpenHandler
+      // Sign-In popups via Orquestra's popup registry. The setWindowOpenHandler
       // installed when the guest's webContents is created strictly filters
       // which URLs are actually allowed; this just removes the blanket veto.
-      params.allowpopups = 'true'
+      // Only enable popups when the initial URL looks like an OAuth flow,
+      // rather than a blanket allow — reduces the surface area for unexpected
+      // popup-based exploits in non-OAuth webviews.
+      const isOAuthPage = typeof src === 'string' && /google|github|microsoft|apple/i.test(src)
+      if (isOAuthPage) {
+        params.allowpopups = 'true'
+      }
 
       const partition = typeof webPreferences.partition === 'string' ? webPreferences.partition : undefined
       const targetSession = guestSessionFor(contents, partition)

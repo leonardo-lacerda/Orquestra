@@ -25,7 +25,7 @@ import {
   CaretRight,
   CaretDown,
 } from '@phosphor-icons/react'
-import { CateLogo } from '../../renderer/ui/CateLogo'
+import { OrquestraLogo } from '../../renderer/ui/OrquestraLogo'
 import { ModelPickerDropdown } from './ModelPicker'
 import log from '../../renderer/lib/logger'
 import { errorMessage as toErrorMessage } from '../../renderer/lib/errorMessage'
@@ -840,7 +840,7 @@ function DefaultModelSection({ models }: { models: Array<{ provider: string; mod
           onClick={() => setOpen((v) => !v)}
           className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-hover border border-strong text-[12.5px] text-primary hover:bg-hover-strong focus:outline-none focus:border-agent-light/50"
         >
-          <CateLogo size={12} className="text-agent-light shrink-0" />
+          <OrquestraLogo size={12} className="text-agent-light shrink-0" />
           <span className="truncate flex-1 text-left">
             {current
               ? (models.find((m) => m.provider === current.provider && m.model === current.model)?.label ?? current.model)

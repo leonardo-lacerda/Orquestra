@@ -1,6 +1,6 @@
 // =============================================================================
 // Same-instance duplicate-root guard. Two workspace tabs pointed at one folder
-// would share its .cate/ state and clobber each other's autosave; the per-pid
+// would share its .orquestra/ state and clobber each other's autosave; the per-pid
 // project lock can't catch this (same process always re-acquires). Opening a
 // folder already open here must redirect to the existing tab, not duplicate it.
 // =============================================================================
@@ -56,7 +56,7 @@ describe('duplicateWorkspace preserves project identity', () => {
       user: 'me',
       remotePath: '/srv/repo',
     }
-    const a = useAppStore.getState().addWorkspace('Remote', 'cate-runtime://comp-1/srv/repo', 'ws-a', connection)
+    const a = useAppStore.getState().addWorkspace('Remote', 'orquestra-runtime://comp-1/srv/repo', 'ws-a', connection)
 
     const dupId = useAppStore.getState().duplicateWorkspace(a)
 
@@ -64,7 +64,7 @@ describe('duplicateWorkspace preserves project identity', () => {
     expect(dup?.connection).toEqual(connection)
     // Not degraded to a broken local workspace.
     expect(dup?.connection?.kind).toBe('server')
-    expect(dup?.rootPath).toBe('cate-runtime://comp-1/srv/repo')
+    expect(dup?.rootPath).toBe('orquestra-runtime://comp-1/srv/repo')
   })
 
   it('preserves additionalRoots and worktrees in the duplicate', () => {
@@ -73,7 +73,7 @@ describe('duplicateWorkspace preserves project identity', () => {
     useAppStore.setState((s) => ({
       workspaces: s.workspaces.map((w) =>
         w.id === a
-          ? { ...w, worktrees: [{ id: 'wt-1', path: '/tmp/repo/.cate/worktrees/feat', color: '#abc', label: 'feat' }] }
+          ? { ...w, worktrees: [{ id: 'wt-1', path: '/tmp/repo/.orquestra/worktrees/feat', color: '#abc', label: 'feat' }] }
           : w,
       ),
     }))
@@ -83,7 +83,7 @@ describe('duplicateWorkspace preserves project identity', () => {
 
     expect(dup?.additionalRoots).toEqual(['/tmp/other-repo'])
     expect(dup?.worktrees).toEqual([
-      { id: 'wt-1', path: '/tmp/repo/.cate/worktrees/feat', color: '#abc', label: 'feat' },
+      { id: 'wt-1', path: '/tmp/repo/.orquestra/worktrees/feat', color: '#abc', label: 'feat' },
     ])
     // Deep-copied, not aliased — mutating the original must not touch the copy.
     const original = useAppStore.getState().workspaces.find((w) => w.id === a)

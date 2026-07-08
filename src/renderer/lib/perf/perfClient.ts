@@ -1,5 +1,5 @@
 // =============================================================================
-// perfClient — renderer-side profiling, active only under CATE_PERF=1.
+// perfClient — renderer-side profiling, active only under ORQUESTRA_PERF=1.
 //
 // Provides:
 //   - useRenderCount(name): counts component renders so the HUD can show
@@ -36,9 +36,9 @@ export function getRenderCounts(): Map<string, number> {
 /**
  * Bump a named counter from a NON-component hot path (a store selector, an
  * event handler) that can't use the useRenderCount hook. Feeds the same map
- * the HUD and __catePerf.renderCounts() read, so instrumented paths show up
+ * the HUD and __orquestraPerf.renderCounts() read, so instrumented paths show up
  * as "<name>/s" alongside component render rates. A no-op (single bool check)
- * when CATE_PERF is off, so it's safe to leave on a per-frame path.
+ * when ORQUESTRA_PERF is off, so it's safe to leave on a per-frame path.
  */
 export function perfCount(name: string, n = 1): void {
   if (!PERF_ENABLED) return
@@ -46,7 +46,7 @@ export function perfCount(name: string, n = 1): void {
 }
 
 /**
- * Count every commit of the calling component. Costs nothing when CATE_PERF is
+ * Count every commit of the calling component. Costs nothing when ORQUESTRA_PERF is
  * off (the effect body early-returns). The empty-less effect runs after every
  * render, so it captures re-renders, not just mounts.
  */
@@ -91,8 +91,8 @@ let started = false
 
 declare global {
   interface Window {
-    /** Exposed only under CATE_PERF=1 — read by the e2e perf-stress harness. */
-    __catePerf?: {
+    /** Exposed only under ORQUESTRA_PERF=1 — read by the e2e perf-stress harness. */
+    __orquestraPerf?: {
       fps(): number
       longTasks(): { count: number; maxMs: number }
       renderCounts(): Record<string, number>
@@ -107,7 +107,7 @@ export function initPerfClient(): void {
   started = true
 
   // Expose a read API for the e2e perf-stress test (page.evaluate reads these).
-  window.__catePerf = {
+  window.__orquestraPerf = {
     fps: () => fps,
     longTasks: () => ({ count: longTaskCount, maxMs: longTaskMaxMs }),
     renderCounts: () => Object.fromEntries(renderCounts),

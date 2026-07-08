@@ -94,7 +94,7 @@ function parseEnv(raw: string): Record<string, string> | null {
  *    terminal) that process boots as plain Node: `require('electron').app`
  *    becomes undefined and the app crashes at startup.
  *  - npm_*    — npm/electron-vite lifecycle vars from the parent `npm run` that
- *    would otherwise pollute every terminal opened inside dev-mode Cate.
+ *    would otherwise pollute every terminal opened inside dev-mode Orquestra.
  *
  * This mirrors the scrub the pre-runtime local PTY path applied at spawn time;
  * doing it here keeps every consumer (runtime, terminals, git, MCP) covered.

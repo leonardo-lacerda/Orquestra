@@ -29,7 +29,7 @@ export interface Rect {
 // Panel types
 // -----------------------------------------------------------------------------
 
-export type PanelType = 'terminal' | 'browser' | 'editor' | 'canvas' | 'agent' | 'document'
+export type PanelType = 'terminal' | 'browser' | 'editor' | 'canvas' | 'agent' | 'document' | 'orchestration'
 
 // -----------------------------------------------------------------------------
 // Canvas node
@@ -114,11 +114,15 @@ export interface PanelState {
    *  registry entry is disposed and `TerminalPanel`'s create effect re-runs at
    *  the new `cwd`. */
   ptyEpoch?: number
+  /** Terminal panels only: when true, the terminal runs in Maestro mode.
+   *  The agent gains access to Orquestra CLI commands (recruit, dismiss, connect)
+   *  that manipulate the canvas from inside the terminal. */
+  maestro?: boolean
 }
 
 // -----------------------------------------------------------------------------
 // Worktree metadata — per-workspace registry of UI-owned facts about the git
-// worktrees Cate manages, keyed by worktree path. This persists ONLY the UI
+// worktrees Orquestra manages, keyed by worktree path. This persists ONLY the UI
 // metadata (id/color/label). The live facts (branch / isPrimary / isCurrent)
 // are authoritative from `git worktree list` (owned by gitStatusStore) and are
 // joined onto this metadata at read time by useWorktrees — they are never
@@ -171,7 +175,7 @@ export interface WorkspaceInfo {
   id: string
   name: string
   color: string
-  /** Locator string: a bare absolute path for local, a `cate-runtime://`
+  /** Locator string: a bare absolute path for local, a `orquestra-runtime://`
    *  URI otherwise. See src/main/runtime/locator.ts. */
   rootPath: string
   /** Defaults to { kind: 'local' } when absent (migration rule). */
@@ -247,7 +251,7 @@ export interface RuntimeStatus {
 }
 
 export interface WorkspaceMutationError {
-  code: 'INVALID_ROOT_PATH' | 'INVALID_WORKSPACE_ID' | 'WORKSPACE_NOT_FOUND' | 'DUPLICATE_ROOT'
+  code: 'INVALID_ROOT_PATH' | 'INVALID_WORKSPACE_ID' | 'WORKSPACE_NOT_FOUND' | 'DUPLIORQUESTRA_ROOT'
   message: string
 }
 
@@ -259,7 +263,7 @@ export type WorkspaceMutationResult =
 // Window type system — main window vs borderless panel windows (Phase 4)
 // -----------------------------------------------------------------------------
 
-export type CateWindowType = 'main' | 'panel' | 'dock'
+export type OrquestraWindowType = 'main' | 'panel' | 'dock'
 
 /** A shadow record of a panel and the window that hosts it. Main maintains the
  *  union across ALL windows (main + detached) and broadcasts it, so every window
@@ -268,7 +272,7 @@ export type CateWindowType = 'main' | 'panel' | 'dock'
  *  the overview can render a detached canvas with its children. */
 export interface WindowPanelInfo extends WindowPanelReport {
   ownerWindowId: number
-  ownerWindowType: CateWindowType
+  ownerWindowType: OrquestraWindowType
 }
 
 /** A single window's report of its panels for cross-window discovery, sent on
@@ -299,8 +303,8 @@ export interface WindowPanelReport {
   hasPorts?: boolean
 }
 
-export interface CateWindowParams {
-  type: CateWindowType
+export interface OrquestraWindowParams {
+  type: OrquestraWindowType
   /** For panel windows: the panel type being displayed */
   panelType?: PanelType
   /** For panel windows: the panel ID */
@@ -488,6 +492,10 @@ export interface CanvasSnapshot {
   canvasNodes: Record<CanvasNodeId, CanvasNodeState>
   zoomLevel: number
   viewportOffset: Point
+  /** Terminal-to-terminal connections for agent orchestration. */
+  connections?: Record<string, TerminalConnection>
+  /** Whiteboard drawings. */
+  drawings?: DrawingElement[]
 }
 
 // -----------------------------------------------------------------------------
@@ -653,7 +661,7 @@ export type MenuActionId = ShortcutAction | 'openFolder' | 'reloadWorkspace' | '
 export type BrowserShortcutAction = 'reload' | 'reloadHard' | 'back' | 'forward' | 'focusUrl'
 
 /** A single global browsing-history entry, deduplicated by URL. Shared across
- *  all workspaces and browser panels so Cate behaves like one browser. */
+ *  all workspaces and browser panels so Orquestra behaves like one browser. */
 export interface BrowserHistoryEntry {
   url: string
   title: string
@@ -681,7 +689,7 @@ export interface BrowserTab {
 /** Sentinel URL for the browser start page ("new tab"). Persisted like any
  *  other panel URL so a start-page panel survives session restore; never
  *  recorded to history and never passed to the <webview> as src. */
-export const BROWSER_NEW_TAB_URL = 'cate://newtab'
+export const BROWSER_NEW_TAB_URL = 'orquestra://newtab'
 
 /** True when a URL should render the start page rather than a webview: the
  *  sentinel, the legacy `about:blank` default, or an empty/missing URL. Lets
@@ -731,7 +739,7 @@ export const SHORTCUT_DISPLAY_NAMES: Record<ShortcutAction, string> = {
   newTerminal: 'New Terminal',
   newBrowser: 'New Browser',
   newEditor: 'New Editor',
-  newAgent: 'New Cate Agent',
+  newAgent: 'New Orquestra Agent',
   newCanvas: 'New Canvas',
   newFile: 'New File',
   closePanel: 'Close Panel',
@@ -970,12 +978,12 @@ export interface SessionSnapshot {
 }
 
 /** One persisted remote workspace (stored in `remote-workspaces.json`). Remote
- *  workspaces can't use the local `.cate/` project-state files (their tree lives
+ *  workspaces can't use the local `.orquestra/` project-state files (their tree lives
  *  on a runtime), so their full restore snapshot + reconnect info is kept here,
- *  keyed by the `cate-runtime://` locator. Local workspaces never appear here —
- *  they round-trip through recentProjects + `.cate/` as before. */
+ *  keyed by the `orquestra-runtime://` locator. Local workspaces never appear here —
+ *  they round-trip through recentProjects + `.orquestra/` as before. */
 export interface RemoteProjectEntry {
-  /** The `cate-runtime://` locator string (this workspace's rootPath). */
+  /** The `orquestra-runtime://` locator string (this workspace's rootPath). */
   locator: string
   /** Reconnect info, used by ensureWorkspaceRuntime on restore. */
   connection: RuntimeConnection
@@ -1030,7 +1038,7 @@ export interface MultiWorkspaceSession {
 }
 
 // -----------------------------------------------------------------------------
-// Project-local workspace file (.cate/workspace.json) — VCS-friendly, shareable
+// Project-local workspace file (.orquestra/workspace.json) — VCS-friendly, shareable
 // -----------------------------------------------------------------------------
 
 export interface ProjectWorkspaceFile {
@@ -1061,7 +1069,7 @@ export interface ProjectPanelRef {
 }
 
 // -----------------------------------------------------------------------------
-// Project-local session file (.cate/session.json) — ephemeral, gitignored
+// Project-local session file (.orquestra/session.json) — ephemeral, gitignored
 // -----------------------------------------------------------------------------
 
 export interface ProjectSessionFile {
@@ -1077,7 +1085,7 @@ export interface ProjectSessionFile {
   /** Detached dock windows (machine-local, not committed). */
   dockWindows?: DetachedDockWindowSnapshot[]
   /** Git worktree registry (id/path/branch/color/label). Machine-local because
-   *  the checkouts under `.cate/worktrees` are gitignored and personal — kept
+   *  the checkouts under `.orquestra/worktrees` are gitignored and personal — kept
    *  here (not in committed workspace.json) so colors/labels survive a restart.
    *  Paths are absolute, matching `ProjectSessionPanel.workingDirectory`. */
   worktrees?: WorktreeMeta[]
@@ -1185,7 +1193,7 @@ export interface AppSettings {
   /** CSS font-family for Monaco editor panels. Empty string = built-in default
    *  stack (Menlo, Monaco, "Courier New", monospace). */
   editorFontFamily: string
-  /** Global UI zoom for Cate's own chrome (panels, sidebars, editor, terminal),
+  /** Global UI zoom for Orquestra's own chrome (panels, sidebars, editor, terminal),
    *  applied via webFrame.setZoomFactor in every window. 1.0 = 100%. Does not
    *  affect web pages shown in browser panels (those keep their own zoom).
    *  Range 0.5–2.0. */
@@ -1322,13 +1330,17 @@ export interface AppSettings {
 
   // Agent
   /** The user-pinned default model applied to every new agent chat, or null for
-   *  none. Was renderer localStorage (cate.agent.defaultModel.v1) before. */
+   *  none. Was renderer localStorage (orquestra.agent.defaultModel.v1) before. */
   agentDefaultModel: AgentModelRef | null
 
   // Layout
   /** Which sidebar views live in the left vs. right rail. Was renderer
-   *  localStorage (cate.sidebarLayout.v3) before. */
+   *  localStorage (orquestra.sidebarLayout.v3) before. */
   sidebarLayout: SidebarLayout
+
+  // Language
+  /** UI display language: 'en' (English) or 'pt-BR' (Português Brasil). */
+  language: string
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -1416,6 +1428,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     left: ['workspaces', 'explorer', 'search'],
     right: ['git'],
   },
+
+  // Language
+  language: 'en',
 }
 
 // -----------------------------------------------------------------------------
@@ -1469,6 +1484,7 @@ export const PANEL_CANVAS_DROP_SIZES: Record<PanelType, Size> = {
   canvas: { width: 640, height: 480 },
   agent: { width: 520, height: 440 },
   document: { width: 640, height: 480 },
+  orchestration: { width: 640, height: 480 },
 }
 
 // -----------------------------------------------------------------------------
@@ -1676,7 +1692,7 @@ export type OAuthFlowEvent =
   | { type: 'error'; message: string }
 
 // -----------------------------------------------------------------------------
-// Performance profiler (CATE_PERF=1) — shared between main sampler and the
+// Performance profiler (ORQUESTRA_PERF=1) — shared between main sampler and the
 // renderer HUD.
 // -----------------------------------------------------------------------------
 
@@ -1698,4 +1714,89 @@ export interface PerfSnapshot {
   spawnsPerSec: Record<string, number>
   ipc: Array<{ channel: string; kbPerSec: number; callsPerSec: number }>
   terminal: { kbPerSec: number; chunksPerSec: number }
+}
+
+// -----------------------------------------------------------------------------
+// Canvas drawings — whiteboard-style shapes on the canvas
+// -----------------------------------------------------------------------------
+
+export type DrawingTool = 'rect' | 'arrow' | 'text' | 'line'
+
+export type DrawingElement =
+  | DrawingRect
+  | DrawingArrow
+  | DrawingText
+  | DrawingLine
+
+export interface DrawingRect {
+  type: 'rect'
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  strokeColor: string
+  strokeWidth: number
+  /** CSS background, typically 'transparent'. */
+  fill: string
+}
+
+export interface DrawingArrow {
+  type: 'arrow'
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  strokeColor: string
+  strokeWidth: number
+}
+
+export interface DrawingLine {
+  type: 'line'
+  id: string
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  strokeColor: string
+  strokeWidth: number
+}
+
+export interface DrawingText {
+  type: 'text'
+  id: string
+  x: number
+  y: number
+  text: string
+  fontSize: number
+  color: string
+}
+
+// Default drawing style
+export const DEFAULT_DRAWING_STROKE = '#ffffff'
+export const DEFAULT_DRAWING_STROKE_WIDTH = 2
+export const DEFAULT_DRAWING_FONT_SIZE = 16
+
+// -----------------------------------------------------------------------------
+// Terminal connections — agent orchestration (Maestri-style PTY piping)
+// -----------------------------------------------------------------------------
+
+/** A directed connection between two terminal nodes on the canvas.
+ *  Source terminal's PTY output is forwarded as input to the target terminal's
+ *  PTY, enabling multi-agent orchestration workflows. */
+export interface TerminalConnection {
+  id: string
+  /** The terminal node whose output is piped (the "orchestrator"). */
+  sourceNodeId: CanvasNodeId
+  /** The terminal node that receives the piped input (the "worker"). */
+  targetNodeId: CanvasNodeId
+  /** When true, also forward a trailing newline after each chunk so the
+   *  target shell executes the received text as a command. Default: true. */
+  autoExecute: boolean
+  /** Connection type:
+   *  - 'pipe': PTY pipe (output forwarded to input, existing behavior)
+   *  - 'orchestration': visual arrow only (no PTY pipe), auto-created when
+   *    an orquestrador terminal recruits a worker. */
+  type?: 'pipe' | 'orchestration'
 }

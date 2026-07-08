@@ -8,7 +8,7 @@
 // what it does today. For a non-local runtime the string becomes an opaque
 // URI:
 //
-//     cate-runtime://<runtimeId>/<absolute-posix-path>
+//     orquestra-runtime://<runtimeId>/<absolute-posix-path>
 //
 // This is the back-compat anchor that lets us route fs/git/terminal operations
 // to a remote or WSL runtime WITHOUT threading a new `runtimeId` argument
@@ -17,7 +17,7 @@
 // (plus the leaf op) has to care.
 // =============================================================================
 
-const SCHEME = 'cate-runtime://'
+const SCHEME = 'orquestra-runtime://'
 
 /** Opaque routing key for a runtime: 'local', 'srv_<id>', 'wsl_<distro>'. */
 export type RuntimeId = string
@@ -45,7 +45,7 @@ function decodePath(p: string): string {
 
 /**
  * Decode a path/cwd string into its runtime + path. A string with no
- * `cate-runtime://` scheme is treated as a local path verbatim — this is the
+ * `orquestra-runtime://` scheme is treated as a local path verbatim — this is the
  * implicit-local rule every legacy path relies on.
  */
 export function parseLocator(raw: string): ResourceLocator {

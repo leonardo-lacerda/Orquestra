@@ -1,5 +1,5 @@
 // =============================================================================
-// Coding agents Cate recognizes — the single source of truth for the agents we
+// Coding agents Orquestra recognizes — the single source of truth for the agents we
 // detect running inside a terminal. Add a new agent HERE (id, display name, and
 // the process name(s) its CLI runs as) and it flows everywhere that matters:
 //   • detection — src/runtime/capabilities/process.ts matches a terminal's
@@ -15,7 +15,7 @@
 //
 // NOTE: skill-install targets are a SEPARATE list (SKILL_TARGETS in
 // src/shared/skills.ts) — related but intentionally not merged: it also covers
-// Cate itself and omits agents we can't install skills into, so the membership
+// Orquestra itself and omits agents we can't install skills into, so the membership
 // and id scheme differ.
 // =============================================================================
 

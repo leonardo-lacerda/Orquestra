@@ -8,7 +8,7 @@ export const oneLight: Theme = {
   name: 'One Light',
   type: 'light',
   builtIn: true,
-  author: 'Cate theme pack',
+  author: 'Orquestra theme pack',
   bootBackground: '#fafafa',
   app: {
     'surface-0': '#fafafa',

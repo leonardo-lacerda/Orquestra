@@ -19,16 +19,20 @@ import {
 } from '@phosphor-icons/react'
 import pkg from '../../../package.json'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 
 // ---------------------------------------------------------------------------
 // View metadata — icon + title for each possible sidebar view
 // ---------------------------------------------------------------------------
 
-const VIEW_META: Record<SidebarView, { icon: PhosphorIcon; title: string }> = {
-  workspaces: { icon: Stack, title: 'Workspaces' },
-  explorer: { icon: FolderOpen, title: 'Explorer' },
-  search: { icon: MagnifyingGlass, title: 'Search' },
-  git: { icon: GitBranch, title: 'Source Control' },
+function useViewMeta(): Record<SidebarView, { icon: PhosphorIcon; title: string }> {
+  const { t } = useTranslation()
+  return {
+    workspaces: { icon: Stack, title: t('sidebar.workspaces') },
+    explorer: { icon: FolderOpen, title: t('sidebar.explorer') },
+    search: { icon: MagnifyingGlass, title: t('sidebar.search') },
+    git: { icon: GitBranch, title: t('sidebar.sourceControl') },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -41,6 +45,7 @@ const SidebarViewContent: React.FC<{ view: SidebarView; rootPath: string }> = ({
 }) => {
   const selectedWorkspaceId = useAppStore((s) => s.selectedWorkspaceId)
   const setWorkspaceRootPath = useAppStore((s) => s.setWorkspaceRootPath)
+  const { t } = useTranslation()
 
   switch (view) {
     case 'workspaces':
@@ -50,7 +55,7 @@ const SidebarViewContent: React.FC<{ view: SidebarView; rootPath: string }> = ({
         <FileExplorer rootPath={rootPath} />
       ) : (
         <div className="flex flex-col items-center justify-center h-full text-muted text-xs gap-3 p-4">
-          <span>No folder open</span>
+          <span>{t('sidebar.noFolderOpen')}</span>
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-secondary hover:text-primary bg-surface-5 hover:bg-hover transition-colors"
             onClick={async () => {
@@ -61,7 +66,7 @@ const SidebarViewContent: React.FC<{ view: SidebarView; rootPath: string }> = ({
             }}
           >
             <FolderOpen size={13} />
-            Open Folder
+            {t('sidebar.openFolder')}
           </button>
         </div>
       )
@@ -78,7 +83,7 @@ const SidebarViewContent: React.FC<{ view: SidebarView; rootPath: string }> = ({
 // Shared activity bar sidebar — parameterized by side
 // ---------------------------------------------------------------------------
 
-const DRAG_MIME = 'application/x-cate-view'
+const DRAG_MIME = 'application/x-orquestra-view'
 const BAR_WIDTH = 40
 
 interface ActivityBarSidebarProps {
@@ -100,6 +105,8 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
   const draggingView = useUIStore((s) => s.draggingView)
   const setDraggingView = useUIStore((s) => s.setDraggingView)
   const isDragActive = draggingView !== null
+  const VIEW_META = useViewMeta()
+  const { t } = useTranslation()
 
   // Guard: if activeView is not present on this side (e.g. just moved away), clear it
   useEffect(() => {
@@ -239,9 +246,6 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
     e.preventDefault()
     e.stopPropagation()
     const view = ((e.dataTransfer.getData(DRAG_MIME) || e.dataTransfer.getData('text/plain')) as SidebarView) || draggingView
-    // Compute index fresh from cursor position — relying on the indicator
-    // ref is unsafe because dragleave with null relatedTarget can clear it
-    // immediately before drop fires.
     const targetIndex = computeDropIndex(e.clientY)
     setDropIndicator(null)
     setDraggingView(null)
@@ -306,34 +310,32 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
       </div>
       {side === 'left' && (
         <div className="mt-auto flex flex-col items-center pb-1 w-full">
-          {/* The standalone ⌘K search icon was removed now that the dedicated
-              Search view exists; ⌘K still opens the command palette via keyboard. */}
-          <Tooltip label="Skills" placement="right">
+          <Tooltip label={t('sidebar.skills')} placement="right">
             <button
               type="button"
               className="flex items-center justify-center w-8 h-8 my-1 rounded text-muted hover:text-secondary transition-colors"
               onClick={() => useUIStore.getState().setShowSkillsDialog(true)}
-              aria-label="Skills"
+              aria-label={t('sidebar.skills')}
             >
               <PuzzlePiece size={16} className="pointer-events-none" />
             </button>
           </Tooltip>
-          <Tooltip label="Saved Layouts" placement="right">
+          <Tooltip label={t('sidebar.savedLayouts')} placement="right">
             <button
               type="button"
               className="flex items-center justify-center w-8 h-8 my-1 rounded text-muted hover:text-secondary transition-colors"
               onClick={() => useUIStore.getState().setShowLayoutsDialog(true)}
-              aria-label="Saved Layouts"
+              aria-label={t('sidebar.savedLayouts')}
             >
               <FloppyDisk size={16} className="pointer-events-none" />
             </button>
           </Tooltip>
-          <Tooltip label="Settings" placement="right">
+          <Tooltip label={t('sidebar.settings')} placement="right">
             <button
               type="button"
               className="flex items-center justify-center w-8 h-8 my-1 rounded text-muted hover:text-secondary transition-colors"
               onClick={() => useUIStore.getState().openSettings()}
-              aria-label="Settings"
+              aria-label={t('sidebar.settings')}
             >
               <Gear size={16} className="pointer-events-none" />
             </button>
@@ -365,7 +367,7 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
       {/* Version marker — shown on whichever side hosts the workspaces view */}
       {isExpanded && activeView === 'workspaces' && (
         <div className="flex-shrink-0 px-2 pt-1.5 pb-4 flex items-center justify-center gap-1.5 select-none">
-          <svg viewBox="0 0 389 204" className="h-3 w-auto text-secondary" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-label="Cate">
+          <svg viewBox="0 0 389 204" className="h-3 w-auto text-secondary" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-label="Orquestra">
             <path d="M274 203.2L307.29 1.79999H388.29L384.51 24.84H329.97L320.5 80.16H342.22H366.34L362.74 103.2H338.62H316.5L304.06 180.16H358.6L355 203.2H314.5H274Z" />
             <path d="M201.264 203.2L230.424 26.5H197.124L201.264 1.3H294.864L290.724 26.5H257.424L228.264 203.2H201.264Z" />
             <path d="M89 133.2L142.1 1.79999H176.3L188 133.2H161.18L159.56 103.5H128.24L117.26 133.2H89ZM136.16 81.9H158.3L157.04 50.22C156.92 45.66 156.68 41.16 156.32 36.72C156.08 32.16 155.9 28.62 155.78 26.1C154.94 28.62 153.8 32.1 152.36 36.54C151.04 40.98 149.54 45.48 147.86 50.04L136.16 81.9Z" />
@@ -390,17 +392,9 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
             : isExpanded
               ? BAR_WIDTH + width
               : BAR_WIDTH,
-        // Static translucent fill — no backdrop-filter. A live blur forces the
-        // compositor to re-sample everything behind the sidebar on every frame
-        // that anything underneath changes (a major sustained WindowServer cost
-        // given the canvas/terminals behind it). A near-opaque tint reads as the
-        // same frosted surface without the per-frame compositing. The fill
-        // percentage is the user's "Background opacity" sidebar setting.
         backgroundColor: `color-mix(in srgb, var(--surface-1) ${Math.round(tintOpacity * 100)}%, transparent)`,
       }}
     >
-      {/* Opaque top strip — matches the dock tab bar height (36px) so the
-          sidebar chrome lines up with the canvas tab bar. */}
       <div
         className="pointer-events-none absolute top-0 left-0 right-0 h-9"
         style={{ backgroundColor: 'var(--surface-1)' }}

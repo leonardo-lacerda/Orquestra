@@ -14,8 +14,8 @@ import seedIndex from '../../../registry/skills-index.json'
 import type { SkillEntry } from '../../shared/skills'
 
 const CURATED_INDEX_URL =
-  process.env.CATE_SKILLS_INDEX_URL ||
-  'https://raw.githubusercontent.com/0-AI-UG/cate/main/registry/skills-index.json'
+  process.env.ORQUESTRA_SKILLS_INDEX_URL ||
+  'https://raw.githubusercontent.com/0-AI-UG/orquestra/main/registry/skills-index.json'
 
 const CURATED_TTL_MS = 30 * 60 * 1000
 const USER_TTL_MS = 10 * 60 * 1000
@@ -43,7 +43,7 @@ async function fetchCurated(): Promise<SkillEntry[]> {
   try {
     const res = await fetch(CURATED_INDEX_URL, {
       signal: ctrl.signal,
-      headers: { 'Accept': 'application/json', 'User-Agent': 'Cate-skills' },
+      headers: { 'Accept': 'application/json', 'User-Agent': 'Orquestra-skills' },
       redirect: 'follow',
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)

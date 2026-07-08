@@ -50,7 +50,7 @@ function actuallyInit(): void {
 
   Sentry.init({
     dsn: SENTRY_DSN,
-    release: `cate@${app.getVersion()}`,
+    release: `orquestra@${app.getVersion()}`,
     environment: app.isPackaged ? 'production' : 'development',
     // Don't include device name / IP / OS user.
     sendDefaultPii: false,
@@ -74,7 +74,7 @@ function actuallyInit(): void {
   })
 
   initialized = true
-  log.info('[sentry] initialized (env=%s, release=cate@%s)', app.isPackaged ? 'production' : 'development', app.getVersion())
+  log.info('[sentry] initialized (env=%s, release=orquestra@%s)', app.isPackaged ? 'production' : 'development', app.getVersion())
 }
 
 export function initSentry(): void {

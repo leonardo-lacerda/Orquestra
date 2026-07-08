@@ -47,8 +47,8 @@ describe('FS_IMPORT_ENTRIES', () => {
   beforeEach(async () => {
     // realpath so the registered allowed root matches validatePathStrict's
     // symlink-resolved comparison (e.g. /tmp → /private/tmp on macOS).
-    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-import-dest-')))
-    extern = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-import-src-')))
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-import-dest-')))
+    extern = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-import-src-')))
     addAllowedRoot(root) // destination must be inside a workspace root; source need not be
   })
 
@@ -124,7 +124,7 @@ describe('in-process fs subscriptions', () => {
   let root: string
 
   beforeEach(async () => {
-    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-fswatch-')))
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-fswatch-')))
     addAllowedRoot(root)
   })
 

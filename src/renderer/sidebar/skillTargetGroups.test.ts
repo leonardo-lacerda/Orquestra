@@ -6,7 +6,7 @@ const row = (skillId: string, name: string, targetId: InstalledSkill['targetId']
   skillId,
   name,
   targetId,
-  path: `.cate/${targetId}/${name}/SKILL.md`,
+  path: `.orquestra/${targetId}/${name}/SKILL.md`,
   origin: 'local',
 })
 
@@ -19,11 +19,11 @@ describe('toSkillTargetGroups', () => {
     const groups = toSkillTargetGroups([
       row('a/x', 'x', 'claude-code'),
       row('a/y', 'y', 'claude-code'),
-      row('a/x', 'x', 'cate-agent'),
+      row('a/x', 'x', 'orquestra-agent'),
     ])
     expect(groups).toEqual([
       { targetId: 'claude-code', skills: [{ skillId: 'a/x', name: 'x' }, { skillId: 'a/y', name: 'y' }] },
-      { targetId: 'cate-agent', skills: [{ skillId: 'a/x', name: 'x' }] },
+      { targetId: 'orquestra-agent', skills: [{ skillId: 'a/x', name: 'x' }] },
     ])
   })
 

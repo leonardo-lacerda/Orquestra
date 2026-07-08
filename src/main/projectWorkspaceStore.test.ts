@@ -20,7 +20,7 @@ vi.mock('./logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock('./windowRegistry', () => ({ broadcastToAll: vi.fn() }))
-vi.mock('./cateGitignore', () => ({ ensureCateGitignore: vi.fn(async () => {}) }))
+vi.mock('./orquestraGitignore', () => ({ ensureOrquestraGitignore: vi.fn(async () => {}) }))
 // The live handler skips saving when another instance owns the project lock;
 // always grant it so the save path runs.
 vi.mock('./projectLock', () => ({
@@ -74,7 +74,7 @@ function nodeCount(ws: ProjectWorkspaceFile): number {
 let root: string
 
 beforeEach(async () => {
-  root = await fs.mkdtemp(path.join(tmpdir(), 'cate-pws-'))
+  root = await fs.mkdtemp(path.join(tmpdir(), 'orquestra-pws-'))
 })
 
 afterEach(async () => {
@@ -82,7 +82,7 @@ afterEach(async () => {
 })
 
 async function readWorkspaceJson(rootPath: string): Promise<ProjectWorkspaceFile> {
-  const raw = await fs.readFile(path.join(rootPath, '.cate', 'workspace.json'), 'utf-8')
+  const raw = await fs.readFile(path.join(rootPath, '.orquestra', 'workspace.json'), 'utf-8')
   return JSON.parse(raw) as ProjectWorkspaceFile
 }
 
@@ -113,14 +113,14 @@ describe('saveProjectState — issue #220 empty-overwrite guard', () => {
 
 describe('loadProjectState — issue #220 prefer-richer fallback', () => {
   it('recovers a richer .bak when the primary file was wiped to empty', async () => {
-    const cateDir = path.join(root, '.cate')
-    await fs.mkdir(cateDir, { recursive: true })
-    const wsPath = path.join(cateDir, 'workspace.json')
+    const orquestraDir = path.join(root, '.orquestra')
+    await fs.mkdir(orquestraDir, { recursive: true })
+    const wsPath = path.join(orquestraDir, 'workspace.json')
     // Primary file is structurally valid but empty (the data-loss footgun);
     // .bak still holds the good canvas.
     await fs.writeFile(wsPath, JSON.stringify(makeWorkspace([])), 'utf-8')
     await fs.writeFile(wsPath + '.bak', JSON.stringify(makeWorkspace([makeNode('a'), makeNode('b')])), 'utf-8')
-    await fs.writeFile(path.join(cateDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
+    await fs.writeFile(path.join(orquestraDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
 
     const loaded = await loadProjectState(root)
     expect(loaded).not.toBeNull()
@@ -128,34 +128,34 @@ describe('loadProjectState — issue #220 prefer-richer fallback', () => {
   })
 
   it('uses the primary file when it is the richest', async () => {
-    const cateDir = path.join(root, '.cate')
-    await fs.mkdir(cateDir, { recursive: true })
-    const wsPath = path.join(cateDir, 'workspace.json')
+    const orquestraDir = path.join(root, '.orquestra')
+    await fs.mkdir(orquestraDir, { recursive: true })
+    const wsPath = path.join(orquestraDir, 'workspace.json')
     await fs.writeFile(wsPath, JSON.stringify(makeWorkspace([makeNode('a'), makeNode('b'), makeNode('c')])), 'utf-8')
     await fs.writeFile(wsPath + '.bak', JSON.stringify(makeWorkspace([makeNode('a')])), 'utf-8')
-    await fs.writeFile(path.join(cateDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
+    await fs.writeFile(path.join(orquestraDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
 
     const loaded = await loadProjectState(root)
     expect(nodeCount(loaded!.workspace)).toBe(3)
   })
 
   it('sweeps orphaned <file>.<pid>.<seq>.tmp files left by a crashed write', async () => {
-    const cateDir = path.join(root, '.cate')
-    await fs.mkdir(cateDir, { recursive: true })
-    const wsPath = path.join(cateDir, 'workspace.json')
+    const orquestraDir = path.join(root, '.orquestra')
+    await fs.mkdir(orquestraDir, { recursive: true })
+    const wsPath = path.join(orquestraDir, 'workspace.json')
     await fs.writeFile(wsPath, JSON.stringify(makeWorkspace([makeNode('a')])), 'utf-8')
-    await fs.writeFile(path.join(cateDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
+    await fs.writeFile(path.join(orquestraDir, 'session.json'), JSON.stringify(makeSession()), 'utf-8')
     // Orphans the uniquified writers leave behind on a crash between write+rename.
     const orphan = wsPath + '.12345.7.tmp'
     await fs.writeFile(orphan, 'garbage', 'utf-8')
-    await fs.writeFile(path.join(cateDir, 'session.json.999.1.tmp'), 'garbage', 'utf-8')
+    await fs.writeFile(path.join(orquestraDir, 'session.json.999.1.tmp'), 'garbage', 'utf-8')
     // A real persisted file with a similar-but-wrong shape must be left alone.
     await fs.writeFile(wsPath + '.bak', JSON.stringify(makeWorkspace([makeNode('a')])), 'utf-8')
 
     await loadProjectState(root)
 
     expect(fsExists(orphan)).toBe(false)
-    expect(fsExists(path.join(cateDir, 'session.json.999.1.tmp'))).toBe(false)
+    expect(fsExists(path.join(orquestraDir, 'session.json.999.1.tmp'))).toBe(false)
     expect(fsExists(wsPath + '.bak')).toBe(true)
   })
 })
@@ -191,7 +191,7 @@ describe('saveProjectStateSync — quit-time guard ordering (issue #220)', () =>
   it('does not copy an already-emptied primary over a rich .bak when flushing empty', async () => {
     // Live save records lastSavedProjectStates and writes the good canvas.
     await save(root, makeWorkspace([makeNode('a'), makeNode('b')]), makeSession())
-    const wsPath = path.join(root, '.cate', 'workspace.json')
+    const wsPath = path.join(root, '.orquestra', 'workspace.json')
     // Queue an empty canvas as the last live save (the guard skips its on-disk
     // write, but lastSavedProjectStates now holds the empty snapshot).
     await save(root, makeWorkspace([]), makeSession())

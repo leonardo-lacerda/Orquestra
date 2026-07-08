@@ -1,24 +1,25 @@
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { SettingRow, TextInput, NumberInput, Toggle, Slider } from './SettingsComponents'
 import { IS_MAC } from '../lib/platform'
 
 export function TerminalSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
 
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs text-muted mb-3">
-        Leave font fields blank for system defaults. Colors follow the active
-        theme; change it in Appearance.
+        {t('terminal.fontFamily.desc')}
       </p>
-      <SettingRow label="Font family override">
+      <SettingRow label={t('terminal.fontFamily')}>
         <TextInput
           value={store.terminalFontFamily}
           onChange={(v) => store.setSetting('terminalFontFamily', v)}
           placeholder="e.g., Menlo, Monaco"
         />
       </SettingRow>
-      <SettingRow label="Font size override" description="0 = use default">
+      <SettingRow label={t('terminal.fontSize')} description={t('terminal.fontSize.desc')}>
         <NumberInput
           value={store.terminalFontSize}
           onChange={(v) => store.setSetting('terminalFontSize', v)}
@@ -27,7 +28,7 @@ export function TerminalSettings() {
           step={1}
         />
       </SettingRow>
-      <SettingRow label="Scroll speed" description={`${store.terminalScrollSpeed.toFixed(2)}x`}>
+      <SettingRow label={t('terminal.scrollSpeed')} description={`${store.terminalScrollSpeed.toFixed(2)}x`}>
         <Slider
           value={store.terminalScrollSpeed}
           onChange={(v) => store.setSetting('terminalScrollSpeed', v)}
@@ -37,7 +38,7 @@ export function TerminalSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Text contrast"
+        label={t('terminal.contrast')}
         description={
           store.terminalContrast <= 1
             ? 'Off. Theme colors shown exactly.'
@@ -57,8 +58,8 @@ export function TerminalSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Blink cursor"
-        description="A steady cursor avoids a compositor redraw on every blink, saving power when idle."
+        label={t('terminal.cursorBlink')}
+        description={t('terminal.cursorBlink.desc')}
       >
         <Toggle
           checked={store.terminalCursorBlink}
@@ -67,8 +68,8 @@ export function TerminalSettings() {
       </SettingRow>
       {IS_MAC && (
         <SettingRow
-          label="Use ⌥ Option as Meta"
-          description="On: ⌥+key sends Meta/ESC (e.g. ⌥F / ⌥B word motion). Off: ⌥ types special characters."
+          label={t('terminal.optionIsMeta')}
+          description={t('terminal.optionIsMeta.desc')}
         >
           <Toggle
             checked={store.terminalOptionIsMeta}
@@ -77,8 +78,8 @@ export function TerminalSettings() {
         </SettingRow>
       )}
       <SettingRow
-        label="Auto-suspend idle background terminals"
-        description="Pause terminals idle and offscreen for 2 minutes to free memory. Resumes instantly on focus."
+        label={t('terminal.autoSuspend')}
+        description={t('terminal.autoSuspend.desc')}
       >
         <Toggle
           checked={store.autoSuspendIdleTerminals}

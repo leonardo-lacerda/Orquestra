@@ -8,7 +8,7 @@ Read and follow the **karpathy-guidelines** skill (`.claude/skills/karpathy-guid
 
 ## Project Overview
 
-Cate is a desktop application that provides an infinite zoomable canvas where editor panels, terminal panels, and browser panels float spatially (similar to Figma/Miro, but for coding). Built with Electron + React + TypeScript, styled with Tailwind CSS.
+Orquestra is a desktop application that provides an infinite zoomable canvas where editor panels, terminal panels, and browser panels float spatially (similar to Figma/Miro, but for coding). Built with Electron + React + TypeScript, styled with Tailwind CSS.
 
 ## Build System
 
@@ -90,9 +90,9 @@ reusable factory for that same pattern (sync load, in-memory authority, debounce
 atomic write, chokidar external-edit watcher, corrupt-file quarantine).
 `workspaceStateStore.ts` uses it for `recent-projects.json`, `sidebar.json`,
 `remote-workspaces.json`, and `layouts.json`. Per-project canvas/session state
-lives in `<project>/.cate/workspace.json` + `session.json`. AI provider credentials are
+lives in `<project>/.orquestra/workspace.json` + `session.json`. AI provider credentials are
 global in `userData/pi-agent/auth.json` (+ `models.json`), mirrored into each
-workspace's `.cate/pi-agent/`.
+workspace's `.orquestra/pi-agent/`.
 
 ### Key Patterns
 

@@ -12,7 +12,7 @@ import {
 let dir: string
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-writejson-'))
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-writejson-'))
 })
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true })

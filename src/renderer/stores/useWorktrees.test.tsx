@@ -79,7 +79,7 @@ beforeEach(() => {
     behind: 0,
     worktrees: [
       { path: '/repo', branch: 'main', isPrimary: true, isCurrent: true },
-      { path: '/repo/.cate/worktrees/feat', branch: 'feat', isPrimary: false, isCurrent: false },
+      { path: '/repo/.orquestra/worktrees/feat', branch: 'feat', isPrimary: false, isCurrent: false },
     ],
     revision: 1,
   }
@@ -98,7 +98,7 @@ afterEach(() => {
 describe('useWorktrees', () => {
   it('joins live git facts with persisted UI metadata and mounts without a loop', () => {
     setWorkspace([
-      { id: 'meta-feat', path: '/repo/.cate/worktrees/feat', color: '#f00', label: 'Feature' },
+      { id: 'meta-feat', path: '/repo/.orquestra/worktrees/feat', color: '#f00', label: 'Feature' },
     ])
     mount()
     expect(renderCount).toBeLessThanOrEqual(2)
@@ -107,7 +107,7 @@ describe('useWorktrees', () => {
     expect(byPath['/repo'].isPrimary).toBe(true)
     expect(byPath['/repo'].isCurrent).toBe(true)
     // Live branch wins; UI metadata (id/color/label) joins on by path.
-    const feat = byPath['/repo/.cate/worktrees/feat']
+    const feat = byPath['/repo/.orquestra/worktrees/feat']
     expect(feat.branch).toBe('feat')
     expect(feat.id).toBe('meta-feat')
     expect(feat.color).toBe('#f00')
@@ -117,10 +117,10 @@ describe('useWorktrees', () => {
 
   it('surfaces persisted metadata with no live worktree as an orphan', () => {
     setWorkspace([
-      { id: 'meta-gone', path: '/repo/.cate/worktrees/gone', label: 'Gone' },
+      { id: 'meta-gone', path: '/repo/.orquestra/worktrees/gone', label: 'Gone' },
     ])
     mount()
-    const orphan = lastResult.find((w) => w.path === '/repo/.cate/worktrees/gone')
+    const orphan = lastResult.find((w) => w.path === '/repo/.orquestra/worktrees/gone')
     expect(orphan?.isOrphan).toBe(true)
     expect(orphan?.label).toBe('Gone')
     // The primary path is never an orphan even without persisted metadata.

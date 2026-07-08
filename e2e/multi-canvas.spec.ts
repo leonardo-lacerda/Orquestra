@@ -23,11 +23,11 @@ const EXTRA_CANVASES = 6
 
 test.beforeEach(async () => {
   ;({ electronApp: app, mainWindow: page } = await launchApp())
-  await page.evaluate(() => window.__cateE2E!.setActiveLeftSidebarView(null))
+  await page.evaluate(() => window.__orquestraE2E!.setActiveLeftSidebarView(null))
   // Seed: 6 extra canvas tabs beside the default one. Each create activates
   // the new tab, so the LAST canvas ends up active/mounted.
   for (let i = 0; i < EXTRA_CANVASES; i++) {
-    await page.evaluate(() => void window.__cateE2E!.createCanvasPanel({ x: 100, y: 100 }))
+    await page.evaluate(() => void window.__orquestraE2E!.createCanvasPanel({ x: 100, y: 100 }))
   }
   await page.waitForTimeout(200)
 })
@@ -42,7 +42,7 @@ function mountedCanvas(p: Page) {
     return {
       id: el?.getAttribute('data-canvas-panel-id') ?? null,
       transform: world?.style.transform ?? null,
-      zoom: window.__cateE2E!.zoom(),
+      zoom: window.__orquestraE2E!.zoom(),
     }
   })
 }
@@ -73,12 +73,12 @@ test('unpinned create lands on the ACTIVE canvas, not the hidden primary one', a
     const mountedId = document
       .querySelector('[data-canvas-panel-id]')!
       .getAttribute('data-canvas-panel-id')!
-    const nodeId = window.__cateE2E!.createTerminal({ x: 300, y: 300 })
+    const nodeId = window.__orquestraE2E!.createTerminal({ x: 300, y: 300 })
     await new Promise((r) => setTimeout(r, 200))
     return {
       mountedId,
       nodeId,
-      nodesOnMounted: window.__cateE2E!.nodes().length,
+      nodesOnMounted: window.__orquestraE2E!.nodes().length,
       nodeInDom: !!document.querySelector(`[data-node-id="${nodeId}"]`),
     }
   })
@@ -90,12 +90,12 @@ test('unpinned create lands on the ACTIVE canvas, not the hidden primary one', a
 test('zoom drives the mounted canvas: store and world transform stay in lock-step', async () => {
   // Store-level zoom (toolbar/shortcut path) must move THIS canvas's world div.
   const probe = await page.evaluate(async () => {
-    window.__cateE2E!.setZoom(2)
+    window.__orquestraE2E!.setZoom(2)
     await new Promise((r) => setTimeout(r, 200))
     const world = document.querySelector(
       '[data-canvas-panel-id] div[style*="transform-origin"]',
     ) as HTMLElement
-    return { zoom: window.__cateE2E!.zoom(), transform: world.style.transform }
+    return { zoom: window.__orquestraE2E!.zoom(), transform: world.style.transform }
   })
   expect(probe.zoom).toBe(2)
   expect(probe.transform).toContain('scale(2)')
@@ -105,7 +105,7 @@ test('ctrl+wheel zooms the mounted canvas store (not a previous tab)', async () 
   const probe = await page.evaluate(async () => {
     const el = document.querySelector('[data-canvas-panel-id]') as HTMLElement
     const r = el.getBoundingClientRect()
-    const before = window.__cateE2E!.zoom()
+    const before = window.__orquestraE2E!.zoom()
     el.dispatchEvent(
       new WheelEvent('wheel', {
         deltaY: -120,
@@ -118,7 +118,7 @@ test('ctrl+wheel zooms the mounted canvas store (not a previous tab)', async () 
     )
     // Smooth zoom is rAF-driven; give it time to settle.
     await new Promise((res) => setTimeout(res, 800))
-    return { before, after: window.__cateE2E!.zoom() }
+    return { before, after: window.__orquestraE2E!.zoom() }
   })
   expect(probe.before).toBe(1)
   expect(probe.after).toBeGreaterThan(1)
@@ -130,7 +130,7 @@ test('switching canvas tabs remounts: each canvas shows its OWN viewport', async
   const secondToLast = tabs[tabs.length - 2]
 
   // Zoom the active (last) canvas to 3.
-  await page.evaluate(() => window.__cateE2E!.setZoom(3))
+  await page.evaluate(() => window.__orquestraE2E!.setZoom(3))
   await page.waitForTimeout(100)
   expect((await mountedCanvas(page)).transform).toContain('scale(3)')
 
@@ -145,7 +145,7 @@ test('switching canvas tabs remounts: each canvas shows its OWN viewport', async
   expect(mounted.transform).toContain('scale(1)')
 
   // Zooming THIS canvas updates THIS canvas's world div.
-  await page.evaluate(() => window.__cateE2E!.setZoom(2))
+  await page.evaluate(() => window.__orquestraE2E!.setZoom(2))
   await page.waitForTimeout(100)
   mounted = await mountedCanvas(page)
   expect(mounted.zoom).toBe(2)
@@ -170,11 +170,11 @@ test('panels created across several canvas tabs land on their own canvas', async
       const mountedId = document
         .querySelector('[data-canvas-panel-id]')!
         .getAttribute('data-canvas-panel-id')!
-      const nodeId = window.__cateE2E!.createTerminal({ x: 200, y: 200 })
+      const nodeId = window.__orquestraE2E!.createTerminal({ x: 200, y: 200 })
       await new Promise((r) => setTimeout(r, 150))
       return {
         mountedOk: mountedId === expected,
-        nodes: window.__cateE2E!.nodes().length,
+        nodes: window.__orquestraE2E!.nodes().length,
         nodeInDom: !!document.querySelector(`[data-node-id="${nodeId}"]`),
       }
     }, tabId)

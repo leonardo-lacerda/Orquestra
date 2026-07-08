@@ -9,12 +9,12 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-store-test-'))
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-store-test-'))
 
 const handlers = new Map<string, (...args: any[]) => any>()
 vi.mock('electron', () => {
   const electron = {
-    app: { getPath: () => userData, getVersion: () => '0.0.0-test', getName: () => 'cate-test', isPackaged: false },
+    app: { getPath: () => userData, getVersion: () => '0.0.0-test', getName: () => 'orquestra-test', isPackaged: false },
     ipcMain: { on: vi.fn(), handle: vi.fn((c: string, fn: any) => handlers.set(c, fn)) },
     nativeTheme: { on: vi.fn(), themeSource: 'system' },
     BrowserWindow: { getAllWindows: () => [] },

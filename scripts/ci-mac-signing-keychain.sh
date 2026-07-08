@@ -2,7 +2,7 @@
 # =============================================================================
 # Import the Developer ID Application cert (CSC_LINK / CSC_KEY_PASSWORD) into a
 # dedicated temporary keychain, add it to the user search list, and export the
-# identity hash (CATE_MAC_SIGN_IDENTITY via $GITHUB_ENV) so build-runtime-
+# identity hash (ORQUESTRA_MAC_SIGN_IDENTITY via $GITHUB_ENV) so build-runtime-
 # tarball.mjs can codesign the bundled native binaries (node, rg, node-pty's
 # pty.node + spawn-helper) BEFORE packing them.
 #
@@ -26,8 +26,8 @@ if [ -z "${CSC_LINK:-}" ]; then
 fi
 
 TMP="${RUNNER_TEMP:-/tmp}"
-KEYCHAIN="$TMP/cate-runtime-signing.keychain-db"
-CERT="$TMP/cate-runtime-cert.p12"
+KEYCHAIN="$TMP/orquestra-runtime-signing.keychain-db"
+CERT="$TMP/orquestra-runtime-cert.p12"
 KPASS="$(uuidgen)"
 
 # Fresh keychain, unlocked, with a long auto-lock timeout so it is still usable
@@ -58,5 +58,5 @@ if [ -z "$IDENTITY" ]; then
   exit 1
 fi
 
-echo "CATE_MAC_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+echo "ORQUESTRA_MAC_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 echo "Runtime natives will be signed with Developer ID identity $IDENTITY"

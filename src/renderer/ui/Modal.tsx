@@ -1,5 +1,5 @@
 // =============================================================================
-// Modal — the shared dialog primitive for Cate.
+// Modal — the shared dialog primitive for Orquestra.
 //
 // One chrome for every modal, derived from the Settings window so they all read
 // as one family: an opaque surface-1 card with a hairline border, a black ring,

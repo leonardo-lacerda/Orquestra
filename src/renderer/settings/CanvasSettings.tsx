@@ -1,4 +1,5 @@
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { SettingRow, Toggle, NumberInput, Slider, Select } from './SettingsComponents'
 import type { CanvasGridStyle } from '../../shared/types'
 import {
@@ -9,6 +10,7 @@ import {
 
 export function CanvasSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
 
   const bgImagePath = store.canvasBackgroundImagePath
   const activeBuiltin = getBuiltinWallpaper(bgImagePath)
@@ -22,12 +24,12 @@ export function CanvasSettings() {
 
   return (
     <div className="flex flex-col gap-1">
-      <SettingRow label="Zoom speed" description={`${store.zoomSpeed.toFixed(1)}x`}>
+      <SettingRow label={t('canvas.zoomSpeed')} description={`${store.zoomSpeed.toFixed(1)}x`}>
         <Slider value={store.zoomSpeed} onChange={(v) => store.setSetting('zoomSpeed', v)} min={0.5} max={3.0} step={0.1} />
       </SettingRow>
       <SettingRow
-        label="Auto-focus largest visible panel"
-        description="Activate the panel filling the most visible area as you pan and zoom."
+        label={t('canvas.autoFocus')}
+        description={t('canvas.autoFocus.desc')}
       >
         <Toggle
           checked={store.autoFocusLargestVisibleNode}
@@ -35,8 +37,8 @@ export function CanvasSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Snap to grid"
-        description="Align panels to the grid while dragging and resizing. Hold Alt to bypass."
+        label={t('canvas.snapToGrid')}
+        description={t('canvas.snapToGrid.desc')}
       >
         <Toggle
           checked={store.snapToGrid}
@@ -44,8 +46,8 @@ export function CanvasSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Recommend where new panels go"
-        description="On Cmd+T or a toolbar click, show numbered spots to pick from. Off places panels automatically."
+        label={t('canvas.placementPicker')}
+        description={t('canvas.placementPicker.desc')}
       >
         <Toggle
           checked={store.placementPicker}
@@ -53,15 +55,15 @@ export function CanvasSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Worktree territories"
-        description="Paint soft colored backgrounds grouping panels by git worktree (shown when a workspace has multiple worktrees)."
+        label={t('canvas.showWorktreeTerritory')}
+        description={t('canvas.showWorktreeTerritory.desc')}
       >
         <Toggle
           checked={store.showWorktreeTerritory}
           onChange={(v) => store.setSetting('showWorktreeTerritory', v)}
         />
       </SettingRow>
-      <SettingRow label="Canvas background">
+      <SettingRow label={t('canvas.gridStyle')}>
         <Select
           value={store.canvasGridStyle}
           onChange={(v) => store.setSetting('canvasGridStyle', v as CanvasGridStyle)}
@@ -73,7 +75,7 @@ export function CanvasSettings() {
         />
       </SettingRow>
       <SettingRow
-        label="Background image"
+        label={t('canvas.backgroundImage')}
         description={
           customImageName || 'Shown behind the canvas, auto-adjusted to keep titles readable.'
         }
@@ -102,7 +104,7 @@ export function CanvasSettings() {
       </SettingRow>
       {bgImagePath && (
         <SettingRow
-          label="Background image opacity"
+          label={t('canvas.backgroundImageOpacity')}
           description={`${Math.round(store.canvasBackgroundImageOpacity * 100)}%`}
         >
           <Slider

@@ -614,7 +614,7 @@ export default function TerminalPanel({
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     // Accept drops from internal file explorer or external file drops
     if (
-      e.dataTransfer.types.includes('application/cate-file') ||
+      e.dataTransfer.types.includes('application/orquestra-file') ||
       e.dataTransfer.types.includes('Files')
     ) {
       // Stop here so the app-root background handler doesn't override the drop
@@ -636,17 +636,17 @@ export default function TerminalPanel({
 
       // Internal file explorer / search drag. A search-line drag carries the
       // line number too — pasted as path:line (like a VS Code reference).
-      const catePath = e.dataTransfer.getData('application/cate-file')
-      if (catePath) {
+      const orquestraPath = e.dataTransfer.getData('application/orquestra-file')
+      if (orquestraPath) {
         let line: number | undefined
-        const lineRaw = e.dataTransfer.getData('application/cate-file-line')
+        const lineRaw = e.dataTransfer.getData('application/orquestra-file-line')
         if (lineRaw) {
           try {
             const lr = JSON.parse(lineRaw) as { path?: string; line?: number }
-            if (lr?.path === catePath) line = lr.line
+            if (lr?.path === orquestraPath) line = lr.line
           } catch { /* ignore */ }
         }
-        refs.push({ path: catePath, line })
+        refs.push({ path: orquestraPath, line })
       }
 
       // External OS file drop — use Electron's webUtils to get real paths

@@ -23,7 +23,7 @@ describe('buildDaemonRuntime FileHost path validation', () => {
   beforeEach(async () => {
     // realpath the temp dir so macOS /var -> /private/var symlinks don't trip
     // validatePathStrict (which compares fully resolved real paths).
-    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-daemon-val-')))
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-daemon-val-')))
     addAllowedRoot(root)
     await fs.writeFile(path.join(root, 'inside.txt'), 'hello from inside\n')
     runtime = buildDaemonRuntime({ id: 'test' }).runtime
@@ -55,7 +55,7 @@ describe('buildDaemonRuntime FileHost path validation', () => {
   })
 
   test('writeBinary outside the root rejects and does not create the file', async () => {
-    const outside = path.join(os.homedir(), 'cate-should-not-write.bin')
+    const outside = path.join(os.homedir(), 'orquestra-should-not-write.bin')
     await expect(runtime.file.writeBinary(outside, Buffer.from([1]))).rejects.toThrow(
       /Access denied|outside allowed directories/,
     )
@@ -80,7 +80,7 @@ describe('buildDaemonRuntime FileHost path validation', () => {
   })
 
   test('mkdir outside the root rejects', async () => {
-    const dir = path.join(os.homedir(), 'cate-should-not-mkdir')
+    const dir = path.join(os.homedir(), 'orquestra-should-not-mkdir')
     await expect(runtime.file.mkdir(dir)).rejects.toThrow(
       /Access denied|outside allowed directories/,
     )
@@ -88,7 +88,7 @@ describe('buildDaemonRuntime FileHost path validation', () => {
   })
 
   test('remove outside the root rejects', async () => {
-    const outside = path.join(os.homedir(), 'cate-should-not-remove')
+    const outside = path.join(os.homedir(), 'orquestra-should-not-remove')
     await expect(runtime.file.remove(outside)).rejects.toThrow(
       /Access denied|outside allowed directories/,
     )
@@ -99,7 +99,7 @@ describe('buildDaemonRuntime FileHost path validation', () => {
   // synchronously, rejecting create BEFORE any node-pty spawn — so no pty is
   // needed here. Use an outside path NOT under os.tmpdir() (tmpdir is allowed).
   test('process.create with a cwd outside the root rejects', async () => {
-    const outside = path.join(os.homedir(), 'cate-nope')
+    const outside = path.join(os.homedir(), 'orquestra-nope')
     await expect(
       runtime.process.create(
         { cols: 80, rows: 24, cwd: outside, shell: '/bin/sh' },

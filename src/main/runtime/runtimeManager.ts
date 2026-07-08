@@ -498,7 +498,7 @@ export class RuntimeManager {
 
   /**
    * Literally delete the runtime: stop any running daemon, then remove its
-   * install from the host over a fresh transport (rm -rf ~/.cate/runtime).
+   * install from the host over a fresh transport (rm -rf ~/.orquestra/runtime).
    * Drives the phase to `missing` on success so the next state is the clean
    * "needs install" — the user reinstalls from there. Emits `unreachable` if the
    * host can't be reached to remove it. The transport is disposed either way.
@@ -588,7 +588,11 @@ export function forwardClearScopedWriteAllowancesForWindow(windowId: number): vo
 /** Run a best-effort RPC against every registered runtime. A single
  *  runtime's rejection is swallowed per-call so it never aborts the others. */
 function forwardToAll(fn: (runtime: Runtime) => Promise<unknown>): void {
-  for (const id of runtimes.registeredIds()) {
-    fn(runtimes.resolve(id)).catch(() => { /* best-effort */ })
+  const ids = [...runtimes.registeredIds()]
+  for (const id of ids) {
+    try {
+      const runtime = runtimes.resolve(id)
+      fn(runtime).catch(() => { /* best-effort */ })
+    } catch { /* runtime was unregistered between iteration and resolve */ }
   }
 }

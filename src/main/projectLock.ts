@@ -3,17 +3,17 @@ import path from 'path'
 import log from './logger'
 
 // ---------------------------------------------------------------------------
-// Per-project lock for .cate/workspace.json
+// Per-project lock for .orquestra/workspace.json
 //
 // The single-instance lock (index.ts) is keyed on Electron's userData dir, but
 // a dev build and an installed build deliberately use *different* userData dirs
 // (the `app.isPackaged` split), so they each win their own single-instance lock
 // and can run side by side. When both open the *same project*, both autosave
-// .cate/workspace.json (~30s) and each reads the other's write as an external
+// .orquestra/workspace.json (~30s) and each reads the other's write as an external
 // edit — the spurious "Reload workspace?" loop.
 //
-// So we drop a .cate/workspace.lock holding the owning pid when a project opens
-// here. A second Cate that finds a *live* owner won't autosave that project.
+// So we drop a .orquestra/workspace.lock holding the owning pid when a project opens
+// here. A second Orquestra that finds a *live* owner won't autosave that project.
 // The pid lets us recover from a crash: a leftover lock whose pid is gone is
 // reclaimed instead of bricking the project read-only. Advisory only — if the
 // file can't be written we fail open and behave as the owner.
@@ -22,7 +22,7 @@ import log from './logger'
 const heldRoots = new Set<string>()
 
 function lockPath(rootPath: string): string {
-  return path.join(rootPath, '.cate', 'workspace.lock')
+  return path.join(rootPath, '.orquestra', 'workspace.lock')
 }
 
 function isProcessAlive(pid: number): boolean {

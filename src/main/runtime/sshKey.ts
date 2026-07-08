@@ -13,7 +13,7 @@ import { homedir } from 'os'
  * Without the quote strip, a pasted `"C:\Users\me\key.pem"` is stored verbatim
  * and the leading `"` makes the OS treat it as a RELATIVE path — so it gets
  * resolved against the app's install dir and fails with a baffling ENOENT
- * pointing at `…\cate\"C:\Users\me\key.pem"`. See issue #335.
+ * pointing at `…\orquestra\"C:\Users\me\key.pem"`. See issue #335.
  */
 export function normalizeKeyPath(raw: string, home: string = homedir()): string {
   let s = raw.trim()

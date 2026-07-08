@@ -26,7 +26,7 @@ import {
 export function registerDialogHandlers(): void {
   // Shell: Reveal in Finder
   ipcMain.handle(SHELL_SHOW_IN_FOLDER, wrapHandler('[SHELL_SHOW_IN_FOLDER]', async (_event, filePath: string) => {
-    // A remote (cate-runtime://) path has no representation on this machine —
+    // A remote (orquestra-runtime://) path has no representation on this machine —
     // there is nothing local to reveal. Return a structured result instead of
     // throwing so the renderer can quietly ignore/disable the action.
     if (!isLocalLocator(filePath)) {
@@ -84,6 +84,10 @@ export function registerDialogHandlers(): void {
     const mime = MIME_BY_EXT[ext]
     if (!mime) return null
     try {
+      // Gate behind path validation — same security boundary as every other
+      // file read handler. The renderer can only read image files inside an
+      // allowed workspace root.
+      validatePath(filePath)
       const stat = await fs.promises.stat(filePath)
       const MAX_BYTES = 40 * 1024 * 1024 // 40 MB ceiling — keeps a data URL sane.
       if (!stat.isFile() || stat.size > MAX_BYTES) return null
@@ -271,7 +275,7 @@ export function registerDialogHandlers(): void {
   })
 
   // Confirm reloading the canvas after the workspace.json file changed on disk
-  // (edited externally while Cate was running).
+  // (edited externally while Orquestra was running).
   ipcMain.handle(DIALOG_CONFIRM_RELOAD_WORKSPACE, async (event, payload: { name?: string }) => {
     const win = windowFromEvent(event)
     const name = payload?.name?.trim()

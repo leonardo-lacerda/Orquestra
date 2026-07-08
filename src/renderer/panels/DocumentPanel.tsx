@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { ArrowLeft, ArrowRight, Minus, Plus } from '@phosphor-icons/react'
 import { errorMessage } from '../lib/errorMessage'
 import { viewedArrayBuffer } from './documentBytes'
+import DOMPurify from 'dompurify'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -287,7 +288,7 @@ function DocxViewer({ data }: { data: Uint8Array }) {
     <div className="flex-1 overflow-auto p-6 bg-neutral-900/50">
       <div
         className="prose prose-invert prose-sm max-w-3xl mx-auto"
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
     </div>
   )

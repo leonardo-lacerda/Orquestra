@@ -76,7 +76,7 @@ function vcsFor(locator: string): { vcs: VcsHost; path: string; runtimeId: strin
 
 /** Decode a worktree-path argument (a locator built by the renderer from the
  *  workspace root) into a runtime-absolute path, asserting it targets the same
- *  runtime as its repo. Without this the raw `cate-runtime://…` URI reaches
+ *  runtime as its repo. Without this the raw `orquestra-runtime://…` URI reaches
  *  the daemon and `git worktree add` runs against a literal-scheme directory. */
 export function worktreeTargetPath(repoRuntimeId: string, targetLocator: string): string {
   const { runtimeId, path: p } = parseLocator(targetLocator)

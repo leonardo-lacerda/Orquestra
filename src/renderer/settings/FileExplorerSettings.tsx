@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, X, ArrowCounterClockwise } from '@phosphor-icons/react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { DEFAULT_SETTINGS } from '../../shared/types'
 import { SearchableBlock, SecondaryButton, TextInput } from './SettingsComponents'
 
@@ -13,6 +14,7 @@ function sameAsDefault(list: string[]): boolean {
 
 export function FileExplorerSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
   const folders = store.fileExclusions ?? []
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -52,8 +54,7 @@ export function FileExplorerSettings() {
     <SearchableBlock keywords="file explorer exclusions hidden ignore folders gitignore exclude">
     <div className="flex flex-col gap-1">
       <p className="text-xs text-muted mb-3">
-        Names hidden from the explorer, search, and file watching, in every
-        project.
+        {t('fileExplorer.exclusions.desc')}
       </p>
 
       <div className="flex gap-1.5">
@@ -66,7 +67,7 @@ export function FileExplorerSettings() {
           onKeyDown={(e) => {
             if (e.key === 'Enter') add()
           }}
-          placeholder="Add a name, e.g. dist"
+          placeholder={t('fileExplorer.addPlaceholder')}
           layoutClassName="flex-1 px-2"
         />
         <button
@@ -74,7 +75,7 @@ export function FileExplorerSettings() {
           className="flex items-center gap-1 px-2.5 py-1 text-[12px] rounded text-secondary hover:text-primary bg-surface-2 hover:bg-hover border border-subtle"
         >
           <Plus size={12} />
-          Add
+          {t('fileExplorer.addButton')}
         </button>
       </div>
 

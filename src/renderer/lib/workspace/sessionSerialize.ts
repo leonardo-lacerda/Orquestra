@@ -1,6 +1,6 @@
 // =============================================================================
 // Session serialize — pure inverses between in-memory SessionSnapshot and the
-// on-disk project files (.cate/workspace.json + .cate/session.json), plus the
+// on-disk project files (.orquestra/workspace.json + .orquestra/session.json), plus the
 // shared dock-state panel-id collector. No store/IPC access.
 // =============================================================================
 
@@ -19,7 +19,7 @@ import { toRelativePath, toAbsolutePath } from '../../../shared/pathUtils'
 import { collectPanelIds } from '../canvas/collectPanelIds'
 
 // -----------------------------------------------------------------------------
-// Project-local state builders (.cate/workspace.json + .cate/session.json)
+// Project-local state builders (.orquestra/workspace.json + .orquestra/session.json)
 // -----------------------------------------------------------------------------
 
 export function buildWorkspaceFile(

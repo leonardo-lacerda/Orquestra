@@ -7,7 +7,7 @@ const path = require('path')
 const fs = require('fs')
 const { execSync } = require('child_process')
 
-const SVG_PATH = path.join(__dirname, '..', 'assets', 'cate-logo.svg')
+const SVG_PATH = path.join(__dirname, '..', 'assets', 'orquestra-logo.svg')
 const BUILD_DIR = path.join(__dirname, '..', 'build')
 
 // Dark background matching the app theme

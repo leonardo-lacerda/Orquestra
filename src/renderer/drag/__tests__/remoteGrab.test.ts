@@ -1,5 +1,5 @@
 // Regression: when a panel is dragged from a detached window into the main
-// Cate window, the in-renderer ghost must anchor near the cursor's top-left
+// Orquestra window, the in-renderer ghost must anchor near the cursor's top-left
 // (matching the native OS ghost) rather than at the ghost's center. The grab
 // offset must therefore be a small fixed value, independent of ghost size.
 import { describe, it, expect } from 'vitest'

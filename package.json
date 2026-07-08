@@ -1,19 +1,19 @@
 {
-  "name": "cate",
+  "name": "orquestra",
   "version": "1.3.2",
-  "productName": "Cate",
+  "productName": "Orquestra",
   "description": "An infinite zoomable canvas IDE",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0-AI-UG/cate.git"
+    "url": "https://github.com/0-AI-UG/orquestra.git"
   },
-  "homepage": "https://github.com/0-AI-UG/cate",
+  "homepage": "https://github.com/0-AI-UG/orquestra",
   "bugs": {
-    "url": "https://github.com/0-AI-UG/cate/issues"
+    "url": "https://github.com/0-AI-UG/orquestra/issues"
   },
   "author": {
-    "name": "0-AI UG",
+    "name": "Orquestra",
     "email": "hello@0-ai.org"
   },
   "main": "dist/main/index.js",
@@ -22,15 +22,15 @@
   },
   "scripts": {
     "postinstall": "bash scripts/patch-electron-name.sh",
-    "predev": "bash scripts/patch-electron-name.sh",
+    "predev": "bash scripts/patch-electron-name.sh && node scripts/build-runtime-tarball.mjs",
     "setup": "bun install && bun run runtime:tarball",
     "dev": "electron-vite dev",
     "dev:dialog": "DEV_FORCE_DIALOG=1 electron-vite dev",
-    "dev:firststart": "CATE_FRESH_USERDATA=1 electron-vite dev",
+    "dev:firststart": "ORQUESTRA_FRESH_USERDATA=1 electron-vite dev",
     "dev:update": "node scripts/dev-update.mjs",
-    "dev:update:major": "CATE_SIMULATE_UPDATE=major electron-vite dev",
-    "dev:update:minor": "CATE_SIMULATE_UPDATE=minor electron-vite dev",
-    "dev:update:patch": "CATE_SIMULATE_UPDATE=patch electron-vite dev",
+    "dev:update:major": "ORQUESTRA_SIMULATE_UPDATE=major electron-vite dev",
+    "dev:update:minor": "ORQUESTRA_SIMULATE_UPDATE=minor electron-vite dev",
+    "dev:update:patch": "ORQUESTRA_SIMULATE_UPDATE=patch electron-vite dev",
     "sentry:test": "node scripts/sentry-test.mjs",
     "build": "electron-vite build",
     "build:runtime": "node src/runtime/build/esbuild.config.mjs",
@@ -66,11 +66,13 @@
     "sharp"
   ],
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.1.0",
     "@earendil-works/pi-agent-core": "^0.75.4",
     "@earendil-works/pi-ai": "^0.75.5",
     "@parcel/watcher": "^2.5.1",
     "@phosphor-icons/react": "^2.1.10",
-    "@sentry/electron": "^5.11.0",
+    "@sentry/electron": "^7.15.0",
+    "@supabase/supabase-js": "^2.110.1",
     "@types/ssh2": "^1.15.5",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.16.0",
@@ -79,6 +81,7 @@
     "@xterm/addon-webgl": "^0.18.0",
     "@xterm/xterm": "^5.5.0",
     "chokidar": "^4.0.0",
+    "dompurify": "^3.4.11",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
     "mammoth": "^1.12.0",
@@ -94,13 +97,14 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.75.4",
+    "@earendil-works/pi-coding-agent": "^0.80.3",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.60.0",
+    "@types/dompurify": "^3.0.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.0",
+    "@vitejs/plugin-react-swc": "^4.3.1",
     "@vscode/ripgrep": "^1.18.0",
     "autoprefixer": "^10.4.0",
     "electron": "^41.2.0",

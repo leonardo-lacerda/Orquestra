@@ -34,7 +34,7 @@ async function rmTemp(dir: string): Promise<void> {
 beforeAll(async () => {
   // Build UNDER the repo so the spawned daemon resolves externalized native
   // deps (node-pty, @parcel/watcher) from the repo's node_modules.
-  buildDir = await fs.mkdtemp(path.join(process.cwd(), 'cate-daemon-build-'))
+  buildDir = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-daemon-build-'))
   bundlePath = path.join(buildDir, 'runtime.cjs')
   await build({
     entryPoints: [path.resolve(__dirname, '../../runtime/index.ts')],
@@ -52,14 +52,14 @@ afterAll(async () => {
   await rmTemp(buildDir)
 })
 
-describe('cate-runtime daemon (real subprocess)', () => {
+describe('orquestra-runtime daemon (real subprocess)', () => {
   let mgr: RuntimeManager
   let workspace: string
 
   beforeAll(async () => {
     // The daemon sandboxes to --root; on the client side we also allow it so the
     // client-side lexical checks (if any) agree. The daemon process has its own.
-    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'cate-daemon-ws-')))
+    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-daemon-ws-')))
     addAllowedRoot(workspace)
     await fs.writeFile(path.join(workspace, 'hello.ts'), 'export const x = 1\n')
     await fs.mkdir(path.join(workspace, 'pkg'))
@@ -136,13 +136,13 @@ describe('cate-runtime daemon (real subprocess)', () => {
             { cols: 80, rows: 24, cwd: workspace, shell: '/bin/sh' },
             (_id, data) => {
               output += data
-              if (output.includes('CATE_REMOTE_PTY_OK')) resolve()
+              if (output.includes('ORQUESTRA_REMOTE_PTY_OK')) resolve()
             },
             () => { /* exit */ },
           )
           .then((handle) => {
             // Write a command into the remote shell; its echo + output stream back.
-            runtime.process.write(handle.id, 'echo CATE_REMOTE_PTY_OK\n')
+            runtime.process.write(handle.id, 'echo ORQUESTRA_REMOTE_PTY_OK\n')
           })
           // Surface a spawn failure instead of letting it time out with empty output.
           .catch(reject)
@@ -152,7 +152,7 @@ describe('cate-runtime daemon (real subprocess)', () => {
         sawMarker,
         new Promise((_r, reject) => setTimeout(() => reject(new Error(`no marker; got: ${output.slice(0, 200)}`)), 8000)),
       ])
-      expect(output).toContain('CATE_REMOTE_PTY_OK')
+      expect(output).toContain('ORQUESTRA_REMOTE_PTY_OK')
     },
     30_000,
   )
@@ -238,11 +238,11 @@ describe('cate-runtime daemon (real subprocess)', () => {
     const sawMarker = new Promise<void>((resolve) => {
       void runtime.process.create(
         { cols: 80, rows: 24, cwd: workspace },
-        (_id, data) => { output += data; if (output.includes('cate-pty-ok')) resolve() },
+        (_id, data) => { output += data; if (output.includes('orquestra-pty-ok')) resolve() },
         () => { /* exit */ },
       ).then((h) => {
         expect(h.pid).toBeGreaterThan(0)
-        runtime.process.write(h.id, 'echo cate-pty-ok\n')
+        runtime.process.write(h.id, 'echo orquestra-pty-ok\n')
       })
     })
     await Promise.race([

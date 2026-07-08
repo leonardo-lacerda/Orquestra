@@ -1,6 +1,6 @@
 // =============================================================================
 // Skill install engine — writes a skill into a workspace's per-target dir via
-// the runtime (local AND remote), and tracks installs in <ws>/.cate/skills.json.
+// the runtime (local AND remote), and tracks installs in <ws>/.orquestra/skills.json.
 //
 // Resolving a skill's files for a workspace install, in order:
 //   - reuse an existing install of the same skill in ANOTHER agent here (copy
@@ -25,7 +25,7 @@ import { slugifySkillName, type InstalledSkill, type SkillEntry, type SkillTarge
 import { fetchSkillFiles, type SkillFile } from './githubCrawl'
 
 // ---------------------------------------------------------------------------
-// Manifest (<workspace>/.cate/skills.json)
+// Manifest (<workspace>/.orquestra/skills.json)
 // ---------------------------------------------------------------------------
 
 interface SkillsManifest {
@@ -33,7 +33,7 @@ interface SkillsManifest {
 }
 
 function manifestPath(runtimeId: string, hostCwd: string): string {
-  return hostJoin(runtimeId, hostCwd, '.cate', 'skills.json')
+  return hostJoin(runtimeId, hostCwd, '.orquestra', 'skills.json')
 }
 
 export async function readManifest(runtime: Runtime, runtimeId: string, hostCwd: string): Promise<InstalledSkill[]> {
@@ -47,7 +47,7 @@ export async function readManifest(runtime: Runtime, runtimeId: string, hostCwd:
 }
 
 async function writeManifest(runtime: Runtime, runtimeId: string, hostCwd: string, skills: InstalledSkill[]): Promise<void> {
-  await runtime.file.mkdir(hostJoin(runtimeId, hostCwd, '.cate'))
+  await runtime.file.mkdir(hostJoin(runtimeId, hostCwd, '.orquestra'))
   const manifest: SkillsManifest = { skills }
   await runtime.file.writeFile(manifestPath(runtimeId, hostCwd), `${JSON.stringify(manifest, null, 2)}\n`)
 }

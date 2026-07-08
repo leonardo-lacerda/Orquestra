@@ -2,7 +2,7 @@
 // dev-update — run the REAL electron-updater against a local feed.
 //
 // `npm run dev:update` starts a tiny static server hosting a fake "newer"
-// release (version 99.0.0) and launches the app with CATE_DEV_UPDATE=1, which
+// release (version 99.0.0) and launches the app with ORQUESTRA_DEV_UPDATE=1, which
 // flips electron-updater's forceDevUpdateConfig on (see src/main/auto-updater.ts)
 // and points it at dev-app-update.yml → this server.
 //
@@ -29,9 +29,9 @@ import { spawn } from 'node:child_process'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 
-const PORT = Number(process.env.CATE_DEV_UPDATE_PORT || 8788)
-const FAKE_VERSION = process.env.CATE_DEV_UPDATE_VERSION || '99.0.0'
-const ASSET_NAME = `cate-dev-update.zip`
+const PORT = Number(process.env.ORQUESTRA_DEV_UPDATE_PORT || 8788)
+const FAKE_VERSION = process.env.ORQUESTRA_DEV_UPDATE_VERSION || '99.0.0'
+const ASSET_NAME = `orquestra-dev-update.zip`
 
 // ---------------------------------------------------------------------------
 // Build the in-memory fixture: a dummy asset + the channel manifests that point
@@ -78,7 +78,7 @@ fs.writeFileSync(
     `provider: generic`,
     `url: http://127.0.0.1:${PORT}`,
     `channel: latest`,
-    `updaterCacheDirName: cate-updater-dev`,
+    `updaterCacheDirName: orquestra-updater-dev`,
     ``,
   ].join('\n'),
 )
@@ -112,16 +112,16 @@ server.listen(PORT, '127.0.0.1', () => {
 
   // CI/self-test hook: serve the feed but don't launch the app. Lets the harness
   // be smoke-tested (fixture + manifest integrity) without an Electron window.
-  if (process.env.CATE_DEV_UPDATE_NO_LAUNCH === '1') {
+  if (process.env.ORQUESTRA_DEV_UPDATE_NO_LAUNCH === '1') {
     // eslint-disable-next-line no-console
-    console.log('[dev-update-server] CATE_DEV_UPDATE_NO_LAUNCH=1 — not launching app')
+    console.log('[dev-update-server] ORQUESTRA_DEV_UPDATE_NO_LAUNCH=1 — not launching app')
     return
   }
 
   const child = spawn('npx', ['electron-vite', 'dev'], {
     cwd: ROOT,
     stdio: 'inherit',
-    env: { ...process.env, CATE_DEV_UPDATE: '1', CATE_DEV_UPDATE_PORT: String(PORT) },
+    env: { ...process.env, ORQUESTRA_DEV_UPDATE: '1', ORQUESTRA_DEV_UPDATE_PORT: String(PORT) },
   })
 
   child.on('exit', (code) => {
@@ -138,7 +138,7 @@ server.listen(PORT, '127.0.0.1', () => {
 
 // When the app isn't launched (self-test mode), signals must still tear down the
 // server cleanly — there's no child to wait on.
-if (process.env.CATE_DEV_UPDATE_NO_LAUNCH === '1') {
+if (process.env.ORQUESTRA_DEV_UPDATE_NO_LAUNCH === '1') {
   const stop = () => { cleanup(); process.exit(0) }
   process.on('SIGINT', stop)
   process.on('SIGTERM', stop)

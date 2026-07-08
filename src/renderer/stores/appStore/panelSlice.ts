@@ -38,6 +38,7 @@ type PanelSliceActions = Pick<
   | 'createCanvas'
   | 'createAgent'
   | 'createDocument'
+  | 'createOrchestration'
   | 'closePanel'
   | 'updatePanelTitle'
   | 'updatePanelTitleFromAgent'
@@ -79,7 +80,7 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
 
     createTerminal(workspaceId, initialInput?, position?, placement?, cwd?) {
       const panelId = generateId()
-      // Auto-number terminal titles so `cate ask "Terminal 2"` and similar
+      // Auto-number terminal titles so `orquestra ask "Terminal 2"` and similar
       // inter-panel calls address each one unambiguously — unique across ALL
       // windows, including terminals detached into other windows.
       const panel: PanelState = {
@@ -171,6 +172,16 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
         isDirty: false,
       }
       return addAndPlacePanel(set, get, workspaceId, panel, withDefaultSize('agent', placement), position)
+    },
+
+    createOrchestration(workspaceId, position?, placement?) {
+      const panel: PanelState = {
+        id: generateId(),
+        type: 'orchestration',
+        title: 'Orchestration',
+        isDirty: false,
+      }
+      return addAndPlacePanel(set, get, workspaceId, panel, withDefaultSize('orchestration', placement), position)
     },
 
     // --- Panel management ---

@@ -1,7 +1,7 @@
 // =============================================================================
-// Build ONE self-contained cate-runtime tarball for a single target:
+// Build ONE self-contained orquestra-runtime tarball for a single target:
 //
-//   dist-runtime/cate-runtime-<version>-<target>.tgz
+//   dist-runtime/orquestra-runtime-<version>-<target>.tgz
 //     runtime.cjs                       (esbuild bundle, runtime-agnostic)
 //     node_modules/node-pty/...           (with prebuilds/<target>/pty.node
 //                                          + spawn-helper)
@@ -93,7 +93,7 @@ mkdirSync(stageDir, { recursive: true })
 // isInstalled probe failed forever → reinstall on every connect). Now an
 // aborted build leaves no tarball at all.
 const exe = targetPlatform === 'win32' ? '.exe' : ''
-const outTar = path.join(dist, `cate-runtime-${version}-${targetArg}.tgz`)
+const outTar = path.join(dist, `orquestra-runtime-${version}-${targetArg}.tgz`)
 rmSync(outTar, { force: true })
 
 // Unified runtime/bin/ layout; only the filename gains a `.exe` on win32 so the
@@ -126,7 +126,7 @@ if (missing.length) throw new Error(`[runtime] incomplete stage for ${targetArg}
 //
 // Write to a temp file then atomically rename into place. The app extracts this
 // exact tarball (dist-runtime/) for the LOCAL runtime, so a rebuild while
-// Cate is running must never expose a half-written archive — a reader that
+// Orquestra is running must never expose a half-written archive — a reader that
 // caught `tar -czf` mid-stream would hit "truncated gzip input" and cache a
 // corrupt install. rename(2) within the same dir is atomic.
 const tmpTar = `${path.basename(outTar)}.partial`
@@ -285,7 +285,7 @@ async function stageParcelWatcher(outRoot) {
 /** `npm pack <spec>` into a temp dir and extract the package's contents into
  *  `destDir` (npm tarballs nest everything under `package/`). */
 async function npmPackInto(spec, destDir) {
-  const tmp = path.join(os.tmpdir(), `cate-npmpack-${spec.replace(/[@/]/g, '_')}`)
+  const tmp = path.join(os.tmpdir(), `orquestra-npmpack-${spec.replace(/[@/]/g, '_')}`)
   rmSync(tmp, { recursive: true, force: true })
   mkdirSync(tmp, { recursive: true })
   console.log(`[runtime] npm pack ${spec} (cross-target prebuilt)…`)
@@ -401,7 +401,7 @@ async function resolveNativeBinaries() {
 
 /** Compile node-pty inside `node:20` for the target arch and extract its binaries. */
 async function dockerBuildLinuxPty() {
-  const outDir = path.join(os.tmpdir(), `cate-pty-${targetArg}-${NODE_PTY_VERSION}`)
+  const outDir = path.join(os.tmpdir(), `orquestra-pty-${targetArg}-${NODE_PTY_VERSION}`)
   rmSync(outDir, { recursive: true, force: true })
   mkdirSync(outDir, { recursive: true })
   // node-pty builds spawn-helper on darwin only; on linux pty.node forks itself.
@@ -430,7 +430,7 @@ async function stageNodeRuntime(platform, arch, outBin) {
     const res = await fetch(url)
     if (!res.ok) throw new Error(`node runtime download failed: ${res.status} ${url}`)
     const buf = Buffer.from(await res.arrayBuffer())
-    const tmp = path.join(os.tmpdir(), `cate-node-${platform}-${arch}-${NODE_VERSION}`)
+    const tmp = path.join(os.tmpdir(), `orquestra-node-${platform}-${arch}-${NODE_VERSION}`)
     rmSync(tmp, { recursive: true, force: true })
     mkdirSync(tmp, { recursive: true })
     const zipPath = path.join(tmp, 'node.zip')
@@ -448,7 +448,7 @@ async function stageNodeRuntime(platform, arch, outBin) {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`node runtime download failed: ${res.status} ${url}`)
   const buf = Buffer.from(await res.arrayBuffer())
-  const tmp = path.join(os.tmpdir(), `cate-node-${platform}-${arch}-${NODE_VERSION}`)
+  const tmp = path.join(os.tmpdir(), `orquestra-node-${platform}-${arch}-${NODE_VERSION}`)
   rmSync(tmp, { recursive: true, force: true })
   mkdirSync(tmp, { recursive: true })
   const tarPath = path.join(tmp, 'node.tar.gz')
@@ -474,7 +474,7 @@ async function stageRipgrep(target, outBin) {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`ripgrep download failed: ${res.status} ${url}`)
   const buf = Buffer.from(await res.arrayBuffer())
-  const tmp = path.join(os.tmpdir(), `cate-rg-${target}-${RIPGREP_VERSION}`)
+  const tmp = path.join(os.tmpdir(), `orquestra-rg-${target}-${RIPGREP_VERSION}`)
   rmSync(tmp, { recursive: true, force: true })
   mkdirSync(tmp, { recursive: true })
   mkdirSync(path.dirname(outBin), { recursive: true })
@@ -508,7 +508,7 @@ function stagePi(outRoot) {
   const piVersion = JSON.parse(
     readFileSync(path.join(repoRoot, 'node_modules', '@earendil-works', 'pi-coding-agent', 'package.json'), 'utf-8'),
   ).version
-  const tar = path.join(dist, `cate-pi-${piVersion}.tgz`)
+  const tar = path.join(dist, `orquestra-pi-${piVersion}.tgz`)
   if (!existsSync(tar)) {
     console.log('[runtime] pi tarball missing; building it…')
     execFileSync('node', [path.join(repoRoot, 'scripts', 'build-pi-tarball.mjs')], { stdio: 'inherit' })
@@ -531,11 +531,11 @@ function stagePi(outRoot) {
  * the app. node also gets the runtime entitlements (JIT + disable-library-
  * validation) so it still runs and can load the native addons once hardened.
  * No-op unless we're building a darwin tarball on a darwin host with
- * CATE_MAC_SIGN_IDENTITY set (see ci-mac-signing-keychain.sh); when absent the
+ * ORQUESTRA_MAC_SIGN_IDENTITY set (see ci-mac-signing-keychain.sh); when absent the
  * binaries stay unsigned and notarization fails loudly.
  */
 function signMacNatives(stageDir) {
-  const identity = process.env.CATE_MAC_SIGN_IDENTITY
+  const identity = process.env.ORQUESTRA_MAC_SIGN_IDENTITY
   if (process.platform !== 'darwin' || targetPlatform !== 'darwin' || !identity) return
   const entitlements = path.join(repoRoot, 'build', 'entitlements.runtime.plist')
   const pbDir = path.join('node_modules', 'node-pty', 'prebuilds', targetArg)

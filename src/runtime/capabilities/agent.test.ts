@@ -15,7 +15,7 @@ let echoCli = ''
 let hangCli = ''
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'cate-agent-test-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'orquestra-agent-test-'))
   // Echoes each stdin line back as `echo:<line>`; `quit` exits with code 7.
   echoCli = path.join(dir, 'echo-cli.js')
   await writeFile(

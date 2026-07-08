@@ -245,6 +245,8 @@ export interface WorkspaceCanvasSnapshot {
   nodes: Record<CanvasNodeId, CanvasNodeState>
   zoomLevel: number
   viewportOffset: Point
+  connections: Record<string, import('../../../shared/types').TerminalConnection>
+  drawings: import('../../../shared/types').DrawingElement[]
 }
 
 /** Snapshot for a SPECIFIC canvas panel (multi-canvas support). Reads the LIVE
@@ -262,6 +264,8 @@ export function getCanvasSnapshotForPanel(canvasPanelId: string): WorkspaceCanva
       nodes: { ...s.nodes },
       zoomLevel: s.zoomLevel,
       viewportOffset: { ...s.viewportOffset },
+      connections: s.connections ? { ...s.connections } : {},
+      drawings: s.drawings ? [...s.drawings] : [],
     }
   }
   // Find the workspace that owns this canvas panel to read its persisted
@@ -279,9 +283,11 @@ export function getCanvasSnapshotForPanel(canvasPanelId: string): WorkspaceCanva
       nodes: { ...persisted.canvasNodes },
       zoomLevel: persisted.zoomLevel,
       viewportOffset: { ...persisted.viewportOffset },
+      connections: persisted.connections ? { ...persisted.connections } : {},
+      drawings: persisted.drawings ? [...persisted.drawings] : [],
     }
   }
-  return { nodes: {}, zoomLevel: ZOOM_DEFAULT, viewportOffset: { x: 0, y: 0 } }
+  return { nodes: {}, zoomLevel: ZOOM_DEFAULT, viewportOffset: { x: 0, y: 0 }, connections: {}, drawings: [] }
 }
 
 /** Live canvas snapshot for a workspace's center (primary) canvas, or the
@@ -294,8 +300,8 @@ export function getWorkspaceCanvasSnapshot(workspaceId: string): WorkspaceCanvas
     // save round-trips, null for an unknown one.
     const ws = useAppStore.getState().workspaces.find((w) => w.id === workspaceId)
     if (!ws) return null
-    return { nodes: {}, zoomLevel: ZOOM_DEFAULT, viewportOffset: { x: 0, y: 0 } }
-  }
+    return { nodes: {}, zoomLevel: ZOOM_DEFAULT, viewportOffset: { x: 0, y: 0 }, connections: {}, drawings: [] }
+    }
   return getCanvasSnapshotForPanel(canvasPanelId)
 }
 

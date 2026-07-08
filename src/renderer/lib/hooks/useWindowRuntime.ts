@@ -1,5 +1,5 @@
 // =============================================================================
-// useWindowRuntime — the shared "app shell runtime" every Cate window mounts.
+// useWindowRuntime — the shared "app shell runtime" every Orquestra window mounts.
 //
 // Each renderer window (main, detached dock, detached panel) is a separate JS
 // context, so the stores and module state the behaviors below touch are already
@@ -10,7 +10,7 @@
 // main window in the first place).
 //
 // Genuinely main-only behavior (session init, process monitor, sidebars, OS
-// title sync, "Open With Cate", dock-back receiver, perf/E2E) stays in App.tsx's
+// title sync, "Open With Orquestra", dock-back receiver, perf/E2E) stays in App.tsx's
 // MainApp and is intentionally NOT moved here.
 // =============================================================================
 

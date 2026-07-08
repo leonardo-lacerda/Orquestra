@@ -30,22 +30,27 @@ import { ProvidersSettings } from './ProvidersSettings'
 import { SkillsSettings } from './SkillsSettings'
 import { SettingsSearchContext } from './SettingsSearchContext'
 import { TextInput } from './SettingsComponents'
+import { useTranslation } from '../i18n/useTranslation'
+import type { Translations } from '../i18n/translations'
 
-const SECTIONS = [
-  { title: 'General', component: GeneralSettings },
-  { title: 'Appearance', component: AppearanceSettings },
-  { title: 'Canvas', component: CanvasSettings },
-  { title: 'Terminal', component: TerminalSettings },
-  { title: 'Browser', component: BrowserSettings },
-  { title: 'Sidebar', component: SidebarSettings },
-  { title: 'File Explorer', component: FileExplorerSettings },
-  { title: 'Worktrees', component: WorktreeSettings },
-  { title: 'Notifications', component: NotificationSettings },
-  { title: 'Providers', component: ProvidersSettings },
-  { title: 'Skills', component: SkillsSettings },
-  { title: 'Updates', component: UpdatesSettings },
-  { title: 'Shortcuts', component: ShortcutSettings },
-] as const
+// Build SECTIONS using translated titles.
+function getSections(t: (key: keyof Translations) => string) {
+  return [
+    { title: t('settings.section.general'), component: GeneralSettings },
+    { title: t('settings.section.appearance'), component: AppearanceSettings },
+    { title: t('settings.section.canvas'), component: CanvasSettings },
+    { title: t('settings.section.terminal'), component: TerminalSettings },
+    { title: t('settings.section.browser'), component: BrowserSettings },
+    { title: t('settings.section.sidebar'), component: SidebarSettings },
+    { title: t('settings.section.fileExplorer'), component: FileExplorerSettings },
+    { title: t('settings.section.worktrees'), component: WorktreeSettings },
+    { title: t('settings.section.notifications'), component: NotificationSettings },
+    { title: t('settings.section.providers'), component: ProvidersSettings },
+    { title: t('settings.section.skills'), component: SkillsSettings },
+    { title: t('settings.section.updates'), component: UpdatesSettings },
+    { title: t('settings.section.shortcuts'), component: ShortcutSettings },
+  ] as const
+}
 
 // DOM id for a section. Slugify spaces (e.g. "File Explorer") so the result is
 // a valid CSS selector for querySelector/scrollIntoView.
@@ -61,6 +66,8 @@ interface SettingsWindowProps {
 export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [rawQuery, setRawQuery] = useState('')
+  const { t } = useTranslation()
+  const SECTIONS = getSections(t)
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].title.toLowerCase())
   const [visibleSections, setVisibleSections] = useState<Set<string>>(
     () => new Set(SECTIONS.map((s) => s.title.toLowerCase())),
@@ -138,7 +145,7 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
     return () => document.removeEventListener('keydown', onKey, { capture: true })
   }, [isOpen, rawQuery, onClose])
 
-  // Open the underlying settings.json in a Cate editor panel (VS Code's "Open
+  // Open the underlying settings.json in a Orquestra editor panel (VS Code's "Open
   // Settings (JSON)"). Main grants this window access to the file and returns
   // its path; we then close the dialog and mount an editor on it. Edits saved
   // there write back to the file, which the watcher reloads into the UI live.
@@ -175,16 +182,16 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
       height="80vh"
       zClassName="z-[100001]"
       closeOnEscape={false}
-      title="Settings"
+      title={t('settings.title')}
       bodyClassName="contents"
       headerActions={
         <button
           onClick={openSettingsJson}
-          title="Open settings.json in an editor to edit and export your settings directly"
+          title={t('settings.openJson')}
           className="flex items-center gap-1.5 px-2 h-7 rounded-md border border-subtle text-secondary hover:bg-hover hover:text-primary text-xs"
         >
           <BracketsCurly size={14} />
-          Open settings.json
+          {t('settings.openJson')}
         </button>
       }
     >
@@ -207,7 +214,7 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
                       setRawQuery('')
                     }
                   }}
-                  placeholder="Search settings…"
+                  placeholder={t('settings.searchPlaceholder')}
                   layoutClassName="w-full pl-7 pr-2"
                 />
               </div>
@@ -229,7 +236,7 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
                 )
               })}
               {navSections.length === 0 && (
-                <span className="px-2.5 py-1.5 text-xs text-muted">No matches</span>
+                <span className="px-2.5 py-1.5 text-xs text-muted">{t('settings.noMatches')}</span>
               )}
             </nav>
           </div>
@@ -254,7 +261,7 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
               })}
               {query !== '' && visibleSections.size === 0 && (
                 <div className="py-10 text-center text-sm text-muted">
-                  No settings match “{rawQuery.trim()}”.
+                  {t('settings.noMatchResults').replace('{query}', rawQuery.trim())}
                 </div>
               )}
             </div>
@@ -263,4 +270,3 @@ export function SettingsWindow({ isOpen, onClose, initialTab }: SettingsWindowPr
     </Modal>
   )
 }
-

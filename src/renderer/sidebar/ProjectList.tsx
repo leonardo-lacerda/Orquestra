@@ -4,6 +4,7 @@ import { useAppStore, useWorkspaceList } from '../stores/appStore'
 import { WorkspaceTab } from './WorkspaceTab'
 import { SidebarSectionHeader, SidebarHeaderButton } from './SidebarSectionHeader'
 import type { NativeContextMenuItem } from '../../shared/electron-api.d'
+import { useTranslation } from '../i18n/useTranslation'
 
 export const ProjectList: React.FC = () => {
   const workspaces = useWorkspaceList()
@@ -11,10 +12,9 @@ export const ProjectList: React.FC = () => {
   const addWorkspace = useAppStore((s) => s.addWorkspace)
   const selectWorkspace = useAppStore((s) => s.selectWorkspace)
   const removeWorkspace = useAppStore((s) => s.removeWorkspace)
+  const { t } = useTranslation()
 
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set())
-  // Workspace expansion lives here (not in each WorkspaceTab) so the header
-  // toggle can expand/collapse every row at once (#375).
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const lastClickedIndexRef = useRef<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -30,7 +30,6 @@ export const ProjectList: React.FC = () => {
   }, [workspaces])
 
   const handleWorkspaceClick = useCallback((index: number, wsId: string, e?: React.MouseEvent) => {
-    // Shift-click — select the contiguous range from the anchor to here.
     if (e?.shiftKey && lastClickedIndexRef.current !== null) {
       const start = Math.min(lastClickedIndexRef.current, index)
       const end = Math.max(lastClickedIndexRef.current, index)
@@ -42,8 +41,6 @@ export const ProjectList: React.FC = () => {
       return
     }
 
-    // Cmd/Ctrl-click — toggle this workspace in/out of the multi-selection
-    // (matches the file explorer's multi-select).
     if (e?.metaKey || e?.ctrlKey) {
       setMultiSelected((prev) => {
         const next = new Set(prev)
@@ -88,14 +85,14 @@ export const ProjectList: React.FC = () => {
     e.stopPropagation()
     if (!window.electronAPI) return true
     const items: NativeContextMenuItem[] = [
-      { id: 'delete-selected', label: `Close ${multiSelected.size} Workspaces` },
+      { id: 'delete-selected', label: t('projects.closeSelected').replace('{count}', String(multiSelected.size)) },
     ]
     const id = await window.electronAPI.showContextMenu(items)
     if (id === 'delete-selected') {
       handleBulkDelete()
     }
     return true
-  }, [multiSelected, handleBulkDelete])
+  }, [multiSelected, handleBulkDelete, t])
 
   const toggleExpanded = useCallback((wsId: string) => {
     setExpandedIds((prev) => {
@@ -120,9 +117,6 @@ export const ProjectList: React.FC = () => {
     setMultiSelected(new Set())
   }, [addWorkspace, selectWorkspace])
 
-  // Insertion slot the drop would land in: 0..N where N is "after the last
-  // row". Derived from which half of a row the cursor is over, so the bottom
-  // slot (below the last workspace) is reachable.
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
 
   const displayWorkspaces = workspaces
@@ -136,27 +130,23 @@ export const ProjectList: React.FC = () => {
       onKeyDown={handleKeyDown}
     >
       <SidebarSectionHeader
-        title="Workspace"
+        title={t('projects.workspace')}
         actions={
           <>
             <SidebarHeaderButton
               onClick={handleToggleAll}
-              title={allExpanded ? 'Collapse All' : 'Expand All'}
+              title={allExpanded ? t('projects.collapseAll') : t('projects.expandAll')}
               disabled={workspaces.length === 0}
             >
               {allExpanded ? <CaretDoubleUp size={14} /> : <CaretDoubleDown size={14} />}
             </SidebarHeaderButton>
-            <SidebarHeaderButton onClick={handleNewWorkspace} title="New Workspace">
+            <SidebarHeaderButton onClick={handleNewWorkspace} title={t('projects.newWorkspace')}>
               <Plus size={14} weight="bold" />
             </SidebarHeaderButton>
           </>
         }
       />
 
-      {/* Scrollable workspace list. No top padding so the first row sits flush
-          beneath the 36px header — matching the canvas dock tab bar, whose
-          content starts flush below its bar. A top gap makes the header read
-          as taller than the canvas header. */}
       <div className="flex-1 overflow-y-auto pb-1">
         <div className="flex flex-col">
           {displayWorkspaces.map((ws, index) => {
@@ -173,8 +163,6 @@ export const ProjectList: React.FC = () => {
                 onDragOver={(e) => {
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
-                  // Top half → insert before this row; bottom half → after it.
-                  // The bottom half of the last row targets the final slot.
                   const rect = e.currentTarget.getBoundingClientRect()
                   const after = e.clientY > rect.top + rect.height / 2
                   setInsertIndex(after ? index + 1 : index)
@@ -182,8 +170,6 @@ export const ProjectList: React.FC = () => {
                 onDrop={(e) => {
                   e.preventDefault()
                   const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10)
-                  // Recompute the target slot from the drop position rather than
-                  // reading insertIndex state, which can be stale in this closure.
                   const rect = e.currentTarget.getBoundingClientRect()
                   const to = e.clientY > rect.top + rect.height / 2 ? index + 1 : index
                   setInsertIndex(null)
@@ -193,8 +179,6 @@ export const ProjectList: React.FC = () => {
                 }}
                 onDragEnd={() => setInsertIndex(null)}
               >
-                {/* Drop indicators overlay the row edges so cards stay flush
-                    (no reserved border space → no inter-card gap). */}
                 {insertIndex === index && (
                   <div className="absolute left-0 right-0 top-0 h-0.5 bg-blue-400/60 z-10 pointer-events-none" />
                 )}

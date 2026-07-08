@@ -2,7 +2,7 @@
 // terminalKeymap — translate macOS line-editing chords into the literal control
 // bytes a shell's line editor (readline / zsh ZLE) understands.
 //
-// In a Cate terminal, chords like Cmd+Backspace ("delete to line start") must
+// In a Orquestra terminal, chords like Cmd+Backspace ("delete to line start") must
 // behave the way they do in the VS Code / Cursor integrated terminal. xterm.js
 // doesn't translate them, and a CSI-u encoding (e.g. `\x1b[127;3u`) isn't
 // understood by a plain shell — so we map each chord to the exact byte sequence

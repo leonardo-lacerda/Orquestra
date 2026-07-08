@@ -35,7 +35,7 @@ async function waitForFileContent(file: string, expected: string): Promise<void>
 }
 
 beforeEach(() => {
-  h.userDataDir = fs.mkdtempSync(path.join(tmpdir(), 'cate-termlog-'))
+  h.userDataDir = fs.mkdtempSync(path.join(tmpdir(), 'orquestra-termlog-'))
 })
 
 afterEach(async () => {

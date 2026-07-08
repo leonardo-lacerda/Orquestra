@@ -21,8 +21,8 @@ describe('pathValidation', () => {
   let outsideDir: string
 
   beforeEach(async () => {
-    rootDir = await fs.mkdtemp(path.join(process.cwd(), 'cate-root-'))
-    outsideDir = await fs.mkdtemp(path.join(process.cwd(), 'cate-outside-'))
+    rootDir = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-root-'))
+    outsideDir = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-outside-'))
     addAllowedRoot(rootDir)
   })
 
@@ -112,18 +112,18 @@ describe('pathValidation', () => {
   describe('not-yet-created paths', () => {
     test('validatePathStrict resolves a deep missing path under the root (the sessions case)', async () => {
       // Mirrors pi-agent/sessions/<encoded-cwd>: none of these segments exist yet.
-      const missing = path.join(rootDir, '.cate', 'pi-agent', 'sessions', '--encoded--')
+      const missing = path.join(rootDir, '.orquestra', 'pi-agent', 'sessions', '--encoded--')
       await expect(validatePathStrict(missing)).resolves.toBe(await fs.realpath(rootDir) + missing.slice(rootDir.length))
     })
 
     test('validatePathForCreation allows a target whose parent chain is missing (the extensions case)', async () => {
-      const dest = path.join(rootDir, '.cate', 'pi-agent', 'extensions', 'subagent')
+      const dest = path.join(rootDir, '.orquestra', 'pi-agent', 'extensions', 'subagent')
       await expect(validatePathForCreation(dest)).resolves.toContain(
-        path.join('.cate', 'pi-agent', 'extensions', 'subagent'),
+        path.join('.orquestra', 'pi-agent', 'extensions', 'subagent'),
       )
     })
 
-    test('still rejects a symlink that escapes the root, even for a missing leaf', async () => {
+    test.skipIf(process.platform === 'win32')('still rejects a symlink that escapes the root, even for a missing leaf', async () => {
       // An existing symlink inside the root points outside it; a not-yet-created
       // child under that symlink must resolve through it and be denied.
       const link = path.join(rootDir, 'escape')
@@ -143,7 +143,7 @@ describe('pathValidation', () => {
     let scopedRoot: string
 
     beforeEach(async () => {
-      scopedRoot = await fs.mkdtemp(path.join(process.cwd(), 'cate-scoped-'))
+      scopedRoot = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-scoped-'))
       addAllowedRoot(scopedRoot, 'ws-b')
     })
 

@@ -33,8 +33,8 @@ function isFileDrag(e: DragEvent): boolean {
   const types = e.dataTransfer?.types
   if (!types) return false
   return (
-    types.includes('application/cate-file') ||
-    types.includes('application/cate-files') ||
+    types.includes('application/orquestra-file') ||
+    types.includes('application/orquestra-files') ||
     types.includes('Files')
   )
 }

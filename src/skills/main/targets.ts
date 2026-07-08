@@ -17,7 +17,7 @@ import { getSkillTarget, type SkillTargetId, type SkillTargetInfo } from '../../
 /** Workspace-relative segments for each target's skills root. */
 const BASE_SEGMENTS: Record<SkillTargetId, string[]> = {
   'claude-code': ['.claude', 'skills'],
-  'cate-agent': ['.cate', PI_AGENT_DIR, 'skills'],
+  'orquestra-agent': ['.orquestra', PI_AGENT_DIR, 'skills'],
   // `.agents/skills` is the cross-tool shared location pi (and others) read.
   'pi-native': ['.agents', 'skills'],
   'opencode': ['.opencode', 'skills'],

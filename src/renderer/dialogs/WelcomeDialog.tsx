@@ -12,15 +12,15 @@
 import { useState } from 'react'
 import { EnvelopeSimple } from '@phosphor-icons/react'
 import { useSettingsStore } from '../stores/settingsStore'
-import { CateLogo } from '../ui/CateLogo'
+import { OrquestraLogo } from '../ui/OrquestraLogo'
 import log from '../lib/logger'
 import headerImg from '../assets/welcome-header.jpg'
 import { AnimatedDotGrid } from './AnimatedDotGrid'
 import { TELEMETRY_NOTICE_VERSION } from '../../shared/types'
 
-const GITHUB_REPO = 'https://github.com/0-AI-UG/cate'
-const NEWSLETTER_URL = 'https://cate.cero-ai.com'
-const PRIVACY_URL = 'https://cate.cero-ai.com/privacy'
+const GITHUB_REPO = 'https://github.com/0-AI-UG/orquestra'
+const NEWSLETTER_URL = 'https://orquestra.cero-ai.com'
+const PRIVACY_URL = 'https://orquestra.cero-ai.com/privacy'
 
 function openLink(url: string, name: string): void {
   try {
@@ -118,9 +118,9 @@ export function WelcomeDialog() {
                 maskComposite: 'exclude',
               }}
             />
-            <CateLogo size={30} className="relative text-white" />
+            <OrquestraLogo size={30} className="relative text-white" />
           </div>
-          <h2 className="mt-5 text-primary text-[22px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">Welcome to Cate</h2>
+          <h2 className="mt-5 text-primary text-[22px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">Welcome to Orquestra</h2>
           <p className="mt-1.5 px-10 text-center text-muted text-[12.5px] leading-relaxed">
             An infinite canvas for your terminals, editors, browsers, and agents.
           </p>
@@ -150,7 +150,7 @@ export function WelcomeDialog() {
 
           {/* Telemetry notice — informational only, no choice. */}
           <p className="text-center text-[12px] text-secondary leading-relaxed">
-            Cate collects anonymous usage data and crash reports to improve the app.{' '}
+            Orquestra collects anonymous usage data and crash reports to improve the app.{' '}
             <button
               type="button"
               onClick={() => openLink(PRIVACY_URL, 'privacy_policy')}

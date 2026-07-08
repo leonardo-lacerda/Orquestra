@@ -736,7 +736,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
           }}
           onContextMenu={handleRootContextMenu}
           onDragOver={(e) => {
-            if (e.dataTransfer.types.includes('application/cate-file')) {
+            if (e.dataTransfer.types.includes('application/orquestra-file')) {
               e.preventDefault()
               e.dataTransfer.dropEffect = 'move'
             }
@@ -744,7 +744,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
           onDrop={async (e) => {
             e.preventDefault()
             if (!window.electronAPI) return
-            const raw = e.dataTransfer.getData('application/cate-files')
+            const raw = e.dataTransfer.getData('application/orquestra-files')
             if (!raw) return
             const sourcePaths: string[] = JSON.parse(raw)
             for (const srcPath of sourcePaths) {

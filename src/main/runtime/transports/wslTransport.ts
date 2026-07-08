@@ -2,7 +2,7 @@
 // WslTransport — runs the self-contained runtime daemon inside a WSL distro
 // via `wsl.exe`. Installs the matching linux tarball (runtime.cjs +
 // node_modules incl. node-pty + a bundled Node runtime) into
-// ~/.cate/runtime/<ver>/<target>/ so the distro needs nothing preinstalled
+// ~/.orquestra/runtime/<ver>/<target>/ so the distro needs nothing preinstalled
 // (server-side `git` still needed for VCS).
 //
 //   1. IN-DISTRO PULL — the distro fetches its own tarball from the GitHub
@@ -66,7 +66,7 @@ export class WslTransport implements RuntimeTransport {
     }
     if (!this.installDir) {
       const { stdout: home } = await this.wsl(['sh', '-c', 'echo $HOME'])
-      this.installDir = `${home.trim()}/.cate/runtime/${version}/${this.target}`
+      this.installDir = `${home.trim()}/.orquestra/runtime/${version}/${this.target}`
     }
     return this.installDir
   }
@@ -80,7 +80,7 @@ export class WslTransport implements RuntimeTransport {
   /** Remove the whole runtime install tree inside the distro (all versions). */
   async uninstall(): Promise<void> {
     const { stdout: home } = await this.wsl(['sh', '-c', 'echo $HOME'])
-    await this.wslSh(`rm -rf ${shq(`${home.trim()}/.cate/runtime`)}`)
+    await this.wslSh(`rm -rf ${shq(`${home.trim()}/.orquestra/runtime`)}`)
     this.installDir = ''
   }
 
@@ -123,9 +123,9 @@ export class WslTransport implements RuntimeTransport {
         const { stdout: srcMnt } = await this.wsl(['wslpath', bundle])
         const res = await this.wslSh(
           `mkdir -p ${quotedDir} && cp ${shq(srcMnt.trim())} ${quotedDir}/runtime.cjs && ` +
-            `printf %s ${shq(hash)} > ${quotedDir}/.cjs.ok && echo CATE_CJS_OK`,
+            `printf %s ${shq(hash)} > ${quotedDir}/.cjs.ok && echo ORQUESTRA_CJS_OK`,
         )
-        if (!res.stdout.includes('CATE_CJS_OK')) {
+        if (!res.stdout.includes('ORQUESTRA_CJS_OK')) {
           throw new Error(`WSL dev runtime.cjs push failed: ${res.stderr || res.stdout}`)
         }
       },
@@ -139,9 +139,9 @@ export class WslTransport implements RuntimeTransport {
     const D = shq(this.installDir)
     const extract = await this.wslSh(
       `mkdir -p ${D} && cd ${D} && cp ${shq(srcMnt.trim())} pkg.tgz && ` +
-        buildExtractCommand(shq(marker), 'CATE_EXTRACT_OK'),
+        buildExtractCommand(shq(marker), 'ORQUESTRA_EXTRACT_OK'),
     )
-    if (!extract.stdout.includes('CATE_EXTRACT_OK')) {
+    if (!extract.stdout.includes('ORQUESTRA_EXTRACT_OK')) {
       throw new Error(`WSL extract failed: ${extract.stderr || extract.stdout}`)
     }
   }

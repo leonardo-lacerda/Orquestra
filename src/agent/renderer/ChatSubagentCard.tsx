@@ -49,10 +49,10 @@ export function SubagentCard({ msg, shimmer }: { msg: ToolMessage; shimmer?: boo
   const running = msg.status === 'running' || msg.status === 'pending'
 
   return (
-    <div className="text-[12px] cate-fade-in">
+    <div className="text-[12px] orquestra-fade-in">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className={`w-full flex items-center gap-1.5 text-left hover:text-primary ${running || shimmer ? 'cate-notif-pulse' : ''}`}
+        className={`w-full flex items-center gap-1.5 text-left hover:text-primary ${running || shimmer ? 'orquestra-notif-pulse' : ''}`}
       >
         <span className="text-muted shrink-0">subagent</span>
         <span className="truncate text-primary/90 font-mono flex-1">
@@ -106,9 +106,9 @@ function SubagentResultRow({
         onClick={toggle}
         className={`w-full flex items-center gap-1.5 text-left ${hasExtras ? 'hover:text-primary' : 'cursor-default'}`}
       >
-        <span className={`font-mono text-[11px] shrink-0 ${isRunning ? 'cate-notif-pulse' : 'text-muted'}`}>{result.agent}</span>
+        <span className={`font-mono text-[11px] shrink-0 ${isRunning ? 'orquestra-notif-pulse' : 'text-muted'}`}>{result.agent}</span>
         {result.step != null && (
-          <span className={`text-[10px] shrink-0 ${isRunning ? 'cate-notif-pulse' : 'text-muted'}`}>#{result.step}</span>
+          <span className={`text-[10px] shrink-0 ${isRunning ? 'orquestra-notif-pulse' : 'text-muted'}`}>#{result.step}</span>
         )}
         <span className="truncate text-primary font-mono flex-1">{summary}</span>
         {usageBits.length > 0 && (

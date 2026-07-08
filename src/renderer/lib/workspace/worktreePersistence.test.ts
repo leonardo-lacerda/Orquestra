@@ -55,7 +55,7 @@ const ROOT = '/tmp/wt'
 // worktrees persist only UI metadata (id/path/color/label); branch/isPrimary are
 // live git facts joined in at read time (see useWorktrees), never persisted.
 const WT_X: WorktreeMeta = {
-  id: 'wt-x', path: `${ROOT}/.cate/worktrees/x`, color: '#11aa55', label: 'X work',
+  id: 'wt-x', path: `${ROOT}/.orquestra/worktrees/x`, color: '#11aa55', label: 'X work',
 }
 const WT_PRIMARY: WorktreeMeta = {
   id: 'wt-primary-ws', path: ROOT, color: '#3366ff',
@@ -105,7 +105,7 @@ describe('worktree session persistence', () => {
     // Simulate a background sync that already discovered the same checkout with a
     // fresh palette color + a different (runtime) id, plus an unknown live one.
     useAppStore.getState().upsertWorktree(ws, { ...WT_X, id: 'wt-fresh', color: '#000000', label: undefined })
-    const live: WorktreeMeta = { id: 'wt-live', path: `${ROOT}/.cate/worktrees/live`, color: '#999999' }
+    const live: WorktreeMeta = { id: 'wt-live', path: `${ROOT}/.orquestra/worktrees/live`, color: '#999999' }
     useAppStore.getState().upsertWorktree(ws, live)
 
     useAppStore.getState().hydrateWorktrees(ws, [WT_X])
@@ -128,13 +128,13 @@ describe('worktree session persistence', () => {
     // Background sync discovered the same checkout via git's forward-slash form,
     // lower-cased, with a fresh runtime id + palette color.
     const discovered: WorktreeMeta = {
-      id: 'wt-fresh', path: 'c:/users/me/proj/.cate/worktrees/x', color: '#000000',
+      id: 'wt-fresh', path: 'c:/users/me/proj/.orquestra/worktrees/x', color: '#000000',
     }
     useAppStore.getState().upsertWorktree('ws-win', discovered)
 
     // Persisted session stored the native-separator form with color/label.
     const persisted: WorktreeMeta = {
-      id: 'wt-x', path: 'C:\\Users\\me\\Proj\\.cate\\worktrees\\x', color: '#11aa55', label: 'X work',
+      id: 'wt-x', path: 'C:\\Users\\me\\Proj\\.orquestra\\worktrees\\x', color: '#11aa55', label: 'X work',
     }
     useAppStore.getState().hydrateWorktrees('ws-win', [persisted])
 

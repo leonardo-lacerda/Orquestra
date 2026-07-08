@@ -179,7 +179,7 @@ export function registerAgentHandlers(authManager: AuthManager, agentManager: Ag
   })
 
   // Disk-backed pi session index — read straight from the workspace's
-  // .cate/pi-agent/sessions/ dir.
+  // .orquestra/pi-agent/sessions/ dir.
   ipcMain.handle(AGENT_LIST_SESSIONS, async (_event, cwd: string) => {
     if (!cwd) return []
     return listSessions(cwd)
@@ -217,7 +217,7 @@ export function registerAgentHandlers(authManager: AuthManager, agentManager: Ag
   })
 
   // ---------------------------------------------------------------------------
-  // Per-agent custom subagents + prompts (.cate/pi-agent/{agents,prompts})
+  // Per-agent custom subagents + prompts (.orquestra/pi-agent/{agents,prompts})
   // ---------------------------------------------------------------------------
 
   // The target is a HOST path (already parseLocator'd); the dir is the host

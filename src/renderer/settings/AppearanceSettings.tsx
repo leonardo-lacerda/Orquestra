@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { Check, Trash, Upload, DownloadSimple, Sparkle } from '@phosphor-icons/react'
 import { Tooltip } from '../ui/Tooltip'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { SettingRow, Select, NumberInput, TextInput, Toggle, SearchableBlock, SecondaryButton } from './SettingsComponents'
 import type { Theme } from '../../shared/types'
 import { validateTheme } from '../../shared/theme'
 import { BASE_DARK, BASE_LIGHT, BUILT_IN_THEMES } from '../../shared/themes'
 import { errorMessage } from '../lib/errorMessage'
 
-const SKILL_GUIDE_URL = 'https://github.com/0-AI-UG/cate/blob/main/skills/cate-theme/SKILL.md'
+const SKILL_GUIDE_URL = 'https://github.com/0-AI-UG/orquestra/blob/main/skills/orquestra-theme/SKILL.md'
 
 const UI_SCALE_OPTIONS = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5].map((s) => ({
   value: String(s),
@@ -39,6 +40,7 @@ function uniqueId(id: string, taken: Set<string>): string {
 
 export function AppearanceSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
   const customThemes = store.customThemes ?? []
   const activeThemeId = store.activeThemeId
   const isSystem = activeThemeId === 'system'
@@ -90,7 +92,7 @@ export function AppearanceSettings() {
     const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${theme.id}.cate-theme.json`
+    a.download = `${theme.id}.orquestra-theme.json`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -110,7 +112,7 @@ export function AppearanceSettings() {
       <SearchableBlock keywords="theme appearance color dark light catalog import export system mode">
       {/* Mode + catalog header */}
       <div className="flex items-center justify-between py-2.5">
-        <span className="text-sm text-primary">Theme</span>
+        <span className="text-sm text-primary">{t('appearance.theme')}</span>
         <SecondaryButton onClick={handleImport} title="Import a theme from a JSON file">
           <Upload size={11} />
           Import…
@@ -174,7 +176,7 @@ export function AppearanceSettings() {
       </button>
       </SearchableBlock>
 
-      <SettingRow label="UI scale" description="Zooms Cate's interface; doesn't affect browser-panel pages">
+      <SettingRow label={t('appearance.uiScale')} description={t('appearance.uiScale.desc')}>
         <Select
           value={String(store.uiScale)}
           onChange={(v) => store.setSetting('uiScale', parseFloat(v))}
@@ -182,11 +184,11 @@ export function AppearanceSettings() {
         />
       </SettingRow>
 
-      <SettingRow label="Editor font size">
+      <SettingRow label={t('appearance.editorFontSize')}>
         <NumberInput value={store.editorFontSize} onChange={(v) => store.setSetting('editorFontSize', v)} min={8} max={32} step={1} />
       </SettingRow>
 
-      <SettingRow label="Editor font family" description="Blank = default (Menlo, Monaco)">
+      <SettingRow label={t('appearance.editorFontFamily')} description={t('appearance.editorFontFamily.desc')}>
         <TextInput
           value={store.editorFontFamily}
           onChange={(v) => store.setSetting('editorFontFamily', v)}
@@ -196,11 +198,11 @@ export function AppearanceSettings() {
 
       <SearchableBlock keywords="gpu rasterization rendering glyph text missing garbled corruption render acceleration restart">
         <SettingRow
-          label="Disable GPU text rendering"
-          description="Fixes occasional missing or garbled glyphs by rasterizing text on the CPU. May slightly increase CPU use during canvas zoom. Takes effect after restarting Cate."
+          label={t('appearance.disableGpuRasterization')}
+          description={t('appearance.disableGpuRasterization.desc')}
           hint={
             store.disableGpuRasterization ? (
-              <span className="text-[11px] text-amber-400">Restart Cate for this to take effect.</span>
+              <span className="text-[11px] text-amber-400">Restart Orquestra for this to take effect.</span>
             ) : undefined
           }
         >

@@ -26,7 +26,7 @@ let dragTempFile: string | null = null
  */
 export function writeDragTempFile(snapshot: PanelTransferSnapshot): string {
   const tempDir = app.getPath('temp')
-  dragTempFile = path.join(tempDir, `cate-drag-${Date.now()}.json`)
+  dragTempFile = path.join(tempDir, `orquestra-drag-${Date.now()}.json`)
   try {
     fs.writeFileSync(dragTempFile, JSON.stringify(snapshot), 'utf-8')
   } catch (error) {

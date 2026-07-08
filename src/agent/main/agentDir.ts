@@ -3,9 +3,9 @@
 // runtime so it works whether the workspace is local or on a remote host.
 //
 // Pi resolves its config dir (extensions, sessions, settings.json, auth.json)
-// from PI_CODING_AGENT_DIR; we point it per-workspace at <cwd>/.cate/pi-agent on
+// from PI_CODING_AGENT_DIR; we point it per-workspace at <cwd>/.orquestra/pi-agent on
 // whichever host pi runs. Provider logins aren't project-specific, so a single
-// shared auth.json lives in cate's userData (always local) and is mirrored into
+// shared auth.json lives in orquestra's userData (always local) and is mirrored into
 // each workspace's dir via runtime.file (local fs for the local runtime, or
 // the daemon for a remote one) with a copy-on-spawn + watch-and-copy-back scheme.
 // =============================================================================
@@ -21,28 +21,28 @@ import { LOCAL_RUNTIME_ID } from '../../main/runtime/locator'
 import { sharedAuthWriteQueue } from './writeQueue'
 import type { Runtime } from '../../main/runtime/types'
 
-const CATE_DIR = '.cate'
+const ORQUESTRA_DIR = '.orquestra'
 export const PI_AGENT_DIR = 'pi-agent'
 
 /** Per-workspace pi config dir on the LOCAL machine (native path). Used by the
  *  local skill-file IPC; runtime-aware code uses hostAgentDir(). */
 export function agentDirFor(cwd: string): string {
-  return path.join(cwd, CATE_DIR, PI_AGENT_DIR)
+  return path.join(cwd, ORQUESTRA_DIR, PI_AGENT_DIR)
 }
 
 /** Per-workspace pi config dir on the host that runs pi. Remote hosts are POSIX,
  *  the local machine uses native separators. */
 export function hostAgentDir(runtimeId: string, hostCwd: string): string {
   const join = runtimeId === LOCAL_RUNTIME_ID ? path.join : path.posix.join
-  return join(hostCwd, CATE_DIR, PI_AGENT_DIR)
+  return join(hostCwd, ORQUESTRA_DIR, PI_AGENT_DIR)
 }
 
 export function hostJoin(runtimeId: string, ...segs: string[]): string {
   return (runtimeId === LOCAL_RUNTIME_ID ? path.join : path.posix.join)(...segs)
 }
 
-/** Pi maps a host cwd (e.g. `/Users/anton/Dev/cate`) to a sessions subdir named
- *  `--Users-anton-Dev-cate--`. The encoding is POSIX-shaped (slashes → dashes),
+/** Pi maps a host cwd (e.g. `/Users/anton/Dev/orquestra`) to a sessions subdir named
+ *  `--Users-anton-Dev-orquestra--`. The encoding is POSIX-shaped (slashes → dashes),
  *  so it operates on the HOST path, never the locator. */
 export function encodeHostCwdForSessions(hostCwd: string): string {
   const trimmed = hostCwd.replace(/\/+$/, '')
@@ -86,13 +86,13 @@ async function pushAuthToHost(runtime: Runtime, hostCwd: string): Promise<void> 
   await runtime.file.writeFile(hostJoin(runtime.id, dir, 'auth.json'), data)
 }
 
-/** Create the host's pi-agent dir, seed auth.json, and keep .cate out of VCS. */
+/** Create the host's pi-agent dir, seed auth.json, and keep .orquestra out of VCS. */
 export async function prepareAgentDir(runtime: Runtime, hostCwd: string): Promise<void> {
   await ensureSharedAuth()
   await runtime.file.mkdir(hostAgentDir(runtime.id, hostCwd))
   await pushAuthToHost(runtime, hostCwd)
-  // .cate/.gitignore ignores everything but workspace.json (best-effort).
-  const gi = hostJoin(runtime.id, hostCwd, CATE_DIR, '.gitignore')
+  // .orquestra/.gitignore ignores everything but workspace.json (best-effort).
+  const gi = hostJoin(runtime.id, hostCwd, ORQUESTRA_DIR, '.gitignore')
   try {
     await runtime.file.stat(gi)
   } catch {
@@ -100,7 +100,7 @@ export async function prepareAgentDir(runtime: Runtime, hostCwd: string): Promis
   }
 }
 
-/** Push the shared auth into the host copy (cate UI changed credentials). */
+/** Push the shared auth into the host copy (orquestra UI changed credentials). */
 export async function pushSharedToWorkspace(runtime: Runtime, hostCwd: string): Promise<void> {
   await pushAuthToHost(runtime, hostCwd)
 }

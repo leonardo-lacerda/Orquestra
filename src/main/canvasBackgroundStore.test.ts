@@ -7,8 +7,8 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-bg-test-'))
-const src = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-bg-src-'))
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-bg-test-'))
+const src = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-bg-src-'))
 
 vi.mock('electron', () => {
   const electron = { app: { getPath: () => userData } }

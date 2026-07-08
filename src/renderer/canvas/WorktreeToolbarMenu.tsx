@@ -4,7 +4,7 @@
 //
 // Per worktree you can: focus its spatial lens (click the row), see its git
 // status + PR state + what's already open on the canvas, open a terminal or
-// Cate agent bound to it (click = here, drag = drop anywhere on the canvas),
+// Orquestra agent bound to it (click = here, drag = drop anywhere on the canvas),
 // recolor / rename inline, reach the full publish / PR / update / merge /
 // discard menu via ⋯, start a new worktree, and clean up orphans. Plus a
 // git-init path when the folder isn't a repo yet.
@@ -27,7 +27,7 @@ import {
   GitPullRequest,
   CircleNotch,
 } from '@phosphor-icons/react'
-import { CateLogo } from '../ui/CateLogo'
+import { OrquestraLogo } from '../ui/OrquestraLogo'
 import { Tooltip } from '../ui/Tooltip'
 import { CreateWorktreeForm } from '../sidebar/CreateWorktreeForm'
 import { useWorktrees, type JoinedWorktree } from '../stores/useWorktrees'
@@ -245,7 +245,7 @@ const WorktreeMenuPopover: React.FC<PopoverProps> = ({
           </button>
         </div>
       ) : creating ? (
-        <div className="cate-fade-in">
+        <div className="orquestra-fade-in">
           <CreateWorktreeForm
             defaultBaseBranch={primaryBranch}
             rootPath={rootPath}
@@ -371,7 +371,7 @@ const SpawnButton: React.FC<{
       draggable
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'copy'
-        e.dataTransfer.setData('application/cate-spawn', JSON.stringify({ panelType, cwd, worktreeId }))
+        e.dataTransfer.setData('application/orquestra-spawn', JSON.stringify({ panelType, cwd, worktreeId }))
       }}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       className="w-5 h-5 flex items-center justify-center rounded-md text-muted hover:text-primary hover:bg-surface-5 cursor-grab active:cursor-grabbing transition-colors"
@@ -500,8 +500,8 @@ const WorktreeRow: React.FC<{
               onClick={() => onLaunch('terminal')}
             />
             <SpawnButton
-              icon={<CateLogo size={12} />}
-              title="Cate agent"
+              icon={<OrquestraLogo size={12} />}
+              title="Orquestra agent"
               panelType="agent"
               cwd={wt.path}
               worktreeId={wt.id}
@@ -536,7 +536,7 @@ const WorktreeRow: React.FC<{
               )}
               {openAgents > 0 && (
                 <span className="flex items-center gap-0.5">
-                  <CateLogo size={10} />
+                  <OrquestraLogo size={10} />
                   {openAgents}
                 </span>
               )}

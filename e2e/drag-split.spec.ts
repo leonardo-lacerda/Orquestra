@@ -20,7 +20,7 @@ test.beforeEach(async () => {
   // (it used to overlay it), stealing ~260px of canvas width. With it open, a
   // node seeded at canvas x=1000 renders off the right window edge, so edge-drops
   // onto it miss. Collapsing restores the wide canvas these geometry tests assume.
-  await page.evaluate(() => window.__cateE2E!.setActiveLeftSidebarView(null))
+  await page.evaluate(() => window.__orquestraE2E!.setActiveLeftSidebarView(null))
   await resetViewport(page)
 })
 test.afterEach(async () => closeApp(app))
@@ -30,7 +30,7 @@ async function seedTwoTerminals(p: Page): Promise<{ a: string; b: string }> {
   // viewport — A on the left, B on the right with clear separation.
   const a = await seedTerminal(p, { x: 300, y: 100 })
   const b = await seedTerminal(p, { x: 1000, y: 100 })
-  await p.evaluate(() => window.__cateE2E!.resetViewport())
+  await p.evaluate(() => window.__orquestraE2E!.resetViewport())
   await p.waitForTimeout(200)
   return { a, b }
 }

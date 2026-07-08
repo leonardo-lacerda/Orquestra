@@ -41,7 +41,7 @@ import { ANALYTICS_FEEDBACK_PROMPT, ANALYTICS_FEEDBACK_SUBMIT, ANALYTICS_FEEDBAC
 // ---------------------------------------------------------------------------
 
 const ENDPOINT = 'https://analytics.cero-ai.com/api/app-events'
-const APP_ID = 'cate'
+const APP_ID = 'orquestra'
 const STATE_FILENAME = 'analytics-state.json'
 const PENDING_FILENAME = 'pending-events.jsonl'
 const MAX_PENDING_BYTES = 256 * 1024 // cap the offline buffer so it can't grow unbounded
@@ -66,7 +66,7 @@ function readState(): AnalyticsState {
   return readJsonFile<AnalyticsState>(STATE_FILENAME, {})
 }
 
-/** Whether Cate has been launched before on this machine (sync). Used to scope
+/** Whether Orquestra has been launched before on this machine (sync). Used to scope
  *  the onboarding tour to genuine first installs — anyone who has run a prior
  *  version (so has a recorded lastSeenVersion) is treated as already onboarded. */
 export function hasRunBefore(): boolean {
@@ -137,7 +137,7 @@ function postEvents(body: string): Promise<boolean> {
     try {
       const request = net.request({ method: 'POST', url: ENDPOINT })
       request.setHeader('Content-Type', 'application/json')
-      request.setHeader('User-Agent', `Cate/${app.getVersion()}`)
+      request.setHeader('User-Agent', `Orquestra/${app.getVersion()}`)
       let settled = false
       const done = (ok: boolean) => { if (!settled) { settled = true; resolve(ok) } }
       request.on('response', (res) => {
@@ -322,8 +322,16 @@ export function initAnalytics(): void {
   })
 
   ipcMain.on(OPEN_EXTERNAL_URL, (_e, url: string) => {
-    if (typeof url === 'string' && (url.startsWith('https://') || url.startsWith('http://'))) {
+    if (typeof url !== 'string') return
+    try {
+      const parsed = new URL(url)
+      // Only allow http/https — reject javascript:, file:, data:, etc.
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return
+      // Reject URLs with embedded credentials (user:pass@host)
+      if (parsed.username || parsed.password) return
       shell.openExternal(url)
+    } catch {
+      // Invalid URL — silently ignore
     }
   })
 
@@ -438,7 +446,7 @@ export async function checkAndReportUpdate(mainWin: BrowserWindow): Promise<void
   // E2E profiles start from a fresh version state every run, which looks like a
   // first install / version bump and would pop the post-update feedback modal.
   // That modal intercepts pointer events and flakes tests — never show it here.
-  if (process.env.CATE_E2E === '1') return
+  if (process.env.ORQUESTRA_E2E === '1') return
 
   if (process.env.DEV_FORCE_DIALOG) {
     promptFeedback(mainWin, app.getVersion(), '0.0.0')

@@ -39,7 +39,7 @@ import {
   broadcastToAllExcept,
   windowFromEvent,
 } from '../windowRegistry'
-import type { CateWindowParams, DockWindowInitPayload, PanelTransferSnapshot } from '../../shared/types'
+import type { OrquestraWindowParams, DockWindowInitPayload, PanelTransferSnapshot } from '../../shared/types'
 import {
   DRAG_START,
   DRAG_DETACH,
@@ -54,7 +54,7 @@ import {
 } from '../../shared/ipc-channels'
 
 interface DragHandlerDeps {
-  createWindow: (params?: CateWindowParams) => BrowserWindow
+  createWindow: (params?: OrquestraWindowParams) => BrowserWindow
 }
 
 export function registerDragHandlers({ createWindow }: DragHandlerDeps): void {
@@ -84,7 +84,7 @@ export function registerDragHandlers({ createWindow }: DragHandlerDeps): void {
     const display = screen.getDisplayNearestPoint(cursor)
 
     // Decide whether to detach and where to place the new window. `decideDetach`
-    // refuses when any Cate window is in macOS native fullscreen (the new window
+    // refuses when any Orquestra window is in macOS native fullscreen (the new window
     // would land in a separate Space and appear black). Caller treats a null
     // return as "detach rejected — put the panel back where it came from".
     const decision = decideDetach({
@@ -208,7 +208,7 @@ export function registerDragHandlers({ createWindow }: DragHandlerDeps): void {
     const win = windowFromEvent(event)
     if (!win) return
 
-    // Refuse any cross-window drag while any Cate window is in macOS
+    // Refuse any cross-window drag while any Orquestra window is in macOS
     // native fullscreen — the drag ghost would land in a different Space
     // (black window). Lock the drag to the source window entirely.
     if (anyWindowFullscreen()) return
@@ -238,17 +238,17 @@ export function registerDragHandlers({ createWindow }: DragHandlerDeps): void {
       crossWindowDragState = updateCrossWindowCursor(crossWindowDragState, pos)
       moveDragGhostWindow(pos.x, pos.y)
 
-      // Hide the native ghost when the cursor is over any Cate window — the
+      // Hide the native ghost when the cursor is over any Orquestra window — the
       // in-renderer DragOverlay handles the visual there. Show it again when
-      // the cursor leaves all Cate windows (e.g. on the desktop between
+      // the cursor leaves all Orquestra windows (e.g. on the desktop between
       // windows) so the user still has a drag affordance.
       const ghost = getDragGhostWindow()
       if (ghost) {
-        const overCateWindow = isCursorInsideAnyAppWindow(
+        const overOrquestraWindow = isCursorInsideAnyAppWindow(
           pos,
           BrowserWindow.getAllWindows() as unknown as GhostHostWindow[],
         )
-        if (overCateWindow) {
+        if (overOrquestraWindow) {
           if (ghost.isVisible()) ghost.hide()
         } else {
           if (!ghost.isVisible()) ghost.showInactive()

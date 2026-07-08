@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 
-/** True when any existing Cate BrowserWindow is in macOS native fullscreen.
+/** True when any existing Orquestra BrowserWindow is in macOS native fullscreen.
  *  Used to reject window-creation IPCs so the app can never "escape" into a
  *  separate Space while the user is in fullscreen mode. */
 export function anyWindowFullscreen(): boolean {

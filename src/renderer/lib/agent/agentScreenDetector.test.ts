@@ -59,7 +59,7 @@ describe('outputShowsBodySpinner', () => {
   it('ignores braille inside an OSC title (claude/codex stay title-driven)', () => {
     // claude/codex animate the spinner in the OSC 0 title, which is stripped.
     expect(outputShowsBodySpinner('\x1b]0;⠂ Respond with pong\x07')).toBe(false)
-    expect(outputShowsBodySpinner('\x1b]0;⠙ cate\x07')).toBe(false)
+    expect(outputShowsBodySpinner('\x1b]0;⠙ orquestra\x07')).toBe(false)
   })
 
   it('ignores plain output', () => {
@@ -81,17 +81,17 @@ describe('titleIndicatesRunning (real captured agent titles)', () => {
   })
 
   it('codex bare project name (idle) → not running', () => {
-    expect(titleIndicatesRunning('cate')).toBe(false)
+    expect(titleIndicatesRunning('orquestra')).toBe(false)
   })
 
   it('codex braille spinner frames → running', () => {
     for (const frame of ['⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏', '⠋']) {
-      expect(titleIndicatesRunning(`${frame} cate`)).toBe(true)
+      expect(titleIndicatesRunning(`${frame} orquestra`)).toBe(true)
     }
   })
 
   it('blank-braille frame (U+2800) still counts as a spinner', () => {
-    expect(titleIndicatesRunning('⠀ cate')).toBe(true)
+    expect(titleIndicatesRunning('⠀ orquestra')).toBe(true)
   })
 
   it('empty / plain titles → not running', () => {

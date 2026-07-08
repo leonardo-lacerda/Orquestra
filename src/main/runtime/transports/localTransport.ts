@@ -22,6 +22,22 @@ import { hostRuntimeTarget, localTarballIfPresent, shippedRuntimeTarball, tarbal
 
 const execFileP = promisify(execFile)
 
+/** Cache tar flavor so we only probe once. */
+let _tarSupportsForceLocal: boolean | undefined
+
+/** Check whether the `tar` on PATH supports --force-local
+ *  (GNU tar does; BSD tar / Windows built-in tar does not). */
+async function tarSupportsForceLocal(): Promise<boolean> {
+  if (_tarSupportsForceLocal !== undefined) return _tarSupportsForceLocal
+  try {
+    const { stdout } = await execFileP('tar', ['--help'])
+    _tarSupportsForceLocal = stdout.includes('--force-local')
+  } catch {
+    _tarSupportsForceLocal = false
+  }
+  return _tarSupportsForceLocal
+}
+
 export interface LocalSubprocessOptions {
   root: string
   id: string
@@ -48,9 +64,9 @@ function tarballNode(installDir: string): string {
 }
 
 /** Where the local host's runtime tarball is extracted, keyed by version +
- *  target (mirrors the remote `~/.cate/runtime/<ver>/<target>` layout). */
+ *  target (mirrors the remote `~/.orquestra/runtime/<ver>/<target>` layout). */
 export function localInstallDir(target: RuntimeTarget): string {
-  return path.join(os.homedir(), '.cate', 'runtime', RUNTIME_VERSION, target)
+  return path.join(os.homedir(), '.orquestra', 'runtime', RUNTIME_VERSION, target)
 }
 
 export class LocalSubprocessTransport implements RuntimeTransport {
@@ -112,7 +128,12 @@ export class LocalSubprocessTransport implements RuntimeTransport {
     if (!force && (await this.isInstalled(version))) return
     await rm(installDir, { recursive: true, force: true })
     await mkdir(installDir, { recursive: true })
-    await execFileP('tar', ['-xzf', tarballPath, '-C', installDir])
+    // Normalise paths so colons don't trip up GNU tar, and append
+    // --force-local for GNU tar on Windows (it interprets C:\ as a remote host).
+    const normalize = (p: string) => p.replace(/\\/g, '/')
+    const args = ['-xzf', normalize(tarballPath), '-C', normalize(installDir)]
+    if (await tarSupportsForceLocal()) args.push('--force-local')
+    await execFileP('tar', args)
     await writeFile(path.join(installDir, '.ok'), await this.marker(version))
   }
 

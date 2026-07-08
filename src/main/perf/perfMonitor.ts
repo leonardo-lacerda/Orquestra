@@ -1,6 +1,6 @@
 // =============================================================================
 // perfMonitor — main-process resource profiler, gated entirely behind
-// CATE_PERF=1 so it costs nothing on normal launches (mirrors CATE_E2E).
+// ORQUESTRA_PERF=1 so it costs nothing on normal launches (mirrors ORQUESTRA_E2E).
 //
 // It does two things on a fixed interval:
 //   1. Samples app.getAppMetrics() for per-process CPU% + working-set memory.
@@ -13,14 +13,14 @@
 // accounting at call sites is additionally gated on PERF_ENABLED so disabled
 // builds never even compute payload sizes.
 //
-// Enable with:  CATE_PERF=1 npm run dev
+// Enable with:  ORQUESTRA_PERF=1 npm run dev
 // =============================================================================
 
 import { app, BrowserWindow } from 'electron'
 import log from '../logger'
 import type { PerfProcSample, PerfSnapshot } from '../../shared/types'
 
-export const PERF_ENABLED = process.env.CATE_PERF === '1'
+export const PERF_ENABLED = process.env.ORQUESTRA_PERF === '1'
 
 const SAMPLE_INTERVAL_MS = 2000
 
@@ -111,7 +111,7 @@ function tick(): void {
 
 export function startPerfMonitor(): void {
   if (!PERF_ENABLED || timer) return
-  log.info('[perf] CATE_PERF=1 — resource profiler active (sampling every %dms)', SAMPLE_INTERVAL_MS)
+  log.info('[perf] ORQUESTRA_PERF=1 — resource profiler active (sampling every %dms)', SAMPLE_INTERVAL_MS)
   timer = setInterval(tick, SAMPLE_INTERVAL_MS)
   // Don't keep the event loop alive solely for profiling.
   if (typeof timer.unref === 'function') timer.unref()

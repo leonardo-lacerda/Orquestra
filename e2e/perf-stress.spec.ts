@@ -1,9 +1,9 @@
 // =============================================================================
 // Performance stress test — drives the app under load and measures the cost.
 //
-// Unlike the other specs, this launches with CATE_PERF=1 so the resource
+// Unlike the other specs, this launches with ORQUESTRA_PERF=1 so the resource
 // profiler is active (main getAppMetrics sampler + spawn/IPC/terminal counters,
-// renderer FPS / long-task / render counters, exposed via window.__catePerf).
+// renderer FPS / long-task / render counters, exposed via window.__orquestraPerf).
 //
 // Each scenario brackets a load action with measure() and reports:
 //   - renderer FPS and long tasks (>50ms main-thread blocks = visible jank)
@@ -28,7 +28,7 @@ let page: Page
 test.beforeAll(async () => {
   ;({ electronApp: app, mainWindow: page } = await launchApp({ perf: true }))
   // Confirm the profiler is actually live before any scenario runs.
-  await page.waitForFunction(() => typeof window.__catePerf === 'object', { timeout: 15_000 })
+  await page.waitForFunction(() => typeof window.__orquestraPerf === 'object', { timeout: 15_000 })
 })
 
 test.afterAll(async () => closeApp(app))
@@ -56,18 +56,18 @@ interface Measurement {
 async function measure(label: string, action: () => Promise<void>, settleMs = 400): Promise<Measurement> {
   const before = await page.evaluate(() => ({
     t: performance.now(),
-    renders: window.__catePerf!.renderCounts(),
+    renders: window.__orquestraPerf!.renderCounts(),
   }))
-  await page.evaluate(() => window.__catePerf!.resetWindow())
+  await page.evaluate(() => window.__orquestraPerf!.resetWindow())
 
   await action()
   await page.waitForTimeout(settleMs)
 
   const after = await page.evaluate(async () => ({
     t: performance.now(),
-    renders: window.__catePerf!.renderCounts(),
-    fps: window.__catePerf!.fps(),
-    longTasks: window.__catePerf!.longTasks(),
+    renders: window.__orquestraPerf!.renderCounts(),
+    fps: window.__orquestraPerf!.fps(),
+    longTasks: window.__orquestraPerf!.longTasks(),
     main: await window.electronAPI!.perfGetSnapshot(),
   }))
 
@@ -135,7 +135,7 @@ async function seedTerminals(count: number): Promise<string[]> {
     const col = i % 3
     const row = Math.floor(i / 3)
     const id = await page.evaluate(
-      (p) => window.__cateE2E!.createTerminal(p),
+      (p) => window.__orquestraE2E!.createTerminal(p),
       { x: 80 + col * 260, y: 80 + row * 220 },
     )
     ids.push(id)
@@ -179,10 +179,10 @@ test('canvas pan stress (wheel-pan over a populated canvas)', async () => {
 
 test('canvas zoom stress (smooth-zoom re-render cascade)', async () => {
   // Ensure a populated canvas so the per-node re-render cost is visible.
-  const nodeCount = await page.evaluate(() => window.__cateE2E!.nodes().length)
+  const nodeCount = await page.evaluate(() => window.__orquestraE2E!.nodes().length)
   if (nodeCount < 6) await seedTerminals(6 - nodeCount)
 
-  await page.evaluate(() => { window.__cateE2E!.setZoom(1); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(1); window.__orquestraE2E!.resetViewport() })
 
   // Drive zoomLevel changes at rAF cadence from inside the page — deterministic
   // (no cursor/empty-space dependency) and faithful to the real smooth-zoom
@@ -192,7 +192,7 @@ test('canvas zoom stress (smooth-zoom re-render cascade)', async () => {
   // though node DOM positions are driven imperatively by the world transform.
   const m = await measure('canvas zoom (90 frames, populated)', async () => {
     await page.evaluate(async () => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 90; i++) {
         h.setZoom(1 + 0.4 * Math.sin(i / 7))
@@ -205,7 +205,7 @@ test('canvas zoom stress (smooth-zoom re-render cascade)', async () => {
   expect(m.longTasks.maxMs).toBeLessThan(2000)
 
   // Restore a neutral viewport.
-  await page.evaluate(() => { window.__cateE2E!.setZoom(1); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(1); window.__orquestraE2E!.resetViewport() })
 })
 
 test('terminal flood (real shell blasting output)', async () => {
@@ -213,7 +213,7 @@ test('terminal flood (real shell blasting output)', async () => {
   // Wait for the PTY to spawn, then give the shell a beat to print its prompt
   // so the flood command isn't typed before the shell is reading input.
   await page.waitForFunction(
-    (id) => !!window.__cateE2E!.terminalPtyId(id),
+    (id) => !!window.__orquestraE2E!.terminalPtyId(id),
     nodeId,
     { timeout: 8000 },
   )
@@ -222,15 +222,15 @@ test('terminal flood (real shell blasting output)', async () => {
   // Renderer-side deltas over the flood window.
   const before = await page.evaluate(() => ({
     t: performance.now(),
-    renders: window.__catePerf!.renderCounts(),
+    renders: window.__orquestraPerf!.renderCounts(),
   }))
-  await page.evaluate(() => window.__catePerf!.resetWindow())
+  await page.evaluate(() => window.__orquestraPerf!.resetWindow())
 
   // ~4M lines × ~21B sustains a multi-second flood (spans the 2s main sampler
   // window) yet still terminates. Exercises PTY -> disk-log -> IPC -> xterm
   // (audit #2: sync statSync+appendFileSync per 4KB on the data callback).
   await page.evaluate(
-    (id) => window.__cateE2E!.writeTerminal(id, 'yes 0123456789ABCDEFGHIJ | head -n 4000000\n'),
+    (id) => window.__orquestraE2E!.writeTerminal(id, 'yes 0123456789ABCDEFGHIJ | head -n 4000000\n'),
     nodeId,
   )
 
@@ -254,13 +254,13 @@ test('terminal flood (real shell blasting output)', async () => {
 
   const after = await page.evaluate(() => ({
     t: performance.now(),
-    renders: window.__catePerf!.renderCounts(),
-    fps: window.__catePerf!.fps(),
-    longTasks: window.__catePerf!.longTasks(),
+    renders: window.__orquestraPerf!.renderCounts(),
+    fps: window.__orquestraPerf!.fps(),
+    longTasks: window.__orquestraPerf!.longTasks(),
   }))
 
   // Best-effort: stop anything still running.
-  await page.evaluate((id) => window.__cateE2E!.writeTerminal(id, '\x03'), nodeId)
+  await page.evaluate((id) => window.__orquestraE2E!.writeTerminal(id, '\x03'), nodeId)
 
   const secs = Math.max(0.001, (after.t - before.t) / 1000)
   const perSec = (a: Record<string, number>, b: Record<string, number>): Record<string, number> => {
@@ -304,13 +304,13 @@ async function mountedNodeCount(): Promise<number> {
 
 /** Seed terminals (spread on a grid) until the canvas holds at least `total`. */
 async function seedToTotal(total: number): Promise<void> {
-  let have = await page.evaluate(() => window.__cateE2E!.nodes().length)
+  let have = await page.evaluate(() => window.__orquestraE2E!.nodes().length)
   while (have < total) {
     const i = have
     const col = i % 4
     const row = Math.floor(i / 4)
     const id = await page.evaluate(
-      (p) => window.__cateE2E!.createTerminal(p),
+      (p) => window.__orquestraE2E!.createTerminal(p),
       { x: 60 + col * 300, y: 60 + row * 240 },
     )
     await page.waitForSelector(`[data-node-id="${id}"]`, { timeout: 5000 })
@@ -331,9 +331,9 @@ interface PeakSample {
 /** Run an action while polling the snapshot for peak per-process CPU. */
 async function measurePeak(durationMs: number, action?: () => Promise<void>): Promise<PeakSample> {
   const before = await page.evaluate(() => ({
-    renders: window.__catePerf!.renderCounts(),
+    renders: window.__orquestraPerf!.renderCounts(),
   }))
-  await page.evaluate(() => window.__catePerf!.resetWindow())
+  await page.evaluate(() => window.__orquestraPerf!.resetWindow())
 
   const perProcCpu: Record<string, number> = {}
   let peakTerminalKbPerSec = 0
@@ -353,9 +353,9 @@ async function measurePeak(durationMs: number, action?: () => Promise<void>): Pr
   await actionP
 
   const after = await page.evaluate(() => ({
-    renders: window.__catePerf!.renderCounts(),
-    fps: window.__catePerf!.fps(),
-    longTasks: window.__catePerf!.longTasks(),
+    renders: window.__orquestraPerf!.renderCounts(),
+    fps: window.__orquestraPerf!.fps(),
+    longTasks: window.__orquestraPerf!.longTasks(),
   }))
   const secs = durationMs / 1000
   const perSec = (a: Record<string, number>, b: Record<string, number>): Record<string, number> => {
@@ -391,7 +391,7 @@ function reportPeak(label: string, mounted: number, s: PeakSample): void {
 
 test('many terminals (9) idle, all visible', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(0.5); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.5); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(600)
   const mounted = await mountedNodeCount()
   const s = await measurePeak(3000)
@@ -402,32 +402,32 @@ test('many terminals (9) idle, all visible', async () => {
 
 test('many terminals (9) with concurrent output in 4', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(0.5); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.5); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(400)
   const mounted = await mountedNodeCount()
 
-  const ids = await page.evaluate(() => window.__cateE2E!.nodes().map((n) => n.id))
+  const ids = await page.evaluate(() => window.__orquestraE2E!.nodes().map((n) => n.id))
   // Wait for PTYs, then start a MODERATE sustained output in 4 terminals (a
   // realistic "builds running in several tabs", not a max flood).
   for (const id of ids.slice(0, 4)) {
-    await page.waitForFunction((x) => !!window.__cateE2E!.terminalPtyId(x), id, { timeout: 8000 }).catch(() => {})
+    await page.waitForFunction((x) => !!window.__orquestraE2E!.terminalPtyId(x), id, { timeout: 8000 }).catch(() => {})
   }
   const s = await measurePeak(4000, async () => {
     for (const id of ids.slice(0, 4)) {
       await page.evaluate(
-        (x) => window.__cateE2E!.writeTerminal(x, 'yes 0123456789ABCDEFGHIJKLMNOP | head -n 1500000\n'),
+        (x) => window.__orquestraE2E!.writeTerminal(x, 'yes 0123456789ABCDEFGHIJKLMNOP | head -n 1500000\n'),
         id,
       )
     }
   })
   // Best-effort stop.
-  for (const id of ids.slice(0, 4)) await page.evaluate((x) => window.__cateE2E!.writeTerminal(x, '\x03'), id)
+  for (const id of ids.slice(0, 4)) await page.evaluate((x) => window.__orquestraE2E!.writeTerminal(x, '\x03'), id)
   reportPeak('9 terminals · output in 4', mounted, s)
 })
 
 test('big canvas pan with 9 nodes visible', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(0.55); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.55); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(400)
   const mounted = await mountedNodeCount()
   const pt = await emptyCanvasPoint()
@@ -453,7 +453,7 @@ test('big canvas pan with 9 nodes visible', async () => {
 
 test('idle spawn budget — 9 terminals, app focused', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(0.5); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.5); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(800)
   const mounted = await mountedNodeCount()
   // Sit idle and watch what the monitor spawns. With the 1s activity scan +
@@ -470,7 +470,7 @@ test('idle spawn budget — 9 terminals, app focused', async () => {
 
 test('backgrounded battery — spawns collapse when the app is unfocused', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(0.5); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.5); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(800)
   const mounted = await mountedNodeCount()
 
@@ -517,7 +517,7 @@ test('backgrounded battery — spawns collapse when the app is unfocused', async
 // =============================================================================
 
 test('editor typing stays smooth (no long tasks)', async () => {
-  const nodeId = await page.evaluate(() => window.__cateE2E!.createEditor({ x: 120, y: 120 }))
+  const nodeId = await page.evaluate(() => window.__orquestraE2E!.createEditor({ x: 120, y: 120 }))
   await page.waitForSelector(`[data-node-id="${nodeId}"]`, { timeout: 5000 })
   // Monaco mounts asynchronously — wait for its input textarea before typing.
   const textarea = await page.waitForSelector(
@@ -554,7 +554,7 @@ test('editor typing stays smooth (no long tasks)', async () => {
 
 test('cull selector reuses the cached node sort across viewport changes', async () => {
   await seedToTotal(9)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(1); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(1); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(300)
 
   // Drive zoomLevel at rAF cadence from inside the page — deterministic (no
@@ -564,7 +564,7 @@ test('cull selector reuses the cached node sort across viewport changes', async 
   // the WeakMap sort-cache must serve every eval — this is the memoization fix.
   const m = await measure('cull eval under viewport sweep (90 frames)', async () => {
     await page.evaluate(async () => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 90; i++) {
         h.setZoom(1 + 0.4 * Math.sin(i / 7))
@@ -573,7 +573,7 @@ test('cull selector reuses the cached node sort across viewport changes', async 
     })
   })
   report(m)
-  await page.evaluate(() => { window.__cateE2E!.setZoom(1); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.setZoom(1); window.__orquestraE2E!.resetViewport() })
 
   const evals = m.renders['canvasCullEval'] ?? 0
   const sorts = m.renders['canvasCullSort'] ?? 0

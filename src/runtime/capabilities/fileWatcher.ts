@@ -75,7 +75,7 @@ export function pathHasPrefix(filePath: string, prefix: string): boolean {
  * does not descend into a matched directory, so excluded trees cost nothing.
  *
  *   `**\/.*\/**`   prunes the CONTENTS of any hidden directory (.git, .cache,
- *                  .cate, …) at any depth while leaving hidden FILES (.env,
+ *                  .orquestra, …) at any depth while leaving hidden FILES (.env,
  *                  .eslintrc) watched — the exact policy the old JS matcher
  *                  expressed, now native.
  *   `**\/<name>`     + `**\/<name>/**`  prune each user-excluded basename (a file

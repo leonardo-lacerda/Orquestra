@@ -3,10 +3,10 @@
 // =============================================================================
 
 import { BrowserWindow } from 'electron'
-import type { CanvasLayoutSnapshot, CateWindowType, DockStateSnapshot, DockWindowSyncState, PanelState } from '../shared/types'
+import type { CanvasLayoutSnapshot, OrquestraWindowType, DockStateSnapshot, DockWindowSyncState, PanelState } from '../shared/types'
 import { PERF_ENABLED, countIpc } from './perf/perfMonitor'
 
-/** Cheap approximate byte size of IPC args — only computed under CATE_PERF=1. */
+/** Cheap approximate byte size of IPC args — only computed under ORQUESTRA_PERF=1. */
 function ipcPayloadBytes(args: unknown[]): number {
   let n = 0
   for (const a of args) {
@@ -21,7 +21,7 @@ function ipcPayloadBytes(args: unknown[]): number {
 const windows = new Map<number, BrowserWindow>()
 
 /** Window type for each tracked window. */
-const windowTypes = new Map<number, CateWindowType>()
+const windowTypes = new Map<number, OrquestraWindowType>()
 
 /** Dock window state — synced from renderer for session persistence. */
 const dockWindowState = new Map<number, DockWindowSyncState>()
@@ -48,7 +48,7 @@ export function onWindowClosed(handler: (windowId: number) => void): void {
 /**
  * Register a BrowserWindow. Automatically unregisters on close.
  */
-export function registerWindow(win: BrowserWindow, type: CateWindowType = 'main', workspaceId?: string): void {
+export function registerWindow(win: BrowserWindow, type: OrquestraWindowType = 'main', workspaceId?: string): void {
   windows.set(win.id, win)
   windowTypes.set(win.id, type)
   if (workspaceId) windowWorkspaceId.set(win.id, workspaceId)
@@ -116,7 +116,7 @@ export function closeWindowsForWorkspace(workspaceId: string): void {
 /**
  * Get the window type for a given window ID.
  */
-export function getWindowType(id: number): CateWindowType | undefined {
+export function getWindowType(id: number): OrquestraWindowType | undefined {
   return windowTypes.get(id)
 }
 

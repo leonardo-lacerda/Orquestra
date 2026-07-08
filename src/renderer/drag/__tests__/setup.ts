@@ -5,6 +5,8 @@
 // about specific calls should spy on the relevant method via vi.spyOn(window.electronAPI, ...).
 // =============================================================================
 
+;(globalThis as any).self = globalThis
+
 import { vi } from 'vitest'
 
 // jsdom doesn't implement getBoundingClientRect layout. The harness assigns

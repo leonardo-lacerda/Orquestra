@@ -60,7 +60,7 @@ async function loadFromProjectFiles(): Promise<MultiWorkspaceSession | null> {
     recentProjects = []
   }
 
-  // Remote (cate-runtime://) workspaces never appear in recentProjects — they
+  // Remote (orquestra-runtime://) workspaces never appear in recentProjects — they
   // live in the parallel remoteProjects store with their full restore snapshot
   // and reconnect info (Finding 3). Load them up front so they round-trip too.
   let remoteEntries: RemoteProjectEntry[] = []

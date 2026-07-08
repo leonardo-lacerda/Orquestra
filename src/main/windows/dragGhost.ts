@@ -43,7 +43,7 @@ export function createDragGhostWindow(
   })
 
   // Tag this window so the cursor-poll loop can exclude it when deciding
-  // whether the cursor is over a Cate window.
+  // whether the cursor is over a Orquestra window.
   ;(dragGhostWin as unknown as { __isDragGhost: boolean }).__isDragGhost = true
 
   // Ignore mouse events so the ghost doesn't interfere with drop targets

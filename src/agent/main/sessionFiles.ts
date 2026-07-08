@@ -1,8 +1,8 @@
 // =============================================================================
 // sessionFiles — read-only access to pi's on-disk session store. Pi writes
-// every conversation to (PI_CODING_AGENT_DIR points at <cwd>/.cate/pi-agent):
+// every conversation to (PI_CODING_AGENT_DIR points at <cwd>/.orquestra/pi-agent):
 //
-//   <cwd>/.cate/pi-agent/sessions/--<cwd-with-/-as-dashes>--/<timestamp>_<uuid>.jsonl
+//   <cwd>/.orquestra/pi-agent/sessions/--<cwd-with-/-as-dashes>--/<timestamp>_<uuid>.jsonl
 //
 // Each line is a JSON entry. The first line is the session header; subsequent
 // lines are either `message`, `session_info` (name), `model_change`,
@@ -25,8 +25,8 @@ import type { AgentSessionListEntry } from '../../shared/types'
 // ops by this path segment (POSIX, since the daemon side is POSIX and the
 // segment is the same shape on the local machine for forward-slash paths). For
 // local Windows paths we also accept the native-separator form.
-const SESSIONS_SEGMENT_POSIX = '/.cate/pi-agent/sessions/'
-const SESSIONS_SEGMENT_NATIVE = `\\.cate\\pi-agent\\sessions\\`
+const SESSIONS_SEGMENT_POSIX = '/.orquestra/pi-agent/sessions/'
+const SESSIONS_SEGMENT_NATIVE = `\\.orquestra\\pi-agent\\sessions\\`
 
 interface ParsedHeader {
   id: string

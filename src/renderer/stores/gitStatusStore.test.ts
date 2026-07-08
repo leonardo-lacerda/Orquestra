@@ -29,7 +29,7 @@ function makeApi(overrides: Record<string, unknown> = {}) {
     })),
     gitWorktreeList: vi.fn(async () => [
       { path: '/repo', branch: 'main', isBare: false, isCurrent: true },
-      { path: '/repo/.cate/worktrees/feature', branch: 'feature', isBare: false, isCurrent: false },
+      { path: '/repo/.orquestra/worktrees/feature', branch: 'feature', isBare: false, isCurrent: false },
     ]),
     onGitBranchUpdate: vi.fn(() => () => {}),
     ...overrides,

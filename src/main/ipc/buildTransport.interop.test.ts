@@ -35,7 +35,7 @@ const repoRoot = join(here, '..', '..', '..')
 // Minimal electron the buildTransport graph touches (app paths + the secret
 // store's safeStorage). No real Electron runtime, no keychain.
 const ELECTRON_SHIM = `
-export const app = { isPackaged:false, getAppPath:()=>process.cwd(), getName:()=>'Cate', getPath:()=>process.env.E2E_USERDATA }
+export const app = { isPackaged:false, getAppPath:()=>process.cwd(), getName:()=>'Orquestra', getPath:()=>process.env.E2E_USERDATA }
 export const safeStorage = { isEncryptionAvailable:()=>true, encryptString:(s)=>Buffer.from('enc:'+s), decryptString:(b)=>Buffer.from(b).toString().replace(/^enc:/,'') }
 export const ipcMain = { handle:()=>{} }
 export const dialog = { showOpenDialog: async()=>({ canceled:true, filePaths:[] }) }

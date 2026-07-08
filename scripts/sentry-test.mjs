@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // =============================================================================
 // Send a single test event to the Sentry-protocol endpoint configured via
-// SENTRY_DSN (falls back to the Cate analytics endpoint). Used to verify the
+// SENTRY_DSN (falls back to the Orquestra analytics endpoint). Used to verify the
 // pipe end-to-end without launching the app.
 //
 // Usage: npm run sentry:test
@@ -31,7 +31,7 @@ const event = {
   platform: 'javascript',
   level: 'info',
   message: `Test event from sentry:test @ ${sentAt}`,
-  release: 'cate@test',
+  release: 'orquestra@test',
   environment: 'test',
   tags: { source: 'sentry-test-script' },
   contexts: {
@@ -54,7 +54,7 @@ try {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-sentry-envelope',
-      'User-Agent': 'cate-sentry-test/1.0',
+      'User-Agent': 'orquestra-sentry-test/1.0',
     },
     body: envelope,
   })

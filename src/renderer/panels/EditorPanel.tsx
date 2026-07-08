@@ -142,15 +142,15 @@ monacoGlobal.MonacoEnvironment = {
 }
 
 // -----------------------------------------------------------------------------
-// Monaco theme — a single 'cate-active' theme built from the active unified
+// Monaco theme — a single 'orquestra-active' theme built from the active unified
 // Theme's `editor` block (base + syntax token rules + chrome colors).
 // (Re)defining the same name and calling setTheme() re-themes every open editor.
 // -----------------------------------------------------------------------------
 
-const CATE_MONACO_THEME = 'cate-active'
+const ORQUESTRA_MONACO_THEME = 'orquestra-active'
 
 function applyMonacoTheme(theme: Theme): void {
-  monaco.editor.defineTheme(CATE_MONACO_THEME, {
+  monaco.editor.defineTheme(ORQUESTRA_MONACO_THEME, {
     base: theme.editor.base,
     inherit: true,
     rules: theme.editor.tokens.map((t) => ({
@@ -361,7 +361,7 @@ export default function EditorPanel({
     if (!containerRef.current) return
 
     applyMonacoTheme(getActiveTheme())
-    monaco.editor.setTheme(CATE_MONACO_THEME)
+    monaco.editor.setTheme(ORQUESTRA_MONACO_THEME)
     const fontSize = useSettingsStore.getState().editorFontSize
     const fontFamily = resolveEditorFontFamily(useSettingsStore.getState().editorFontFamily)
 
@@ -370,7 +370,7 @@ export default function EditorPanel({
     // =======================================================================
     if (diffMode && filePath && rootPath) {
       const diffEditor = monaco.editor.createDiffEditor(containerRef.current, {
-        theme: CATE_MONACO_THEME,
+        theme: ORQUESTRA_MONACO_THEME,
         fontFamily,
         fontSize: fontSize || 12,
         automaticLayout: false,
@@ -443,7 +443,7 @@ export default function EditorPanel({
     // REGULAR EDITOR
     // =======================================================================
     const editor = monaco.editor.create(containerRef.current, {
-      theme: CATE_MONACO_THEME,
+      theme: ORQUESTRA_MONACO_THEME,
       fontFamily,
       fontSize: fontSize || 12,
       minimap: { enabled: false },
@@ -485,11 +485,11 @@ export default function EditorPanel({
       // monaco.editor.getModel(uri) in case Monaco itself still owns one
       // (e.g. across HMR boundaries). Models survive panel unmount in the
       // cache so reopening the same file is instant.
-      // A remote/WSL file path is a `cate-runtime://<id>/<path>` locator;
+      // A remote/WSL file path is a `orquestra-runtime://<id>/<path>` locator;
       // monaco.Uri.file() would mangle it, so parse the URI directly. Bare
       // local paths keep using .file(). The LRU cache key is the raw filePath
       // string, which already distinguishes runtimes, so no cache change.
-      const fileUri = filePath.startsWith('cate-runtime://')
+      const fileUri = filePath.startsWith('orquestra-runtime://')
         ? monaco.Uri.parse(filePath)
         : monaco.Uri.file(filePath)
       let cached = getCachedModel(filePath) as monaco.editor.ITextModel | undefined
@@ -696,7 +696,7 @@ export default function EditorPanel({
     const original = monaco.editor.createModel(conflict.diskContent ?? '', language)
     const modified = monaco.editor.createModel(bufferValue, language)
     const diff = monaco.editor.createDiffEditor(diffOverlayRef.current, {
-      theme: CATE_MONACO_THEME,
+      theme: ORQUESTRA_MONACO_THEME,
       fontFamily,
       fontSize: fontSize || 12,
       readOnly: true,
@@ -734,7 +734,7 @@ export default function EditorPanel({
   useEffect(() => {
     const unsub = subscribeTheme((t) => {
       applyMonacoTheme(t)
-      monaco.editor.setTheme(CATE_MONACO_THEME)
+      monaco.editor.setTheme(ORQUESTRA_MONACO_THEME)
     })
     return unsub
   }, [])

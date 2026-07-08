@@ -49,7 +49,22 @@ export function registerWindowControlHandlers(): void {
   // window, which owns the real workspace + session. Without this, "reload
   // workspace" run from a detached window operates on that window's stub store
   // and destroys the window instead of reloading the project.
+  //
+  // Only specific safe actions are allowed — arbitrary action forwarding could
+  // let a compromised renderer trigger destructive commands (e.g. "delete
+  // workspace") in the main window.
+  const ALLOWED_MAIN_ACTIONS = new Set([
+    'workspace:reload',
+    'workspace:openOnCurrent',
+    'workspace:switchToNext',
+    'workspace:switchToPrevious',
+    'navigate:back',
+    'navigate:forward',
+    'panel:focusNext',
+    'panel:focusPrevious',
+  ])
   ipcMain.handle(RUN_ACTION_IN_MAIN, async (_e, action: string) => {
+    if (typeof action !== 'string' || !ALLOWED_MAIN_ACTIONS.has(action)) return
     const main = getActiveMainWindow()
     if (main && !main.isDestroyed()) main.webContents.send(MENU_TRIGGER_ACTION, action)
   })

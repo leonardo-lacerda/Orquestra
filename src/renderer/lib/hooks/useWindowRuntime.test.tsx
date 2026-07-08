@@ -136,7 +136,7 @@ describe('useWindowRuntime', () => {
   it('ignores INTERNAL drags (panel/file reorder) so their drop still fires', () => {
     mount()
     const e = new Event('dragover', { cancelable: true, bubbles: true })
-    Object.defineProperty(e, 'dataTransfer', { value: { types: ['application/x-cate-panel'], dropEffect: '' } })
+    Object.defineProperty(e, 'dataTransfer', { value: { types: ['application/x-orquestra-panel'], dropEffect: '' } })
     window.dispatchEvent(e)
     expect(e.defaultPrevented).toBe(false)
   })

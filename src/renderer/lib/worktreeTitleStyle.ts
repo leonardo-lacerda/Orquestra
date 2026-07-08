@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react'
 // with the per-agent icon swap.
 //
 // While the agent is running the title shimmers: the caller adds the
-// `cate-notif-pulse` class and this returns the gradient stops as CSS custom
+// `orquestra-notif-pulse` class and this returns the gradient stops as CSS custom
 // properties (--shimmer-dim/--shimmer-bright). The base sits at the worktree
 // color and a WHITE highlight sweeps across it — keeping the moving band white
 // regardless of hue, since a same-hue sweep (bright color over dim color) is

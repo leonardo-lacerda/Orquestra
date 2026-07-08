@@ -18,8 +18,8 @@ const ids = (panels: P[]): string[] => panels.map((p) => p.id)
 
 const worktrees = [
   { id: 'wt-main', path: '/repo' },
-  { id: 'wt-feat', path: '/repo/.cate/worktrees/feat' },
-  { id: 'wt-fix', path: '/repo/.cate/worktrees/fix' },
+  { id: 'wt-feat', path: '/repo/.orquestra/worktrees/feat' },
+  { id: 'wt-fix', path: '/repo/.orquestra/worktrees/fix' },
 ]
 
 describe('sortWorkspacePanels', () => {
@@ -44,7 +44,7 @@ describe('sortWorkspacePanels', () => {
   it('places the primary worktree (the rootPath checkout) first regardless of registry order', () => {
     // Primary listed LAST in the registry — it must still rank first.
     const reordered = [
-      { id: 'wt-feat', path: '/repo/.cate/worktrees/feat' },
+      { id: 'wt-feat', path: '/repo/.orquestra/worktrees/feat' },
       { id: 'wt-main', path: '/repo' },
     ]
     const panels = [
@@ -67,7 +67,7 @@ describe('sortWorkspacePanels', () => {
 
   it('resolves a path-valued worktree tag to its registry record', () => {
     const panels = [
-      panel('by-path', 'terminal', 'A', '/repo/.cate/worktrees/fix'),
+      panel('by-path', 'terminal', 'A', '/repo/.orquestra/worktrees/fix'),
       panel('by-id', 'terminal', 'B', 'wt-feat'),
     ]
     const sorted = sortWorkspacePanels(panels, worktrees, '/repo')

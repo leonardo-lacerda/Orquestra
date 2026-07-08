@@ -2,8 +2,8 @@
 // customModels — a single user-defined OpenAI-compatible provider, persisted to
 // pi's models.json.
 //
-// Like auth.json, the source of truth is one shared file in cate's userData
-// that we mirror into each workspace's .cate/pi-agent dir, because the embedded
+// Like auth.json, the source of truth is one shared file in orquestra's userData
+// that we mirror into each workspace's .orquestra/pi-agent dir, because the embedded
 // pi resolves its config from PI_CODING_AGENT_DIR (per-workspace), not the
 // user's global ~/.pi/agent. pi reloads models.json whenever its model list is
 // fetched, so a saved endpoint shows up without restarting a session.

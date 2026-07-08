@@ -31,7 +31,7 @@ import {
   ArrowUUpRight,
 } from '@phosphor-icons/react'
 import type { PanelType, MenuActionId } from '../../shared/types'
-import { CateLogo } from './CateLogo'
+import { OrquestraLogo } from './OrquestraLogo'
 import { PaletteDialogShell } from './Modal'
 import { useUIStore } from '../stores/uiStore'
 import { useAppStore } from '../stores/appStore'
@@ -44,6 +44,8 @@ import { useWorkspacePanelTree } from '../lib/workspace/useWorkspacePanelTree'
 import { revealPanel } from '../lib/workspace/panelReveal'
 import { openFileAsPanel } from '../lib/fs/fileRouting'
 import { getRecentFiles } from '../lib/fs/recentFiles'
+import { useTranslation } from '../i18n/useTranslation'
+import type { Translations } from '../i18n/translations'
 
 // -----------------------------------------------------------------------------
 // Command definitions
@@ -74,7 +76,7 @@ const ReloadIcon = () => <ArrowsClockwise size={ICON_SIZE} />
 const DeleteRuntimeIcon = () => <Trash size={ICON_SIZE} />
 const TutorialIcon = () => <GraduationCap size={ICON_SIZE} />
 const SkillsIcon = () => <PuzzlePiece size={ICON_SIZE} />
-const AgentIcon = () => <CateLogo size={ICON_SIZE} />
+const AgentIcon = () => <OrquestraLogo size={ICON_SIZE} />
 const CloseIcon = () => <X size={ICON_SIZE} />
 const MinimapIcon = () => <MapTrifold size={ICON_SIZE} />
 const UndoIcon = () => <ArrowUUpLeft size={ICON_SIZE} />
@@ -120,6 +122,7 @@ export const CommandPalette: React.FC = () => {
   const canvasApi = useCanvasStoreApi()
   // Detached windows have no sidebar, so sidebar toggles are hidden there.
   const isMainWindow = useContext(WindowTypeContext) === 'main'
+  const { t } = useTranslation()
 
   // The reinstall command is only meaningful for a remote (ssh/wsl) workspace.
   const isRemoteWorkspace = useAppStore((s) => {
@@ -154,38 +157,38 @@ export const CommandPalette: React.FC = () => {
   // Build command items
   const allCommands: CommandItem[] = useMemo(
     () => [
-      { id: 'newTerminal', title: 'New Terminal', icon: <TerminalIcon />, action: run('newTerminal') },
-      { id: 'newBrowser', title: 'New Browser', icon: <GlobeIcon />, action: run('newBrowser') },
-      { id: 'newEditor', title: 'New Editor', icon: <FileTextIcon />, action: run('newEditor') },
-      { id: 'newAgent', title: 'New Cate Agent', icon: <AgentIcon />, action: run('newAgent') },
-      { id: 'newCanvas', title: 'New Canvas', icon: <LayoutIcon />, action: run('newCanvas') },
-      { id: 'closePanel', title: 'Close Panel', icon: <CloseIcon />, action: run('closePanel') },
-      { id: 'saveFile', title: 'Save File', icon: <SaveIcon />, action: run('saveFile') },
+      { id: 'newTerminal', title: t('palette.newTerminal'), icon: <TerminalIcon />, action: run('newTerminal') },
+      { id: 'newBrowser', title: t('palette.newBrowser'), icon: <GlobeIcon />, action: run('newBrowser') },
+      { id: 'newEditor', title: t('palette.newEditor'), icon: <FileTextIcon />, action: run('newEditor') },
+      { id: 'newAgent', title: t('palette.newAgent'), icon: <AgentIcon />, action: run('newAgent') },
+      { id: 'newCanvas', title: t('palette.newCanvas'), icon: <LayoutIcon />, action: run('newCanvas') },
+      { id: 'closePanel', title: t('palette.closePanel'), icon: <CloseIcon />, action: run('closePanel') },
+      { id: 'saveFile', title: t('palette.saveFile'), icon: <SaveIcon />, action: run('saveFile') },
       // Sidebar toggles only exist in the main window; hidden in detached windows.
       ...(isMainWindow
         ? [
-            { id: 'toggleSidebar', title: 'Toggle Sidebar', icon: <SidebarIcon />, action: run('toggleSidebar') },
-            { id: 'toggleFileExplorer', title: 'Toggle File Explorer', icon: <FolderOpenIcon />, action: run('toggleFileExplorer') },
-            { id: 'toggleSearch', title: 'Toggle Search', icon: <SearchIcon />, action: run('toggleSearch') },
+            { id: 'toggleSidebar', title: t('palette.toggleSidebar'), icon: <SidebarIcon />, action: run('toggleSidebar') },
+            { id: 'toggleFileExplorer', title: t('palette.toggleFileExplorer'), icon: <FolderOpenIcon />, action: run('toggleFileExplorer') },
+            { id: 'toggleSearch', title: t('palette.toggleSearch'), icon: <SearchIcon />, action: run('toggleSearch') },
           ]
         : []),
-      { id: 'toggleMinimap', title: 'Toggle Minimap', icon: <MinimapIcon />, action: run('toggleMinimap') },
-      { id: 'zoomReset', title: 'Reset Zoom', icon: <ZoomResetIcon />, action: run('zoomReset') },
-      { id: 'zoomToFit', title: 'Zoom to Fit', icon: <ZoomToFitIcon />, action: run('zoomToFit') },
-      { id: 'zoomToSelection', title: 'Zoom to Selection', icon: <ZoomSelectionIcon />, action: run('zoomToSelection') },
-      { id: 'autoLayout', title: 'Auto-Layout Canvas', icon: <LayersIcon />, action: run('autoLayout') },
-      { id: 'undo', title: 'Undo', icon: <UndoIcon />, action: run('undo') },
-      { id: 'redo', title: 'Redo', icon: <RedoIcon />, action: run('redo') },
-      { id: 'manageLayouts', title: 'Saved Layouts…', icon: <SaveIcon />, action: run('manageLayouts') },
+      { id: 'toggleMinimap', title: t('palette.toggleMinimap'), icon: <MinimapIcon />, action: run('toggleMinimap') },
+      { id: 'zoomReset', title: t('palette.resetZoom'), icon: <ZoomResetIcon />, action: run('zoomReset') },
+      { id: 'zoomToFit', title: t('palette.zoomToFit'), icon: <ZoomToFitIcon />, action: run('zoomToFit') },
+      { id: 'zoomToSelection', title: t('palette.zoomToSelection'), icon: <ZoomSelectionIcon />, action: run('zoomToSelection') },
+      { id: 'autoLayout', title: t('palette.autoLayout'), icon: <LayersIcon />, action: run('autoLayout') },
+      { id: 'undo', title: t('palette.undo'), icon: <UndoIcon />, action: run('undo') },
+      { id: 'redo', title: t('palette.redo'), icon: <RedoIcon />, action: run('redo') },
+      { id: 'manageLayouts', title: t('palette.savedLayouts'), icon: <SaveIcon />, action: run('manageLayouts') },
       {
         id: 'skills',
-        title: 'Skills…',
+        title: t('palette.skills'),
         icon: <SkillsIcon />,
         action: () => useUIStore.getState().setShowSkillsDialog(true),
       },
       {
         id: 'showTutorial',
-        title: 'Show Tutorial',
+        title: t('palette.showTutorial'),
         icon: <TutorialIcon />,
         // Replays the first-run guided tour by clearing the completed flag.
         action: () => {
@@ -193,32 +196,26 @@ export const CommandPalette: React.FC = () => {
           try { window.electronAPI?.trackFeatureUsed?.('onboarding_replayed') } catch { /* noop */ }
         },
       },
-      { id: 'reloadWorkspace', title: 'Reload Workspace from Disk', icon: <ReloadIcon />, action: run('reloadWorkspace') },
+      { id: 'reloadWorkspace', title: t('palette.reloadWorkspace'), icon: <ReloadIcon />, action: run('reloadWorkspace') },
       // Remote-only: delete the daemon from the host. Main re-probes to the
       // 'missing' phase; the canvas lock then offers "Install Runtime" for a
       // clean reinstall — the deliberate delete → install two-step.
       ...(isRemoteWorkspace
         ? [{
             id: 'deleteRuntime',
-            title: 'Delete Runtime',
+            title: t('palette.deleteRuntime'),
             icon: <DeleteRuntimeIcon />,
             action: () => { void deleteRuntime(selectedWorkspaceId) },
           }]
         : []),
     ],
-    [run, isMainWindow, isRemoteWorkspace, deleteRuntime, selectedWorkspaceId],
+    [run, isMainWindow, isRemoteWorkspace, deleteRuntime, selectedWorkspaceId, t],
   )
 
   // Open panels in the current workspace.
-  // Panels come from the SAME source as the sidebar workspace overview
-  // (useWorkspacePanelTree): ws.panels joined against every canvas store + the
-  // dock store. So a panel docked or on a secondary canvas still appears, ghosts
-  // (placed nowhere) and panels detached into other windows don't, and the order
-  // mirrors the overview's tree.
   const { panels, orderedPanels } = useWorkspacePanelTree(selectedWorkspaceId)
 
-  // Panels that live in OTHER windows for this workspace (bidirectional: the main
-  // window sees detached panels, and a detached window sees the main window's).
+  // Panels that live in OTHER windows for this workspace.
   const otherWindowPanels = useOtherWindowPanels(selectedWorkspaceId, Object.keys(panels))
 
   const rootPath = useAppStore((s) => s.workspaces.find((w) => w.id === s.selectedWorkspaceId)?.rootPath)
@@ -231,8 +228,7 @@ export const CommandPalette: React.FC = () => {
     return allCommands.filter((cmd) => cmd.title.toLowerCase().includes(query))
   }, [allCommands, query])
 
-  // Navigable panels in overview order, matched by title. Local panels first,
-  // then panels living in other windows (labelled "Other window").
+  // Navigable panels in overview order, matched by title.
   const filteredPanels = useMemo<PanelResult[]>(() => {
     const results: PanelResult[] = []
     for (const panel of orderedPanels) {
@@ -253,12 +249,12 @@ export const CommandPalette: React.FC = () => {
         panelId: panel.panelId,
         title: panel.title,
         type: panel.type,
-        secondary: 'Other window',
+        secondary: t('palette.otherWindow'),
         inOtherWindow: true,
       })
     }
     return results
-  }, [orderedPanels, otherWindowPanels, query])
+  }, [orderedPanels, otherWindowPanels, query, t])
 
   // With a query, search workspace files by name (debounced). With an empty box,
   // skip the filesystem walk and show recently-opened files instead.
@@ -287,8 +283,7 @@ export const CommandPalette: React.FC = () => {
     return () => { clearTimeout(timer); setSearching(false) }
   }, [searchText, query, showCommandPalette])
 
-  // Recently-opened files, shown when the search box is empty. Skip files that
-  // are already open (they appear under Panels), and resolve a display name/path.
+  // Recently-opened files, shown when the search box is empty.
   const recentFileResults = useMemo<FileResult[]>(() => {
     if (query) return []
     const openPaths = new Set(Object.values(panels).map((p) => p.filePath).filter(Boolean) as string[])
@@ -333,9 +328,7 @@ export const CommandPalette: React.FC = () => {
     }
   }, [showCommandPalette])
 
-  // Navigate to a panel the same way the sidebar overview does — revealPanel
-  // resolves the panel's real location (dock zone or any canvas) and brings it
-  // forward, so docked / secondary-canvas panels are reached correctly.
+  // Navigate to a panel the same way the sidebar overview does.
   const focusPanelById = useCallback(
     (panelId: string) => { void revealPanel(selectedWorkspaceId, panelId, { retry: true }) },
     [selectedWorkspaceId],
@@ -367,7 +360,6 @@ export const CommandPalette: React.FC = () => {
       if (item.kind === 'command') {
         item.command.action()
       } else if (item.kind === 'panel') {
-        // A panel in another window: ask main to focus that window and reveal it.
         if (item.panel.inOtherWindow) void window.electronAPI.focusWindowPanel(item.panel.panelId)
         else focusPanelById(item.panel.panelId)
       } else {
@@ -377,18 +369,12 @@ export const CommandPalette: React.FC = () => {
     [close, focusPanelById, openFile],
   )
 
-  // Arrow/Enter/Escape are handled on the search input's own onKeyDown (see the
-  // <input> below). The input is the element that actually holds focus while the
-  // palette is open, so binding there is reliable — a document-level listener
-  // would only fire if focus happened to stay on the host document, which it
-  // doesn't when the palette opens over a focused terminal/canvas surface.
-
   if (!showCommandPalette) return null
 
   // Section boundaries within the flat list.
   const panelStart = filteredCommands.length
   const fileStart = panelStart + filteredPanels.length
-  const filesLabel = query ? 'Files' : 'Recent Files'
+  const filesLabel = query ? t('palette.files') : t('palette.recentFiles')
 
   return (
     <PaletteDialogShell
@@ -428,7 +414,7 @@ export const CommandPalette: React.FC = () => {
                     break
                 }
               }}
-              placeholder="Search commands, panels and files by name"
+              placeholder={t('palette.searchPlaceholder')}
               className="flex-1 bg-transparent text-primary text-[13px] outline-none placeholder:text-muted"
             />
           </div>
@@ -438,14 +424,14 @@ export const CommandPalette: React.FC = () => {
         <div className="flex-1 overflow-y-auto pb-1.5">
           {totalItems === 0 ? (
             <div className="text-muted text-[13px] text-center py-5">
-              {searching ? 'Searching…' : 'No results'}
+              {searching ? t('palette.searching') : t('palette.noResults')}
             </div>
           ) : (
             <>
               {/* Commands */}
               {filteredCommands.length > 0 && (
                 <>
-                  <SectionHeader>Commands</SectionHeader>
+                  <SectionHeader>{t('palette.commands')}</SectionHeader>
                   {filteredCommands.map((cmd, i) => {
                     const isSelected = i === selectedIndex
                     return (
@@ -468,7 +454,7 @@ export const CommandPalette: React.FC = () => {
               {filteredPanels.length > 0 && (
                 <>
                   {filteredCommands.length > 0 && <Separator />}
-                  <SectionHeader>Panels</SectionHeader>
+                  <SectionHeader>{t('palette.panels')}</SectionHeader>
                   {filteredPanels.map((panel, i) => {
                     const itemIndex = panelStart + i
                     const isSelected = itemIndex === selectedIndex
@@ -482,7 +468,7 @@ export const CommandPalette: React.FC = () => {
                       >
                         <PanelIcon type={panel.type} />
                         <span className="text-[13px] text-primary flex-1 truncate">{panel.title}</span>
-                        <span className="text-[11px] text-muted capitalize">{panel.inOtherWindow ? 'Other window' : panel.type}</span>
+                        <span className="text-[11px] text-muted capitalize">{panel.inOtherWindow ? t('palette.otherWindow') : panel.type}</span>
                       </Row>
                     )
                   })}
@@ -562,6 +548,6 @@ function PanelIcon({ type }: { type: PanelType }) {
   if (type === 'terminal') return <span className={`${cls} text-emerald-400`}><Terminal size={ICON_SIZE} /></span>
   if (type === 'browser')  return <span className={`${cls} text-sky-400`}><Globe size={ICON_SIZE} /></span>
   if (type === 'editor' || type === 'document') return <span className={`${cls} text-orange-400`}><FileText size={ICON_SIZE} /></span>
-  if (type === 'agent')    return <span className={`${cls} text-[rgb(var(--agent-rgb))]`}><CateLogo size={ICON_SIZE} /></span>
+  if (type === 'agent')    return <span className={`${cls} text-[rgb(var(--agent-rgb))]`}><OrquestraLogo size={ICON_SIZE} /></span>
   return <span className={`${cls} text-violet-400`}><Square size={ICON_SIZE} /></span>
 }

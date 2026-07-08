@@ -1,5 +1,5 @@
 // =============================================================================
-// Saved skills library — Cate's userData list of skills the user saved.
+// Saved skills library — Orquestra's userData list of skills the user saved.
 //
 // A saved skill records its metadata here; the canonical bytes live in the skill
 // store (skillStore), keyed by skillId. Saving is library-only — nothing is

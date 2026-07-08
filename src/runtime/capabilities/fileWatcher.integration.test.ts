@@ -49,7 +49,7 @@ function waitFor(
 
 describe('createWatchPool — real @parcel/watcher', () => {
   it('round-trips a nested create / update / delete with absolute paths', async () => {
-    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cate-pw-')))
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'orquestra-pw-')))
     const nestedDir = path.join(root, 'src', 'panels')
     await mkdir(nestedDir, { recursive: true })
     const file = path.join(nestedDir, 'deep.txt')
@@ -70,7 +70,7 @@ describe('createWatchPool — real @parcel/watcher', () => {
   })
 
   it('emits for hidden + normal files but never for excluded or hidden directories', async () => {
-    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cate-pw-')))
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'orquestra-pw-')))
     await mkdir(path.join(root, 'src'))
     await mkdir(path.join(root, '.git'))
     await mkdir(path.join(root, 'node_modules', 'pkg'), { recursive: true })
@@ -111,7 +111,7 @@ describe('createWatchPool — real @parcel/watcher', () => {
   // subtree still learns its file is gone (the narrowing the old native
   // recursive fs.watch carried — a lone dir rename — is fixed).
   it('synthesizes a delete for every file when a populated subtree is removed', async () => {
-    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cate-pw-')))
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'orquestra-pw-')))
     const dir = path.join(root, 'pkg')
     const top = path.join(dir, 'a.ts')
     const deep = path.join(dir, 'nested', 'b.ts')
@@ -141,9 +141,9 @@ describe('createWatchPool — real @parcel/watcher', () => {
   // into a directory symlink that points OUTSIDE the watched root — changes
   // under `linked/` are not reported. This asserts only that the symlink's
   // presence is harmless; it is not a claim that symlinked subtrees are watched.
-  it('keeps watching real files when an external directory symlink is present', async () => {
-    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cate-pw-')))
-    const ext = await realpath(await mkdtemp(path.join(os.tmpdir(), 'cate-pw-ext-')))
+  it.skipIf(process.platform === 'win32')('keeps watching real files when an external directory symlink is present', async () => {
+    root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'orquestra-pw-')))
+    const ext = await realpath(await mkdtemp(path.join(os.tmpdir(), 'orquestra-pw-ext-')))
     extraDirs.push(ext)
     await mkdir(path.join(ext, 'pkg'), { recursive: true })
     await symlink(path.join(ext, 'pkg'), path.join(root, 'linked'), 'dir')

@@ -1,6 +1,6 @@
 // =============================================================================
-// Session save — serialize every persistable workspace to .cate/workspace.json +
-// .cate/session.json (and remote/sidebar stores), with per-target dedup so the
+// Session save — serialize every persistable workspace to .orquestra/workspace.json +
+// .orquestra/session.json (and remote/sidebar stores), with per-target dedup so the
 // periodic autosave doesn't rewrite identical files.
 // =============================================================================
 
@@ -35,7 +35,7 @@ const lastSerializedByRoot = new Map<string, string>()
 // Same idea for the global sidebar arrangement: skip the IPC + electron-store
 // write when order/active-workspace haven't changed since the last save.
 let lastSidebarSessionSerialized: string | null = null
-// And for the remote-projects list (cate-runtime:// restore snapshots).
+// And for the remote-projects list (orquestra-runtime:// restore snapshots).
 let lastRemoteProjectsSerialized: string | null = null
 
 export async function saveSession(): Promise<void> {
@@ -84,6 +84,8 @@ export async function saveSession(): Promise<void> {
         canvasNodes,
         zoomLevel: snap.zoomLevel,
         viewportOffset: snap.viewportOffset,
+        connections: Object.keys(snap.connections).length > 0 ? snap.connections : undefined,
+        drawings: snap.drawings.length > 0 ? snap.drawings : undefined,
       }
     }
 
@@ -155,7 +157,7 @@ export async function saveSession(): Promise<void> {
     })
   }
 
-  // Capture detached dock-window snapshots for inclusion in .cate/session.json
+  // Capture detached dock-window snapshots for inclusion in .orquestra/session.json
   let dockWindows: DetachedDockWindowSnapshot[] | undefined
   try {
     const dwList = await window.electronAPI.dockWindowsList()
@@ -166,11 +168,11 @@ export async function saveSession(): Promise<void> {
     log.warn('[session] Dock window listing failed:', err)
   }
 
-  // Remote (cate-runtime://) workspaces can't use the local .cate/ files —
+  // Remote (orquestra-runtime://) workspaces can't use the local .orquestra/ files —
   // their tree lives on a runtime. Collect their full snapshots + reconnect
   // info into the electron-store remoteProjects list so restart can rebuild and
   // reconnect them (Findings 2/3/4). TODO: route remote project-state through
-  // runtime.file so .cate/ lives next to the remote repo instead of here.
+  // runtime.file so .orquestra/ lives next to the remote repo instead of here.
   const remoteEntries: RemoteProjectEntry[] = []
   for (const snapshot of snapshots) {
     if (!snapshot.rootPath || isLocalLocator(snapshot.rootPath)) continue
@@ -190,9 +192,9 @@ export async function saveSession(): Promise<void> {
       })
   }
 
-  // Save to .cate/workspace.json + .cate/session.json next to the repo for EVERY
+  // Save to .orquestra/workspace.json + .orquestra/session.json next to the repo for EVERY
   // workspace. Local writes to local disk; remote routes through the runtime to
-  // the remote repo's .cate/ (projectStateSave is locator-aware). This is what
+  // the remote repo's .orquestra/ (projectStateSave is locator-aware). This is what
   // lets a closed remote workspace restore on reopen, exactly like local.
   // One owner workspace per root. When two share a root (a duplicated workspace),
   // the SELECTED one owns the write so the live/active layout is what persists;
@@ -209,9 +211,9 @@ export async function saveSession(): Promise<void> {
     if (!snapshot.rootPath) continue
 
     const ws = workspacesByRoot.get(snapshot.rootPath)
-    // A single owner workspace per root writes its .cate/ files. Two workspaces
+    // A single owner workspace per root writes its .orquestra/ files. Two workspaces
     // duplicated onto one rootPath would otherwise each write a different layout
-    // every tick — the rootPath-keyed dedup never settles, .cate/workspace.json
+    // every tick — the rootPath-keyed dedup never settles, .orquestra/workspace.json
     // flip-flops, and one layout is lost on restart. Skip the non-owner snapshot;
     // the owner (the selected one, else the first in order) wins.
     if (ws && ws.id !== snapshot.workspaceId) continue

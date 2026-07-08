@@ -262,13 +262,13 @@ export function DockTabBar(props: DockTabBarProps) {
               />
             ) : (
               <span
-                className={`truncate flex-1 min-w-0 ${agentInfoByPanel[panelId]?.state === 'running' ? 'cate-notif-pulse' : ''}`}
+                className={`truncate flex-1 min-w-0 ${agentInfoByPanel[panelId]?.state === 'running' ? 'orquestra-notif-pulse' : ''}`}
                 style={worktreeTitleStyle(worktreeColorByPanel[panelId], agentInfoByPanel[panelId]?.state === 'running')}
               >{getPanelTitle(panelId)}</span>
             )}
             {agentInfoByPanel[panelId]?.state === 'waitingForInput' && (
-              <span className="cate-await-indicator shrink-0" aria-label="awaiting input">
-                <span className="cate-await-dot" style={{ backgroundColor: AWAIT_COLOR }} />
+              <span className="orquestra-await-indicator shrink-0" aria-label="awaiting input">
+                <span className="orquestra-await-dot" style={{ backgroundColor: AWAIT_COLOR }} />
               </span>
             )}
             {onClosePanel && (

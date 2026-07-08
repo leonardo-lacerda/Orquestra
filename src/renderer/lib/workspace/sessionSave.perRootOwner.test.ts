@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // =============================================================================
 // Per-root write ownership: when two workspaces share one rootPath (a duplicated
-// workspace), exactly ONE — the owner — writes .cate/workspace.json per save.
+// workspace), exactly ONE — the owner — writes .orquestra/workspace.json per save.
 // Otherwise the rootPath-keyed dedup never settles, the file flip-flops every
 // autosave tick, and one layout is lost on restart. The SELECTED workspace owns
 // the write so the active layout is what persists.

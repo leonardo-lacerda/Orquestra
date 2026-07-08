@@ -56,7 +56,7 @@ export async function hostFileExists(runtime: Runtime, hostPath: string): Promis
  *
  *  Overwrite semantics depend on `overwrite`:
  *   - 'if-changed': rewrite only when the host copy differs from the bundled
- *     source (Cate-managed files where the bundle is authoritative — comparing
+ *     source (Orquestra-managed files where the bundle is authoritative — comparing
  *     first still skips the write when nothing changed, but a shipped update
  *     reliably reaches hosts that already have an older copy).
  *   - 'if-missing': skip entirely when the host already has the file, so a

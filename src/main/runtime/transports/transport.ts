@@ -20,7 +20,7 @@ export interface RuntimeChannel {
 
 // -----------------------------------------------------------------------------
 // Shared remote-install helpers — SSH and WSL provision the SAME self-contained
-// tarball into the SAME `~/.cate/runtime/<ver>/<target>` layout with identical
+// tarball into the SAME `~/.orquestra/runtime/<ver>/<target>` layout with identical
 // markers, pull commands, and dev hot-swap flow; only the push mechanism (SFTP
 // vs /mnt copy) and the exec primitive differ. These keep that logic in one
 // place. localTransport keeps its own fs-based marker()/install (it never shells).
@@ -66,7 +66,7 @@ export function buildInstallCheckCommand(quotedInstallDir: string): string {
 /** sh tail run from inside the install dir after the tarball is in place as
  *  `pkg.tgz`: extract -> verify runtime + cjs -> write the `.ok` marker -> echo
  *  the success token. `quotedMarker` must already be shell-quoted; `okToken` is
- *  the sentinel the caller greps for (CATE_EXTRACT_OK / CATE_PULL_OK). */
+ *  the sentinel the caller greps for (ORQUESTRA_EXTRACT_OK / ORQUESTRA_PULL_OK). */
 export function buildExtractCommand(quotedMarker: string, okToken: string): string {
   return (
     `tar -xzf pkg.tgz && rm -f pkg.tgz && ` +
@@ -76,7 +76,7 @@ export function buildExtractCommand(quotedMarker: string, okToken: string): stri
 }
 
 /** Compound sh command: download (curl|wget) -> extract -> verify -> mark `.ok`.
- *  Echoes CATE_PULL_OK on success; CATE_NO_FETCHER + exit 3 when neither tool. */
+ *  Echoes ORQUESTRA_PULL_OK on success; ORQUESTRA_NO_FETCHER + exit 3 when neither tool. */
 export function buildRemotePullCommand(installDir: string, url: string, version: string): string {
   const D = shellQuote(installDir)
   const U = shellQuote(url)
@@ -85,15 +85,15 @@ export function buildRemotePullCommand(installDir: string, url: string, version:
     `mkdir -p ${D} && cd ${D} && rm -f pkg.tgz && ` +
     `if command -v curl >/dev/null 2>&1; then curl -fSL ${U} -o pkg.tgz; ` +
     `elif command -v wget >/dev/null 2>&1; then wget -qO pkg.tgz ${U}; ` +
-    `else echo CATE_NO_FETCHER >&2; exit 3; fi && ` +
-    buildExtractCommand(V, 'CATE_PULL_OK')
+    `else echo ORQUESTRA_NO_FETCHER >&2; exit 3; fi && ` +
+    buildExtractCommand(V, 'ORQUESTRA_PULL_OK')
   )
 }
 
 /** sh test that the heavy parts are provisioned (runtime + rg + pi + cjs +
- *  node_modules). Echoes CATE_PROVISIONED when all present. `D` must be shell-quoted. */
+ *  node_modules). Echoes ORQUESTRA_PROVISIONED when all present. `D` must be shell-quoted. */
 export function provisionedProbe(quotedInstallDir: string): string {
-  return `test -x ${quotedInstallDir}/runtime/bin/node && test -x ${quotedInstallDir}/runtime/bin/rg && test -f ${quotedInstallDir}/pi/dist/cli.js && test -f ${quotedInstallDir}/runtime.cjs && test -d ${quotedInstallDir}/node_modules && echo CATE_PROVISIONED`
+  return `test -x ${quotedInstallDir}/runtime/bin/node && test -x ${quotedInstallDir}/runtime/bin/rg && test -f ${quotedInstallDir}/pi/dist/cli.js && test -f ${quotedInstallDir}/runtime.cjs && test -d ${quotedInstallDir}/node_modules && echo ORQUESTRA_PROVISIONED`
 }
 
 /** Transport-specific bits the shared dev provisioner needs. */
@@ -118,7 +118,7 @@ export interface BootstrapDevDeps {
  * produced. `D` is the shell-quoted install dir.
  */
 export async function bootstrapDevShared(version: string, D: string, deps: BootstrapDevDeps): Promise<void> {
-  const provisioned = (await deps.exec(provisionedProbe(D))).stdout.includes('CATE_PROVISIONED')
+  const provisioned = (await deps.exec(provisionedProbe(D))).stdout.includes('ORQUESTRA_PROVISIONED')
 
   // First connect on this host/version: lay down runtime + node_modules from the
   // local tarball (marker is just the version; the cjs overlay below is the real
@@ -170,7 +170,7 @@ export async function isInstalledShared(
   exec: (cmd: string) => Promise<RemoteExecResult>,
 ): Promise<boolean> {
   if (isRuntimeDevMode()) {
-    return (await exec(provisionedProbe(D))).stdout.includes('CATE_PROVISIONED')
+    return (await exec(provisionedProbe(D))).stdout.includes('ORQUESTRA_PROVISIONED')
   }
   const localTar = localTarballIfPresent(version, target)
   const marker = await computeMarker(version, localTar)
@@ -198,7 +198,7 @@ export async function bootstrapProdShared(version: string, D: string, deps: Boot
   // 1. Remote / in-distro pull — let the host fetch its own tarball from the release.
   const url = releaseUrl(version, deps.target)
   const pull = await deps.exec(buildRemotePullCommand(deps.installDir, url, version))
-  if (pull.stdout.includes('CATE_PULL_OK')) {
+  if (pull.stdout.includes('ORQUESTRA_PULL_OK')) {
     log.info('[runtime:%s] %s pulled tarball from release', deps.tag, deps.target)
     return
   }
@@ -223,7 +223,7 @@ export interface RuntimeTransport {
    *  `force` is set, wipe any existing install first so a corrupt or partial
    *  bundle is replaced by a clean download/push+extract (the reinstall path). */
   bootstrap(expectedVersion: string, force?: boolean): Promise<void>
-  /** Remove the runtime install from the host (rm -rf ~/.cate/runtime).
+  /** Remove the runtime install from the host (rm -rf ~/.orquestra/runtime).
    *  Backs the explicit "Delete runtime" action. Optional — omitted by
    *  transports with nothing host-side to remove. */
   uninstall?(): Promise<void>

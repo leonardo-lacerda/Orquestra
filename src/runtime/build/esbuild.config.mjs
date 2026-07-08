@@ -1,5 +1,5 @@
 // =============================================================================
-// Bundles the cate-runtime daemon into a single runtime-agnostic .cjs that
+// Bundles the orquestra-runtime daemon into a single runtime-agnostic .cjs that
 // can be shipped to a server / WSL and run by a plain Node (NOT Electron). Run
 // via `npm run build:runtime`.
 //

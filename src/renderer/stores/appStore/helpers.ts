@@ -35,7 +35,7 @@ import type { AppSet, AppGet, PanelPlacement } from './types'
 // -----------------------------------------------------------------------------
 
 /**
- * Load a freshly-opened workspace's saved `.cate/` layout into its stores.
+ * Load a freshly-opened workspace's saved `.orquestra/` layout into its stores.
  * Dynamically imported to avoid a static cycle (session.ts imports appStore).
  * hydrateWorkspaceFromDiskIfEmpty is internally guarded (rootPath + no live
  * content + not deferred), so this is a safe, idempotent no-op otherwise. For a

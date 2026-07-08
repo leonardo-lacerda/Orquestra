@@ -125,15 +125,15 @@ export function ChatInput({
   const canSend = !disabled && (draft.trim().length > 0 || images.length > 0)
   const [dragOver, setDragOver] = useState(false)
 
-  // Accept either an internal file drag (cate-files / cate-file) or external
+  // Accept either an internal file drag (orquestra-files / orquestra-file) or external
   // image files. Returning true tells the dragover handler to claim the event
   // so that ancestor drop zones (e.g. the canvas) don't also process it.
   const acceptsDrag = (e: React.DragEvent): boolean => {
     const types = e.dataTransfer?.types
     if (!types) return false
     return (
-      types.includes('application/cate-files') ||
-      types.includes('application/cate-file') ||
+      types.includes('application/orquestra-files') ||
+      types.includes('application/orquestra-file') ||
       types.includes('Files')
     )
   }

@@ -1,0 +1,13 @@
+{
+  "defaultAgent": "auto",
+  "autoRecruit": true,
+  "maxWorkers": 5,
+  "roleTemplates": {
+    "dev": "Developer — implement features, fix bugs, write code",
+    "qa": "QA Tester — write tests, find bugs, validate features",
+    "review": "Code Reviewer — review code quality, suggest improvements",
+    "docs": "Documentation Writer — write docs, README, comments",
+    "frontend": "Frontend Developer — UI/UX, HTML, CSS, React",
+    "backend": "Backend Developer — APIs, databases, server logic"
+  }
+}

@@ -6,11 +6,11 @@
 // We vendor pi's subagent extension into our own tree at
 // src/agent/extensions/subagent/ (copied from the pi-coding-agent npm package's
 // examples/extensions/subagent) and ship it via electron-builder.yml
-// `extraResources` into resources/cate-extensions/subagent — the same way
-// cate-plan-mode ships (see installPlanMode). electron-builder's default file
+// `extraResources` into resources/orquestra-extensions/subagent — the same way
+// orquestra-plan-mode ships (see installPlanMode). electron-builder's default file
 // filter strips node_modules `examples/` dirs at pack time, so we can't rely on
 // the npm copy in packaged builds. We copy three things (relative to
-// <cwd>/.cate/pi-agent/ on the host that runs pi):
+// <cwd>/.orquestra/pi-agent/ on the host that runs pi):
 //   - extensions/subagent/{index.ts,agents.ts}
 //   - agents/*.md (scout, planner, reviewer, worker, plus our additions)
 //   - prompts/*.md (implement, scout-and-plan, ...)
@@ -39,7 +39,7 @@ import type { Runtime } from '../../main/runtime/types'
 function subagentSourceDir(): string | null {
   return findSourceDir([
     path.join(app.getAppPath(), 'src', 'agent', 'extensions', 'subagent'),
-    path.join(process.resourcesPath ?? '', 'cate-extensions', 'subagent'),
+    path.join(process.resourcesPath ?? '', 'orquestra-extensions', 'subagent'),
   ])
 }
 

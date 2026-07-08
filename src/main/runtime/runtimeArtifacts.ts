@@ -48,9 +48,9 @@ export function hostRuntimeTarget(): RuntimeTarget | null {
   return isRuntimeTarget(t) ? t : null
 }
 
-/** `cate-runtime-1.1.0-linux-x64.tgz` */
+/** `orquestra-runtime-1.1.0-linux-x64.tgz` */
 export function tarballName(version: string, target: RuntimeTarget): string {
-  return `cate-runtime-${version}-${target}.tgz`
+  return `orquestra-runtime-${version}-${target}.tgz`
 }
 
 /** Public download URL for a target's tarball on the GitHub release. */
@@ -68,10 +68,10 @@ function devTarball(version: string, target: RuntimeTarget): string | null {
 /** True when running unpackaged (dev). In dev the transports prefer local
  *  artifacts, skip the release remote-pull, and hot-swap just runtime.cjs when
  *  the host is already provisioned — so iterating on the daemon needs neither a
- *  version bump nor a full tarball rebuild. Override off with CATE_RUNTIME_DEV=0. */
+ *  version bump nor a full tarball rebuild. Override off with ORQUESTRA_RUNTIME_DEV=0. */
 export function isRuntimeDevMode(): boolean {
-  if (process.env.CATE_RUNTIME_DEV === '0') return false
-  return !app.isPackaged || process.env.CATE_RUNTIME_DEV === '1'
+  if (process.env.ORQUESTRA_RUNTIME_DEV === '0') return false
+  return !app.isPackaged || process.env.ORQUESTRA_RUNTIME_DEV === '1'
 }
 
 /** The freshly built daemon bundle (`dist-runtime/runtime.cjs`) on this

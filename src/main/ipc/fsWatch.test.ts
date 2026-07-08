@@ -69,7 +69,7 @@ describe('fs watch events for nested paths', () => {
   beforeEach(async () => {
     // realpath so the registered allowed root matches validatePathStrict's
     // symlink-resolved comparison (e.g. /tmp → /private/tmp on macOS).
-    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-watch-')))
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-watch-')))
     addAllowedRoot(root)
     sendToWindow.mockClear()
   })

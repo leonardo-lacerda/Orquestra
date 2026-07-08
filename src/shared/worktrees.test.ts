@@ -4,7 +4,7 @@ import type { WorktreeMeta } from './types'
 
 const WT: WorktreeMeta = {
   id: 'wt-x',
-  path: '/repo/.cate/worktrees/x',
+  path: '/repo/.orquestra/worktrees/x',
   color: '#11aa55',
 }
 

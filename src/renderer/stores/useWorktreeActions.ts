@@ -14,13 +14,13 @@ import { gitStatusStore } from './gitStatusStore'
 import type { WorktreeMeta } from '../../shared/types'
 import type { PrListItem } from '../sidebar/CreateWorktreeForm'
 
-/** Worktrees live inside the project at <repo>/.cate/worktrees/<branch-slug>.
+/** Worktrees live inside the project at <repo>/.orquestra/worktrees/<branch-slug>.
  *  The worktree-add handler drops a `*` .gitignore in that folder so the
  *  checkouts never show up as untracked noise in the parent repo. */
 function worktreePathFor(repoRoot: string, branch: string): string {
   const trimmed = repoRoot.replace(/[/\\]+$/, '')
   const slug = branch.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'wt'
-  return `${trimmed}/.cate/worktrees/${slug}`
+  return `${trimmed}/.orquestra/worktrees/${slug}`
 }
 
 /** Turn free-text ("fix the login bug") into a valid branch name

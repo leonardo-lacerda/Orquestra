@@ -27,8 +27,8 @@ describe.skipIf(!hasTarball)('local daemon from the real tarball', () => {
   let workspace: string
 
   beforeAll(async () => {
-    installDir = await fs.mkdtemp(path.join(process.cwd(), 'cate-local-install-'))
-    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'cate-local-ws-')))
+    installDir = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-local-install-'))
+    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-local-ws-')))
     addAllowedRoot(workspace)
     await fs.writeFile(path.join(workspace, 'hello.ts'), 'export const x = 1\n')
   }, 60_000)
@@ -85,7 +85,7 @@ describe.skipIf(!hasTarball)('local daemon from the real tarball', () => {
         () => {},
       ).then((handle) => {
         expect(handle.pid).toBeGreaterThan(0)
-        runtime.process.write(handle.id, 'echo cate-ok\n')
+        runtime.process.write(handle.id, 'echo orquestra-ok\n')
       })
     })
     await sawData

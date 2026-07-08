@@ -9,7 +9,7 @@ import { revealWindowPanel } from '../windowPanels'
 import { collectTopLevelPanelIds } from '../windows/dockState'
 import { revealWindow } from '../windows/reveal'
 import type {
-  CateWindowParams,
+  OrquestraWindowParams,
   DetachedDockWindowSnapshot,
   DockWindowInitPayload,
   DockWindowSyncState,
@@ -23,7 +23,7 @@ import {
 } from '../../shared/ipc-channels'
 
 interface DockWindowDeps {
-  createWindow: (params?: CateWindowParams) => BrowserWindow
+  createWindow: (params?: OrquestraWindowParams) => BrowserWindow
 }
 
 export function registerDockWindowHandlers({ createWindow }: DockWindowDeps): void {

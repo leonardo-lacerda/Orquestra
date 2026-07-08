@@ -40,7 +40,7 @@ const EXITS_IMMEDIATELY = `
 `
 
 beforeAll(async () => {
-  dir = await mkdtemp(path.join(os.tmpdir(), 'cate-dispose-test-'))
+  dir = await mkdtemp(path.join(os.tmpdir(), 'orquestra-dispose-test-'))
 })
 
 afterAll(async () => {

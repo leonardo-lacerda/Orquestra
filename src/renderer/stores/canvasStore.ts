@@ -25,6 +25,8 @@ import { createPlacementSlice } from './canvas/placementSlice'
 import { createNavigationSlice } from './canvas/navigationSlice'
 import { createSelectionSlice } from './canvas/selectionSlice'
 import { createArrangeSlice } from './canvas/arrangeSlice'
+import { createConnectionsSlice } from './canvas/connectionsSlice'
+import { createDrawingsSlice } from './canvas/drawingsSlice'
 import { focusedNodeId as focusedNodeIdOf } from './canvas/selectionModel'
 
 // Re-export the store types so existing importers (`from '.../canvasStore'`)
@@ -63,6 +65,9 @@ export function createCanvasStore(): UseBoundStore<StoreApi<CanvasStore>> {
       history: [],
       future: [],
       pendingPlacement: null,
+      connections: {},
+      drawings: [],
+      selectedDrawingId: null,
 
       // --- Actions (composed from focused slices) ---
       ...createHistorySlice(set, get),
@@ -72,9 +77,11 @@ export function createCanvasStore(): UseBoundStore<StoreApi<CanvasStore>> {
       ...createNavigationSlice(set, get, ctx),
       ...createSelectionSlice(set, get),
       ...createArrangeSlice(set, get),
+      ...createConnectionsSlice(set, get),
+      ...createDrawingsSlice(set, get),
 
       // --- Lifecycle / bulk reset (counterpart to the initial state above) ---
-      loadWorkspaceCanvas(nodes, viewportOffset, zoomLevel) {
+      loadWorkspaceCanvas(nodes, viewportOffset, zoomLevel, connections?, drawings?) {
         // Compute next counters from loaded data
         const nodeList = Object.values(nodes)
         const maxZOrder = nodeList.reduce((max, n) => Math.max(max, n.zOrder), -1)
@@ -97,7 +104,17 @@ export function createCanvasStore(): UseBoundStore<StoreApi<CanvasStore>> {
           history: [],
           future: [],
           pendingPlacement: null,
+          connections: connections ?? {},
+          drawings: drawings ?? [],
         })
+
+        // Re-sync terminal pipes to main process
+        if (connections) {
+          get().loadConnections(connections)
+        }
+        if (drawings) {
+          get().loadDrawings(drawings)
+        }
       },
     }
   })
@@ -158,6 +175,19 @@ export function releaseCanvasStoreForPanel(panelId: string): void {
  *  Used by drag handlers to find the source canvas of a given node id. */
 export function getAllCanvasStores(): UseBoundStore<StoreApi<CanvasStore>>[] {
   return Array.from(canvasBoundStoresByPanelId.values())
+}
+
+/** Find the canvas store that contains a node for the given panelId, and
+ *  return the store together with the canvas node id. Used by the orquestra
+ *  hook to add visual orchestration arrows between orquestrador and worker. */
+export function findCanvasNodeForPanel(
+  panelId: string,
+): { store: UseBoundStore<StoreApi<CanvasStore>>; nodeId: string } | null {
+  for (const [, store] of canvasBoundStoresByPanelId) {
+    const nodeId = store.getState().nodeForPanel(panelId)
+    if (nodeId) return { store, nodeId }
+  }
+  return null
 }
 
 // -----------------------------------------------------------------------------

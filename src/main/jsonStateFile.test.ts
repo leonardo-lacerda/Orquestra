@@ -7,7 +7,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-jsonstate-test-'))
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-jsonstate-test-'))
 
 vi.mock('electron', () => {
   const electron = { app: { getPath: () => userData } }

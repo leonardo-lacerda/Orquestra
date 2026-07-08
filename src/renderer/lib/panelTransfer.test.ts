@@ -62,7 +62,7 @@ describe('createTransferSnapshot — worktree registry threading', () => {
     const panel: PanelState = { id: 'p-1', type: 'terminal', title: 'zsh', isDirty: false, worktreeId: 'wt-b' }
     const wts = [
       { id: 'wt-a', path: '/repo', color: '#111111' },
-      { id: 'wt-b', path: '/repo/.cate/worktrees/b', color: '#22aa55' },
+      { id: 'wt-b', path: '/repo/.orquestra/worktrees/b', color: '#22aa55' },
     ]
     const snapshot = createTransferSnapshot(
       panel,

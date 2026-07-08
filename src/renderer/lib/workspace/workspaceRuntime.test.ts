@@ -23,7 +23,7 @@ const wslConn: RuntimeConnection = { kind: 'wsl', runtimeId: 'abc', distro: 'Ubu
 
 function remote(phase: RuntimePhase | undefined, error?: string): WorkspaceState {
   return ws({
-    rootPath: 'cate-runtime://abc/repo',
+    rootPath: 'orquestra-runtime://abc/repo',
     connection: wslConn,
     runtime: phase ? { phase, ...(error ? { error } : {}) } : undefined,
   })

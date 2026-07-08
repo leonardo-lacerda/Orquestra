@@ -1,5 +1,5 @@
 // =============================================================================
-// importExternalEntries — handle files/folders dragged into Cate from the OS
+// importExternalEntries — handle files/folders dragged into Orquestra from the OS
 // file manager (Finder, Explorer, …). Prompts copy/move and imports them into a
 // target workspace directory via the privileged fsImportEntries IPC.
 //
@@ -12,7 +12,7 @@
 import log from '../logger'
 
 /** True when the drag carries OS files (an external drop), not an internal
- *  Cate panel/file drag. */
+ *  Orquestra panel/file drag. */
 export function isExternalFileDrag(e: React.DragEvent): boolean {
   return Array.from(e.dataTransfer.types).includes('Files')
 }

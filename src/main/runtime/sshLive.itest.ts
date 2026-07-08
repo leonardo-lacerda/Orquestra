@@ -2,10 +2,10 @@
 // LIVE SSH integration harness — drives the REAL RuntimeManager + SshTransport
 // against a real server, to reproduce / rule out the reconnect loop in #335.
 //
-// Opt-in only: needs a reachable server + key, so it's gated on CATE_LIVE_SSH=1
+// Opt-in only: needs a reachable server + key, so it's gated on ORQUESTRA_LIVE_SSH=1
 // and a *.itest.ts name that the normal vitest `include` (*.test.ts) skips.
 //
-// Run:  CATE_LIVE_SSH=1 npx vitest run --config vitest.live.config.ts
+// Run:  ORQUESTRA_LIVE_SSH=1 npx vitest run --config vitest.live.config.ts
 // =============================================================================
 
 import { describe, test, expect, vi, beforeAll } from 'vitest'
@@ -15,10 +15,10 @@ import { readFileSync } from 'fs'
 import { execFileSync } from 'child_process'
 
 // Server + key come from the environment so nothing host-specific is committed:
-//   CATE_LIVE_SSH=1 CATE_LIVE_SSH_HOST=1.2.3.4 CATE_LIVE_SSH_USER=root \
-//   CATE_LIVE_SSH_ROOT=/root/ CATE_LIVE_SSH_KEY=~/.ssh/id_ed25519 \
+//   ORQUESTRA_LIVE_SSH=1 ORQUESTRA_LIVE_SSH_HOST=1.2.3.4 ORQUESTRA_LIVE_SSH_USER=root \
+//   ORQUESTRA_LIVE_SSH_ROOT=/root/ ORQUESTRA_LIVE_SSH_KEY=~/.ssh/id_ed25519 \
 //   npx vitest run --config vitest.live.config.ts
-const LIVE = process.env.CATE_LIVE_SSH === '1' && !!process.env.CATE_LIVE_SSH_HOST
+const LIVE = process.env.ORQUESTRA_LIVE_SSH === '1' && !!process.env.ORQUESTRA_LIVE_SSH_HOST
 
 // electron `app` is a path string outside the electron runtime; runtimeArtifacts
 // reads app.isPackaged / getAppPath / getPath. Provide a dev-shaped stub so the
@@ -27,17 +27,17 @@ vi.mock('electron', () => ({
   app: {
     isPackaged: false,
     getAppPath: () => process.cwd(),
-    getPath: () => join(process.cwd(), '.cate-live-tmp'),
-    getName: () => 'Cate',
+    getPath: () => join(process.cwd(), '.orquestra-live-tmp'),
+    getName: () => 'Orquestra',
   },
 }))
 
-const HOST = process.env.CATE_LIVE_SSH_HOST ?? ''
-const USER = process.env.CATE_LIVE_SSH_USER ?? 'root'
-const ROOT = process.env.CATE_LIVE_SSH_ROOT ?? '/root/'
-const KEY = (process.env.CATE_LIVE_SSH_KEY ?? join(homedir(), '.ssh', 'id_ed25519'))
+const HOST = process.env.ORQUESTRA_LIVE_SSH_HOST ?? ''
+const USER = process.env.ORQUESTRA_LIVE_SSH_USER ?? 'root'
+const ROOT = process.env.ORQUESTRA_LIVE_SSH_ROOT ?? '/root/'
+const KEY = (process.env.ORQUESTRA_LIVE_SSH_KEY ?? join(homedir(), '.ssh', 'id_ed25519'))
   .replace(/^~(?=$|\/)/, homedir())
-const RUNTIME_ID = process.env.CATE_LIVE_SSH_ID ?? 'srv_live'
+const RUNTIME_ID = process.env.ORQUESTRA_LIVE_SSH_ID ?? 'srv_live'
 
 /** Count live runtime daemons on the server — one per live transport, so any
  *  count >1 is a leaked/duplicate connection (the smoking gun for #335). */

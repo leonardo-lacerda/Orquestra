@@ -45,7 +45,7 @@ export default function DockZone({ position, renderPanel, getPanelTitle, onClose
   // The canvas handles its own area and stops propagation, so canvas drops
   // still open floating nodes.
   const handleFileDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (e.dataTransfer.types.includes('application/cate-file') || e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes('application/orquestra-file') || e.dataTransfer.types.includes('Files')) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
     }
@@ -53,8 +53,8 @@ export default function DockZone({ position, renderPanel, getPanelTitle, onClose
 
   const handleFileDrop = useCallback(
     async (e: React.DragEvent<HTMLDivElement>) => {
-      const multiData = e.dataTransfer.getData('application/cate-files')
-      const singlePath = e.dataTransfer.getData('application/cate-file')
+      const multiData = e.dataTransfer.getData('application/orquestra-files')
+      const singlePath = e.dataTransfer.getData('application/orquestra-file')
       let paths: string[] = []
       if (multiData) {
         try { paths = JSON.parse(multiData) } catch { /* ignore */ }
@@ -72,7 +72,7 @@ export default function DockZone({ position, renderPanel, getPanelTitle, onClose
       e.stopPropagation()
 
       let lineReveal: { path: string; line: number; column?: number } | null = null
-      const lineRaw = e.dataTransfer.getData('application/cate-file-line')
+      const lineRaw = e.dataTransfer.getData('application/orquestra-file-line')
       if (lineRaw) {
         try { lineReveal = JSON.parse(lineRaw) } catch { /* ignore */ }
       }

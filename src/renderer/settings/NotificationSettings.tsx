@@ -1,14 +1,16 @@
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { SettingRow, Toggle } from './SettingsComponents'
 
 export function NotificationSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
 
   return (
     <div className="flex flex-col gap-1">
       <SettingRow
-        label="Enable notifications"
-        description="Show an OS notification when an agent finishes or needs input"
+        label={t('notifications.enabled')}
+        description={t('notifications.enabled.desc')}
       >
         <Toggle
           checked={store.notificationsEnabled}
@@ -17,8 +19,8 @@ export function NotificationSettings() {
       </SettingRow>
 
       <SettingRow
-        label="Only when window unfocused"
-        description="Skip notifications while Cate is in focus"
+        label={t('notifications.onlyWhenUnfocused')}
+        description={t('notifications.onlyWhenUnfocused.desc')}
       >
         <Toggle
           checked={store.notifyOnlyWhenUnfocused}

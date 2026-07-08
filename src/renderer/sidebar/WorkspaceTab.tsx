@@ -154,7 +154,7 @@ export const TerminalPanelRow: React.FC<TerminalPanelRowProps> = ({ panel, inden
         <PanelRenameInput rename={rename!} />
       ) : (
         <span
-          className={`truncate min-w-0 flex-1 ${isRunning ? 'cate-notif-pulse' : ''}`}
+          className={`truncate min-w-0 flex-1 ${isRunning ? 'orquestra-notif-pulse' : ''}`}
           style={worktreeTitleStyle(worktreeColor, isRunning)}
           onDoubleClick={(e) => { e.stopPropagation(); rename?.onBeginRename() }}
         >
@@ -162,8 +162,8 @@ export const TerminalPanelRow: React.FC<TerminalPanelRowProps> = ({ panel, inden
         </span>
       )}
       {isAwaiting ? (
-        <span className="cate-await-indicator flex-shrink-0" aria-label="awaiting input">
-          <span className="cate-await-dot" style={{ backgroundColor: AWAIT_COLOR }} />
+        <span className="orquestra-await-indicator flex-shrink-0" aria-label="awaiting input">
+          <span className="orquestra-await-dot" style={{ backgroundColor: AWAIT_COLOR }} />
         </span>
       ) : !isRunning && hasPorts ? (
         <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-muted opacity-50" />

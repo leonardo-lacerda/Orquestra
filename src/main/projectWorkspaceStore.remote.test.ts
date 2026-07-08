@@ -18,9 +18,9 @@ vi.mock('./logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock('./windowRegistry', () => ({ broadcastToAll: vi.fn() }))
-vi.mock('./cateGitignore', () => ({
-  ensureCateGitignore: vi.fn(async () => {}),
-  CATE_GITIGNORE_CONTENT: '* \n!workspace.json\n',
+vi.mock('./orquestraGitignore', () => ({
+  ensureOrquestraGitignore: vi.fn(async () => {}),
+  ORQUESTRA_GITIGNORE_CONTENT: '* \n!workspace.json\n',
 }))
 
 // A fake runtime whose file API is backed by a temp dir: the remote POSIX
@@ -81,8 +81,8 @@ function nodeCount(ws: ProjectWorkspaceFile): number {
   return Object.values(ws.canvases ?? {}).reduce((n, c) => n + Object.keys(c.canvasNodes).length, 0)
 }
 
-// cate-runtime://<id>/<posix path> — routed to the runtime, not local fs.
-const LOCATOR = 'cate-runtime://srv1/remote/proj'
+// orquestra-runtime://<id>/<posix path> — routed to the runtime, not local fs.
+const LOCATOR = 'orquestra-runtime://srv1/remote/proj'
 
 const save = (root: string, ws: ProjectWorkspaceFile, sess: ProjectSessionFile) =>
   handlers.get(PROJECT_STATE_SAVE)!(null, root, ws, sess) as Promise<void>
@@ -95,7 +95,7 @@ const load = (root: string) =>
 beforeEach(async () => {
   handlers.clear()
   fileWrites.length = 0
-  hostRoot = await fs.mkdtemp(path.join(tmpdir(), 'cate-pws-remote-'))
+  hostRoot = await fs.mkdtemp(path.join(tmpdir(), 'orquestra-pws-remote-'))
   registerProjectStateHandlers()
 })
 
@@ -103,13 +103,13 @@ afterEach(async () => {
   await fs.rm(hostRoot, { recursive: true, force: true })
 })
 
-describe('project state — remote (cate-runtime://) routing', () => {
-  it('writes .cate/ next to the remote repo via the runtime, and round-trips', async () => {
+describe('project state — remote (orquestra-runtime://) routing', () => {
+  it('writes .orquestra/ next to the remote repo via the runtime, and round-trips', async () => {
     await save(LOCATOR, makeWorkspace([makeNode('a'), makeNode('b')]), makeSession())
 
-    // Files landed at the remote repo's .cate/, addressed by POSIX path.
-    expect(fileWrites).toContain('/remote/proj/.cate/workspace.json')
-    expect(fileWrites).toContain('/remote/proj/.cate/session.json')
+    // Files landed at the remote repo's .orquestra/, addressed by POSIX path.
+    expect(fileWrites).toContain('/remote/proj/.orquestra/workspace.json')
+    expect(fileWrites).toContain('/remote/proj/.orquestra/session.json')
 
     const loaded = await load(LOCATOR)
     expect(loaded).not.toBeNull()
@@ -124,7 +124,7 @@ describe('project state — remote (cate-runtime://) routing', () => {
     expect(nodeCount(loaded!.workspace)).toBe(2)
   })
 
-  it('returns null when the remote repo has no .cate/ yet', async () => {
+  it('returns null when the remote repo has no .orquestra/ yet', async () => {
     expect(await load(LOCATOR)).toBeNull()
   })
 })

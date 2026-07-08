@@ -1,5 +1,5 @@
 // =============================================================================
-// PerfHud — live resource overlay, mounted only under CATE_PERF=1.
+// PerfHud — live resource overlay, mounted only under ORQUESTRA_PERF=1.
 //
 // Pulls the main-process snapshot (per-process CPU/mem, subprocess spawns, IPC
 // bytes, terminal throughput) once a second and combines it with the renderer's
@@ -104,7 +104,7 @@ export default function PerfHud(): JSX.Element | null {
       className="fixed bottom-2 left-2 z-[10000] w-[280px] max-h-[70vh] overflow-auto rounded-md bg-black/80 backdrop-blur-sm text-[10px] leading-tight font-mono text-zinc-200 p-2 pointer-events-auto select-text shadow-lg ring-1 ring-white/10"
     >
       <div className="flex items-center justify-between mb-1 text-zinc-400">
-        <span className="font-semibold tracking-wide text-zinc-300">CATE PERF</span>
+        <span className="font-semibold tracking-wide text-zinc-300">ORQUESTRA PERF</span>
         <span>⌘⌥P to hide</span>
       </div>
 

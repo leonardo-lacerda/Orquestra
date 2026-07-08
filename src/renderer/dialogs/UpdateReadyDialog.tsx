@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ArrowClockwise } from '@phosphor-icons/react'
 import type { UpdateStatus } from '../../shared/electron-api'
-import { CateLogo } from '../ui/CateLogo'
+import { OrquestraLogo } from '../ui/OrquestraLogo'
 import headerImg from '../assets/welcome-header.jpg'
 
 // In-app "update ready" modal. Shown once electron-updater has downloaded an
@@ -111,7 +111,7 @@ export function UpdateReadyDialog() {
                 maskComposite: 'exclude',
               }}
             />
-            <CateLogo size={30} className="relative text-white" />
+            <OrquestraLogo size={30} className="relative text-white" />
           </div>
           {version && (
             <span className="mt-4 text-[10px] font-bold uppercase tracking-widest text-blue-400 [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">

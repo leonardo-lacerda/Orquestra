@@ -10,9 +10,9 @@
 //
 // The sidebar is collapsible (hamburger in header). Per-agent settings
 // (custom agents/prompts/extensions) were removed — the agent is opinionated;
-// provider sign-in lives in the main Cate Settings → Providers.
+// provider sign-in lives in the main Orquestra Settings → Providers.
 //
-// Chats are pi's own session files on disk (<cwd>/.cate/pi-agent/sessions/<cwd>/*.jsonl).
+// Chats are pi's own session files on disk (<cwd>/.orquestra/pi-agent/sessions/<cwd>/*.jsonl).
 // The sidebar reads them via AGENT_LIST_SESSIONS; opening a row resumes that
 // session by spawning pi with `--session <path>`. New chat = dispose + create
 // without a session file, then pick up pi's freshly-written file from getState.
@@ -24,7 +24,7 @@ import {
   Sidebar as SidebarIcon,
   Gear,
 } from '@phosphor-icons/react'
-import { CateLogo } from '../../renderer/ui/CateLogo'
+import { OrquestraLogo } from '../../renderer/ui/OrquestraLogo'
 import log from '../../renderer/lib/logger'
 import { errorMessage as toErrorMessage } from '../../renderer/lib/errorMessage'
 import type { PanelProps } from '../../renderer/panels/types'
@@ -505,9 +505,22 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
     setModelPickerOpen(false)
     if (!activeAgentKey) return
     const ref: AgentModelRef = { provider: m.provider, model: m.model }
+    const prev = useAgentStore.getState().panels[activeAgentKey]?.model ?? null
     useAgentStore.getState().setModel(activeAgentKey, ref)
-    try { await window.electronAPI.agentSetModel(activeAgentKey, ref) }
-    catch (err) { log.warn('[AgentPanel] setModel failed', err) }
+    try {
+      await window.electronAPI.agentSetModel(activeAgentKey, ref)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      log.warn('[AgentPanel] setModel failed', err)
+      // Roll back to the previous model so the UI doesn't show a model that
+      // pi rejected (e.g. npm package catalog is ahead of the pi binary).
+      useAgentStore.getState().setModel(activeAgentKey, prev)
+      useAgentStore.getState().appendSystem(
+        activeAgentKey,
+        `Could not switch to ${m.model}: ${msg}`,
+        'error',
+      )
+    }
   }, [activeAgentKey])
 
   const handleNewChat = useCallback(async () => {
@@ -650,7 +663,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
     if (activeAgentKey) void refreshCommands(activeAgentKey)
   }, [activeAgentKey, refreshCommands])
 
-  // Provider sign-in now lives in the main Cate Settings (Providers section),
+  // Provider sign-in now lives in the main Orquestra Settings (Providers section),
   // not in the agent panel. Opening it there keeps a single source of truth for
   // credentials, which are global and shared across all workspaces.
   const openProviderSettings = useCallback(() => {
@@ -843,7 +856,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
   }, [activeAgentKey, forkMap, refreshStatsAndState, setDraft])
 
   // ---------------------------------------------------------------------------
-  // Plan mode (cate-plan-mode extension)
+  // Plan mode (orquestra-plan-mode extension)
   // ---------------------------------------------------------------------------
 
   const planModeActive = useMemo(
@@ -861,7 +874,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
     if (!activeAgentKey) return
     const key = activeAgentKey
     try {
-      // The cate-plan-mode extension clears plan mode and starts the implement
+      // The orquestra-plan-mode extension clears plan mode and starts the implement
       // turn itself (via a custom message), so there's no synthetic user prompt.
       await window.electronAPI.agentPrompt(key, '/apply-plan')
     } catch (err) {
@@ -931,22 +944,22 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
   // never fires twice.
   const handlePanelDragOver = useCallback((e: React.DragEvent) => {
     const t = e.dataTransfer?.types
-    if (t && (t.includes('application/cate-files') || t.includes('application/cate-file') || t.includes('Files'))) {
+    if (t && (t.includes('application/orquestra-files') || t.includes('application/orquestra-file') || t.includes('Files'))) {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'copy'
     }
   }, [])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
-    // Files dragged from Cate's own Explorer come through as a JSON payload of
-    // absolute paths under `application/cate-files`. Image files are attached as
+    // Files dragged from Orquestra's own Explorer come through as a JSON payload of
+    // absolute paths under `application/orquestra-files`. Image files are attached as
     // image inputs; everything else is inserted into the draft as @-mentions.
-    const cateRaw = e.dataTransfer?.getData('application/cate-files')
-    if (cateRaw) {
+    const orquestraRaw = e.dataTransfer?.getData('application/orquestra-files')
+    if (orquestraRaw) {
       e.preventDefault()
       e.stopPropagation()
       try {
-        const paths = JSON.parse(cateRaw) as string[]
+        const paths = JSON.parse(orquestraRaw) as string[]
         if (Array.isArray(paths) && paths.length > 0) {
           const imagePaths = paths.filter((p) => imageMimeForPath(p))
           const otherPaths = paths.filter((p) => !imageMimeForPath(p))
@@ -960,7 +973,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
             // A search-line drag carries the line number — mention it as
             // @path:line so the agent gets the exact location.
             let lineRef: LineRef | null = null
-            const lineRaw = e.dataTransfer.getData('application/cate-file-line')
+            const lineRaw = e.dataTransfer.getData('application/orquestra-file-line')
             if (lineRaw) {
               try { lineRef = JSON.parse(lineRaw) } catch { /* ignore */ }
             }
@@ -1039,7 +1052,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
                 onClick={() => { setModelPickerOpen((v) => { if (!v) void refreshModels(); return !v }) }}
                 className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[12px] text-primary hover:bg-hover"
               >
-                <CateLogo size={12} className="text-agent-light" />
+                <OrquestraLogo size={12} className="text-agent-light" />
                 <span className="truncate max-w-[220px]">
                   {selectedModel ? selectedModel.model : 'Pick a model'}
                 </span>
@@ -1102,7 +1115,7 @@ export default function AgentPanel({ panelId, workspaceId }: PanelProps) {
               <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center px-6 py-8 min-h-0">
                 <div className="w-full max-w-[520px] flex flex-col items-center">
                   <div className="w-12 h-12 rounded-2xl bg-agent/15 flex items-center justify-center mb-4">
-                    <CateLogo size={22} className="text-agent-light" />
+                    <OrquestraLogo size={22} className="text-agent-light" />
                   </div>
                   <div className="text-[16px] font-medium text-primary mb-3 text-center">
                     What should we work on?

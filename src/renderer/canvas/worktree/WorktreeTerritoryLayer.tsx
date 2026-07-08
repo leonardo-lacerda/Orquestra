@@ -11,7 +11,7 @@
 // update + one full-screen-quad draw — full resolution every frame, no tile cache.
 // The CPU `drawTerritory` is kept as a verified fallback (WebGL2 unavailable /
 // context lost) and as the A/B reference. Backend is forceable via localStorage
-// `cate.territory.backend` = 'gl' | 'cpu'.
+// `orquestra.territory.backend` = 'gl' | 'cpu'.
 // =============================================================================
 
 import React, { useEffect, useRef, useState } from 'react'
@@ -49,7 +49,7 @@ const ENABLE_POCKET_FILL = false
 
 function forcedBackend(): Backend | null {
   try {
-    const v = localStorage.getItem('cate.territory.backend')
+    const v = localStorage.getItem('orquestra.territory.backend')
     return v === 'cpu' || v === 'gl' ? v : null
   } catch { return null }
 }

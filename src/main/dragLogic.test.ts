@@ -312,7 +312,7 @@ describe('cross-window claim records', () => {
 
 // -----------------------------------------------------------------------------
 // isCursorInsideAnyAppWindow — pins the "hide the native ghost when cursor is
-// over any Cate window" decision. The bug this prevents: dragging a panel out
+// over any Orquestra window" decision. The bug this prevents: dragging a panel out
 // of a detached window and back over the main app rendered TWO ghosts (the
 // native ghost + the in-renderer DragOverlay) until drop.
 // -----------------------------------------------------------------------------

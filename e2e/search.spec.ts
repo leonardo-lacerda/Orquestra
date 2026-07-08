@@ -27,12 +27,12 @@ type Snapshot = {
 }
 
 const snap = (page: Page): Promise<Snapshot> =>
-  page.evaluate(() => window.__cateE2E!.getSearchSnapshot() as unknown) as Promise<Snapshot>
+  page.evaluate(() => window.__orquestraE2E!.getSearchSnapshot() as unknown) as Promise<Snapshot>
 
 /** Open the Search view rooted at the repo; returns the query input locator. */
 async function openSearch(page: Page) {
-  await page.evaluate((root) => window.__cateE2E!.setWorkspaceRoot(root), REPO_ROOT)
-  await page.evaluate(() => window.__cateE2E!.openSidebarView('search'))
+  await page.evaluate((root) => window.__orquestraE2E!.setWorkspaceRoot(root), REPO_ROOT)
+  await page.evaluate(() => window.__orquestraE2E!.openSidebarView('search'))
   const input = page.locator('input[aria-label="Search"]')
   await input.waitFor({ state: 'visible', timeout: 30_000 })
   return input
@@ -80,7 +80,7 @@ test.describe('content search', () => {
 
     await mark.click()
     await expect
-      .poll(async () => page.evaluate(() => window.__cateE2E!.editorPaths().length), { timeout: 30_000 })
+      .poll(async () => page.evaluate(() => window.__orquestraE2E!.editorPaths().length), { timeout: 30_000 })
       .toBeGreaterThan(0)
   })
 
@@ -222,7 +222,7 @@ test.describe('content search', () => {
     await expect(page.locator('[data-selected="true"]')).toHaveAttribute('data-testid', 'search-line')
     await tree.press('Enter')
     await expect
-      .poll(async () => page.evaluate(() => window.__cateE2E!.editorPaths().length), { timeout: 30_000 })
+      .poll(async () => page.evaluate(() => window.__orquestraE2E!.editorPaths().length), { timeout: 30_000 })
       .toBeGreaterThan(0)
   })
 
@@ -236,7 +236,7 @@ test.describe('content search', () => {
     expect(lineNo).toBeGreaterThan(0)
     await line.click()
 
-    const reveal = await page.evaluate(() => window.__cateE2E!.lastEditorReveal())
+    const reveal = await page.evaluate(() => window.__orquestraE2E!.lastEditorReveal())
     expect(reveal?.line).toBe(lineNo)
   })
 

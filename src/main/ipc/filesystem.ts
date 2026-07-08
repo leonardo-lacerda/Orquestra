@@ -396,10 +396,23 @@ export function registerHandlers(): void {
       const win = windowFromEvent(event)
       const { runtime, path: destP, runtimeId } = fileRuntimeFor(destDir)
       const safeDestDir = await runtime.validatePathStrict(destP, win?.id, workspaceId)
+      // Validate source paths against allowed roots so 'move' mode cannot
+      // delete files from outside the workspace. 'copy' mode is validated too
+      // for defense-in-depth (matches every other file-read IPC handler).
+      const validatedSources: string[] = []
+      for (const src of sources) {
+        try {
+          const safe = await runtime.validatePathStrict(src, win?.id, workspaceId)
+          validatedSources.push(safe)
+        } catch {
+          log.warn('[FS_IMPORT_ENTRIES] source outside allowed roots: %s', src)
+          if (mode === 'move') throw new Error(`Import failed: source path not allowed`)
+        }
+      }
       const result =
         runtimeId === LOCAL_RUNTIME_ID
-          ? await runtime.file.importEntries(sources, safeDestDir, mode, win?.id)
-          : await uploadEntriesToRuntime(runtime, sources, safeDestDir, mode)
+          ? await runtime.file.importEntries(validatedSources, safeDestDir, mode, win?.id)
+          : await uploadEntriesToRuntime(runtime, validatedSources, safeDestDir, mode)
       return {
         ...result,
         created: result.created.map((p) => encodeResultPath(runtimeId, p)),

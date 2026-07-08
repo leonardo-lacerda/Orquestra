@@ -58,7 +58,7 @@ describe('runtime loopback (real daemon capabilities over the wire)', () => {
   let rootDir: string
 
   beforeEach(async () => {
-    rootDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'cate-loopback-')))
+    rootDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-loopback-')))
     addAllowedRoot(rootDir)
     await fs.writeFile(path.join(rootDir, 'alpha.ts'), 'const needle = 42\n')
     await fs.writeFile(path.join(rootDir, 'pic.bin'), Buffer.from([0, 1, 2, 3, 255]))
@@ -163,7 +163,7 @@ describe('runtime loopback (real daemon capabilities over the wire)', () => {
     const { remote } = loopback(daemonApi())
     // A file OUTSIDE any allowed root (not under rootDir, not under tmpdir): the
     // daemon's strict validation must reject it until the grant is forwarded.
-    const outsideDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'cate-grant-')))
+    const outsideDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-grant-')))
     const outsideFile = path.join(outsideDir, 'granted.txt')
     await fs.writeFile(outsideFile, 'secret\n')
     try {
@@ -213,7 +213,7 @@ describe('runtime loopback (real daemon capabilities over the wire)', () => {
   // per-window grants after the window closes.
   test('clearFileGrantsForWindow / clearScopedWriteAllowancesForWindow round-trip and revoke daemon grants', async () => {
     const { remote } = loopback(daemonApi())
-    const outsideDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'cate-clear-')))
+    const outsideDir = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-clear-')))
     const outsideFile = path.join(outsideDir, 'granted.txt')
     await fs.writeFile(outsideFile, 'secret\n')
     try {

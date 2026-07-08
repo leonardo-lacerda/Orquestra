@@ -17,7 +17,7 @@ test.beforeEach(async () => {
   // Keep the left sidebar EXPANDED (default) so it occupies real width and the
   // canvas container starts to its right — that left strip is the region the
   // drop indicator must not paint over.
-  await page.evaluate(() => window.__cateE2E!.setActiveLeftSidebarView('explorer'))
+  await page.evaluate(() => window.__orquestraE2E!.setActiveLeftSidebarView('explorer'))
   await page.waitForTimeout(300) // 200ms width transition + margin
   await resetViewport(page)
 })
@@ -53,7 +53,7 @@ test('dock-split indicator is clamped to the canvas, never over the sidebar', as
     const sb = document.querySelector('[data-app-sidebar="left"]')!.getBoundingClientRect()
     const r = ind?.getBoundingClientRect() ?? null
     return {
-      targetKind: window.__cateE2E!.dragSnapshot().targetKind,
+      targetKind: window.__orquestraE2E!.dragSnapshot().targetKind,
       attr: ind?.getAttribute('data-drag-indicator') ?? null,
       indicatorLeft: r ? r.left : null,
       sidebarRight: sb.right,

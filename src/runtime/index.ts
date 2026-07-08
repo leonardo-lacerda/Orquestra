@@ -1,11 +1,11 @@
 // =============================================================================
-// cate-runtime daemon entry. Runs as a standalone Node program — locally as a
+// orquestra-runtime daemon entry. Runs as a standalone Node program — locally as a
 // child process, on a server over SSH exec, or inside WSL — and speaks the
 // LF-JSON runtime protocol over stdio. stdin carries `req` frames; stdout
 // carries `hello` / `res` / `evt` frames. Nothing electron is imported here, so
 // this bundles into a runtime-agnostic file (see build/esbuild.config.mjs).
 //
-// Usage: cate-runtime --root <abs-path> --id <runtimeId> [--exclude a,b,c]
+// Usage: orquestra-runtime --root <abs-path> --id <runtimeId> [--exclude a,b,c]
 // =============================================================================
 
 import { addAllowedRoot } from '../main/ipc/pathValidation'
@@ -32,7 +32,7 @@ function parseArgs(argv: string[]): DaemonArgs {
     else if (a === '--idle-suspend') idleSuspend = true
   }
   if (!root) {
-    process.stderr.write('cate-runtime: --root <abs-path> is required\n')
+    process.stderr.write('orquestra-runtime: --root <abs-path> is required\n')
     process.exit(2)
   }
   return { root, id, exclusions, idleSuspend }

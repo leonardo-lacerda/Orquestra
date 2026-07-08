@@ -73,7 +73,7 @@ function CodePreview({
   )
 }
 
-// ask_user (cate-ask-user) renders as a normal collapsible tool row like every
+// ask_user (orquestra-ask-user) renders as a normal collapsible tool row like every
 // other tool — a one-line summary that expands — but the expanded body is nice
 // readable text (the questions, and the answer once given) instead of raw JSON.
 export function AskUserToolView({ msg, shimmer }: { msg: ToolMessage; shimmer?: boolean }) {
@@ -90,10 +90,10 @@ export function AskUserToolView({ msg, shimmer }: { msg: ToolMessage; shimmer?: 
   const hasExtras = questions.length > 0 || !!msg.result || !!msg.error
 
   return (
-    <div className="text-[12px] cate-fade-in">
+    <div className="text-[12px] orquestra-fade-in">
       <button
         onClick={() => hasExtras && setExpanded((v) => !v)}
-        className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'cate-notif-pulse' : ''} ${hasExtras ? 'hover:text-primary' : 'cursor-default'}`}
+        className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'orquestra-notif-pulse' : ''} ${hasExtras ? 'hover:text-primary' : 'cursor-default'}`}
       >
         <span className="text-muted shrink-0">Asked</span>
         <span className="truncate text-primary/90 flex-1">{summary}</span>
@@ -180,10 +180,10 @@ export function ToolCard({ msg, shimmer }: { msg: ToolMessage; shimmer?: boolean
     const output = liveOutput ?? msg.result ?? ''
     const hasOutput = !!output || !!msg.error
     return (
-      <div className="text-[12px] cate-fade-in">
+      <div className="text-[12px] orquestra-fade-in">
         <button
           onClick={() => hasOutput && setExpanded((v) => !v)}
-          className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'cate-notif-pulse' : ''} ${hasOutput ? 'hover:text-primary' : 'cursor-default'}`}
+          className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'orquestra-notif-pulse' : ''} ${hasOutput ? 'hover:text-primary' : 'cursor-default'}`}
         >
           <span className="text-muted shrink-0">{verb}</span>
           <span className="truncate text-primary/90 font-mono flex-1">{cmd}</span>
@@ -206,10 +206,10 @@ export function ToolCard({ msg, shimmer }: { msg: ToolMessage; shimmer?: boolean
   }
 
   return (
-    <div className="text-[12px] cate-fade-in">
+    <div className="text-[12px] orquestra-fade-in">
       <button
         onClick={() => hasExtras && setExpanded((v) => !v)}
-        className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'cate-notif-pulse' : ''} ${hasExtras ? 'hover:text-primary' : 'cursor-default'}`}
+        className={`w-full flex items-center gap-1.5 text-left ${isRunning || shimmer ? 'orquestra-notif-pulse' : ''} ${hasExtras ? 'hover:text-primary' : 'cursor-default'}`}
       >
         <span className="text-muted shrink-0">{verb}</span>
         <span className="truncate text-primary/90 font-mono flex-1">{summary}</span>

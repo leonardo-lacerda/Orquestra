@@ -435,7 +435,7 @@ export function createTerritoryGL(canvas: HTMLCanvasElement): TerritoryGL | null
       gl.drawArrays(gl.TRIANGLES, 0, 3)
       gl.bindVertexArray(null)
       gl.disable(gl.SCISSOR_TEST)
-      // Perf instrumentation (no-op unless CATE_PERF=1): draw rate plus shaded
+      // Perf instrumentation (no-op unless ORQUESTRA_PERF=1): draw rate plus shaded
       // vs full-canvas area in kilopixels, so the e2e perf harness can report
       // how much fragment work the scissor saved.
       perfCount('territoryDraw')

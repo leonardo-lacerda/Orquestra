@@ -15,6 +15,9 @@ import {
   TERMINAL_SCROLLBACK_SAVE,
   TERMINAL_SET_VISIBILITY,
   TERMINAL_CLIPBOARD_WRITE,
+  TERMINAL_SET_MAESTRO,
+  TERMINAL_PIPE_CREATE,
+  TERMINAL_PIPE_DESTROY,
   FS_READ_FILE,
   FS_READ_BINARY,
   FS_WRITE_FILE,
@@ -244,9 +247,32 @@ import {
   AUTH_SAVE_API_KEY,
   AUTH_DELETE,
   PERF_GET,
+  ACP_START_AGENT,
+  ACP_STOP_AGENT,
+  ACP_CREATE_SESSION,
+  ACP_SEND_PROMPT,
+  ACP_CANCEL_SESSION,
+  ACP_CLOSE_SESSION,
+  ACP_SESSION_UPDATE,
+  ACP_SESSION_STATUS,
+  ACP_REQUEST_PERMISSION,
+  ACP_PERMISSION_RESPONSE,
+  API_ORCHESTRATE,
+  MAESTRO_RECRUIT,
+  MAESTRO_DISMISS,
+  MAESTRO_CONNECT,
+  MAESTRO_LIST,
+  MAESTRO_REASSIGN,
+  ORQUESTRA_TRACK_WORKER,
+  APP_AUTH_RESTORE,
+  APP_AUTH_SIGN_IN,
+  APP_AUTH_SIGN_OUT,
+  APP_AUTH_REFRESH_SUB,
+  APP_AUTH_STATE,
 } from '../shared/ipc-channels'
 import type { AppSettings, SearchResultBatch, SearchDoneEvent } from '../shared/types'
-import type { ElectronAPI, UpdateStatus } from '../shared/electron-api'
+import type { AcpAgentConfig, AcpAgentInfo, AcpSessionInfo, AcpSessionUpdate, AcpPermissionRequest, ApiOrchestratorConfig } from '../shared/acp-types'
+import type { ElectronAPI, UpdateStatus, AppAuthState } from '../shared/electron-api'
 
 // Cache native-fullscreen state so renderer drag handlers can synchronously
 // check it without an IPC round-trip on every mousemove. Main BROADCASTS
@@ -324,6 +350,10 @@ const invokeForwarders = {
   terminalScrollbackSave: makeInvoker<'terminalScrollbackSave'>(TERMINAL_SCROLLBACK_SAVE),
   terminalSetVisibility: makeInvoker<'terminalSetVisibility'>(TERMINAL_SET_VISIBILITY),
   terminalClipboardWrite: makeInvoker<'terminalClipboardWrite'>(TERMINAL_CLIPBOARD_WRITE),
+  terminalSetMaestro: makeInvoker<"terminalSetMaestro">(TERMINAL_SET_MAESTRO),
+  orquestraTrackWorker: makeInvoker<"orquestraTrackWorker">(ORQUESTRA_TRACK_WORKER),
+  terminalPipeCreate: makeInvoker<'terminalPipeCreate'>(TERMINAL_PIPE_CREATE),
+  terminalPipeDestroy: makeInvoker<'terminalPipeDestroy'>(TERMINAL_PIPE_DESTROY),
 
   // Filesystem
   fsReadFile: makeInvoker<'fsReadFile'>(FS_READ_FILE),
@@ -558,14 +588,29 @@ const invokeForwarders = {
   authOAuthPromptReply: makeInvoker<'authOAuthPromptReply'>(AUTH_OAUTH_PROMPT_REPLY),
   authSaveApiKey: makeInvoker<'authSaveApiKey'>(AUTH_SAVE_API_KEY),
   authDelete: makeInvoker<'authDelete'>(AUTH_DELETE),
+
+  // ACP — Agent Client Protocol
+  acpStartAgent: makeInvoker<'acpStartAgent'>(ACP_START_AGENT),
+  acpStopAgent: makeInvoker<'acpStopAgent'>(ACP_STOP_AGENT),
+  acpCreateSession: makeInvoker<'acpCreateSession'>(ACP_CREATE_SESSION),
+  acpSendPrompt: makeInvoker<'acpSendPrompt'>(ACP_SEND_PROMPT),
+  acpCancelSession: makeInvoker<'acpCancelSession'>(ACP_CANCEL_SESSION),
+  acpCloseSession: makeInvoker<'acpCloseSession'>(ACP_CLOSE_SESSION),
+  apiOrchestrate: makeInvoker<'apiOrchestrate'>(API_ORCHESTRATE),
+
+  // App auth (Supabase login for the desktop app)
+  appAuthRestore: makeInvoker<'appAuthRestore'>(APP_AUTH_RESTORE),
+  appAuthSignIn: makeInvoker<'appAuthSignIn'>(APP_AUTH_SIGN_IN),
+  appAuthSignOut: makeInvoker<'appAuthSignOut'>(APP_AUTH_SIGN_OUT),
+  appAuthRefreshSubscription: makeInvoker<'appAuthRefreshSubscription'>(APP_AUTH_REFRESH_SUB),
 } satisfies Partial<ElectronAPI>
 
 contextBridge.exposeInMainWorld('electronAPI', {
   ...invokeForwarders,
-  isE2E: process.env.CATE_E2E === '1',
-  isPerf: process.env.CATE_PERF === '1',
+  isE2E: process.env.ORQUESTRA_E2E === '1',
+  isPerf: process.env.ORQUESTRA_PERF === '1',
 
-  /** Set this window's UI zoom factor (Cate chrome only — webview content keeps
+  /** Set this window's UI zoom factor (Orquestra chrome only — webview content keeps
    *  its own zoom). Applied per-renderer; each window calls this on mount and
    *  whenever the uiScale setting changes. */
   setUiScale(scale: number): void {
@@ -744,7 +789,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cross-window drag-and-drop
   // ---------------------------------------------------------------------------
 
-  /** Synchronous check: is any Cate BrowserWindow currently in macOS
+  /** Synchronous check: is any Orquestra BrowserWindow currently in macOS
    *  native fullscreen? Uses the cached push value when available and
    *  falls back to a sync IPC for the authoritative answer. Drag handlers
    *  call this on every mousemove — that's fine at ~60 Hz. */
@@ -772,7 +817,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /** Subscribe to native-fullscreen state changes. Fires with the new boolean
-   *  whenever any Cate window enters or leaves macOS native fullscreen. */
+   *  whenever any Orquestra window enters or leaves macOS native fullscreen. */
   onFullscreenChange(callback: (isFullscreen: boolean) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, value: boolean): void => {
       callback(Boolean(value))
@@ -782,7 +827,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   /** Subscribe to workspace.json external-edit state. Fires whenever a project's
-   *  on-disk workspace file diverges from what Cate last wrote (edited
+   *  on-disk workspace file diverges from what Orquestra last wrote (edited
    *  externally) or comes back in sync after a reload. */
   onWorkspaceExternalEdit(callback: (payload: { rootPath: string }) => void): () => void {
     return createIpcListener(WORKSPACE_EXTERNAL_EDIT, callback)
@@ -931,4 +976,61 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return createIpcListener(AUTH_CHANGED, callback)
   },
 
+  // ---------------------------------------------------------------------------
+  // ACP — Agent Client Protocol
+  // ---------------------------------------------------------------------------
+
+  onAcpSessionUpdate(callback: (update: AcpSessionUpdate) => void): () => void {
+    return createIpcListener(ACP_SESSION_UPDATE, callback)
+  },
+
+  onAcpSessionStatus(callback: (info: AcpSessionInfo) => void): () => void {
+    return createIpcListener(ACP_SESSION_STATUS, callback)
+  },
+
+  onAcpRequestPermission(callback: (request: AcpPermissionRequest) => void): () => void {
+    return createIpcListener(ACP_REQUEST_PERMISSION, callback)
+  },
+
+  acpPermissionResponse(toolCallId: string, allowed: boolean): void {
+    ipcRenderer.send(ACP_PERMISSION_RESPONSE, toolCallId, allowed)
+  },
+
+
+  // --- Maestro event listeners (main -> renderer) ---
+  onMaestroRecruit(callback: (maestroId: string, args: { role: string; agent?: string; name?: string }) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: { role: string; agent?: string; name?: string }) => callback(maestroId, args)
+    ipcRenderer.on(MAESTRO_RECRUIT, handler)
+    return () => ipcRenderer.removeListener(MAESTRO_RECRUIT, handler)
+  },
+  onMaestroDismiss(callback: (maestroId: string, args: { target: string }) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: { target: string }) => callback(maestroId, args)
+    ipcRenderer.on(MAESTRO_DISMISS, handler)
+    return () => ipcRenderer.removeListener(MAESTRO_DISMISS, handler)
+  },
+  onMaestroConnect(callback: (maestroId: string, args: { target: string; path: string }) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: { target: string; path: string }) => callback(maestroId, args)
+    ipcRenderer.on(MAESTRO_CONNECT, handler)
+    return () => ipcRenderer.removeListener(MAESTRO_CONNECT, handler)
+  },
+  onMaestroList(callback: (maestroId: string, args: Record<string, never>) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: Record<string, never>) => callback(maestroId, args)
+    ipcRenderer.on(MAESTRO_LIST, handler)
+    return () => ipcRenderer.removeListener(MAESTRO_LIST, handler)
+  },
+  onMaestroReassign(callback: (maestroId: string, args: { target: string; role: string }) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: { target: string; role: string }) => callback(maestroId, args)
+    ipcRenderer.on(MAESTRO_REASSIGN, handler)
+    return () => ipcRenderer.removeListener(MAESTRO_REASSIGN, handler)
+  },
+
+  // ---------------------------------------------------------------------------
+  // App Auth — Supabase login for the desktop app
+  // ---------------------------------------------------------------------------
+
+  onAppAuthState(callback: (state: AppAuthState) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, state: AppAuthState) => callback(state)
+    ipcRenderer.on(APP_AUTH_STATE, handler)
+    return () => ipcRenderer.removeListener(APP_AUTH_STATE, handler)
+  },
 })

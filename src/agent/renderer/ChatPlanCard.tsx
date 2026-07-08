@@ -1,6 +1,6 @@
 // =============================================================================
 // ChatPlanCard — "Plan ready" card rendered for `plan_complete` tool calls
-// emitted by the cate-plan-mode pi extension. Shows summary + ordered steps +
+// emitted by the orquestra-plan-mode pi extension. Shows summary + ordered steps +
 // three actions: Implement, Refine plan, Clear context & implement. Locks after
 // any action so historical cards can't re-trigger.
 // =============================================================================

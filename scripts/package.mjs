@@ -39,7 +39,7 @@ function run(command, commandArgs, options = {}) {
 }
 
 // Ship the host-target runtime tarball into the installer under a fixed name.
-// electron-builder can't compute the per-target name (cate-runtime-<version>-<target>.tgz),
+// electron-builder can't compute the per-target name (orquestra-runtime-<version>-<target>.tgz),
 // so copy it to dist-runtime/runtime-host.tgz (extraResources → resources/runtime-host.tgz).
 function plat(p) {
   return p === 'win32' ? 'win32' : p // darwin | linux pass through
@@ -47,7 +47,7 @@ function plat(p) {
 function stageHostRuntimeTarball() {
   const version = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf-8')).version
   const target = `${plat(process.platform)}-${process.arch}`
-  const src = path.join(repoRoot, 'dist-runtime', `cate-runtime-${version}-${target}.tgz`)
+  const src = path.join(repoRoot, 'dist-runtime', `orquestra-runtime-${version}-${target}.tgz`)
   const dest = path.join(repoRoot, 'dist-runtime', 'runtime-host.tgz')
   if (!existsSync(src)) {
     throw new Error(

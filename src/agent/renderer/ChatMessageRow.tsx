@@ -70,7 +70,7 @@ export const MessageRow = memo(function MessageRow({
   }
   if (msg.type === 'assistant') {
     return (
-      <div className={`text-[13.5px] text-primary leading-relaxed space-y-1.5 cate-fade-in ${shimmer ? 'cate-notif-pulse' : ''}`}>
+      <div className={`text-[13.5px] text-primary leading-relaxed space-y-1.5 orquestra-fade-in ${shimmer ? 'orquestra-notif-pulse' : ''}`}>
         {msg.thinking && <ThinkingBlock text={msg.thinking} streaming={msg.streaming && !msg.text} />}
         <div>
           <Markdown text={msg.text} />
@@ -131,12 +131,12 @@ export const MessageRow = memo(function MessageRow({
 function ThinkingBlock({ text, streaming }: { text: string; streaming: boolean }) {
   const [expanded, setExpanded] = useState(false)
   return (
-    <div className="text-[12px] cate-fade-in">
+    <div className="text-[12px] orquestra-fade-in">
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-1.5 text-left text-muted"
       >
-        <span className={streaming ? 'cate-notif-pulse' : ''}>Thinking</span>
+        <span className={streaming ? 'orquestra-notif-pulse' : ''}>Thinking</span>
       </button>
       {expanded && (
         <pre className="mt-1 pl-4 text-[11px] text-primary/70 whitespace-pre-wrap break-words font-mono leading-snug max-h-[280px] overflow-auto select-text cursor-text">

@@ -1,7 +1,7 @@
 // =============================================================================
 // StartPage — the browser "new tab" page. A clean, minimal launchpad: a quiet
 // greeting, a hero search box, a favorites grid and a recent-history list, all
-// fed by the shared global browserStore. Styled purely with Cate's theme tokens
+// fed by the shared global browserStore. Styled purely with Orquestra's theme tokens
 // (surface levels + the selected accent), so it matches whatever theme is active.
 // Self-contained (no network): site glyphs are generated locally.
 // =============================================================================

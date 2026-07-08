@@ -5,7 +5,7 @@
 // `<userData>/canvas-backgrounds/` and store that managed path in settings,
 // rather than referencing the original file. This makes the wallpaper durable:
 // it survives the source file being moved/renamed/deleted and is self-contained
-// under userData (alongside the rest of Cate's persisted state). The copy is
+// under userData (alongside the rest of Orquestra's persisted state). The copy is
 // named by a hash of its contents so re-picking the same image is idempotent.
 //
 // `prune` keeps the directory to just the current wallpaper, deleting orphaned

@@ -32,7 +32,7 @@ function settingsPath() {
 }
 
 beforeEach(() => {
-  dirRef.current = path.join(tmpdir(), `cate-settings-test-${process.pid}-${counter++}`)
+  dirRef.current = path.join(tmpdir(), `orquestra-settings-test-${process.pid}-${counter++}`)
   fs.mkdirSync(dirRef.current, { recursive: true })
 })
 

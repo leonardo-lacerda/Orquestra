@@ -14,11 +14,15 @@ import { registerUIStateHandlers } from './uiStateStore'
 import { registerProjectStateHandlers } from './projectWorkspaceStore'
 import { registerHandlers as registerMenuHandlers } from './ipc/menu'
 import { registerHandlers as registerNotificationHandlers } from './ipc/notifications'
+import { registerHandlers as registerAcpHandlers } from './ipc/acp'
+import { registerApiOrchestratorHandlers } from './acp/apiOrchestrator'
 import { registerAgentHandlers } from '../agent/main/ipcAgent'
 import { registerSkillHandlers } from '../skills/main/ipcSkills'
 import { registerAuthHandlers } from '../agent/main/ipcAuth'
 import { authManager } from '../agent/main/authManager'
 import { AgentManager } from '../agent/main/agentManager'
+import { electronAuth } from './supabase/electronAuth'
+import { registerAppAuthHandlers } from './ipc/authApp'
 
 // Shared singletons for pi agent + auth.
 const agentManager = new AgentManager(authManager)
@@ -51,7 +55,7 @@ import { setMainWindowReady, flushPendingOpenPaths, registerOpenFileHandler } fr
 import { fireStartupTelemetry, registerTelemetryNoticeHandler } from './lifecycle/telemetry'
 import { registerLifecycleHandlers } from './lifecycle/shutdown'
 
-// NOTE: runSmokeAssertions only ever runs when CATE_SMOKE_TEST=1. The 1200 ms
+// NOTE: runSmokeAssertions only ever runs when ORQUESTRA_SMOKE_TEST=1. The 1200 ms
 // wait below is part of the smoke-only branch in mainWin.once('ready-to-show')
 // and never executes on normal launches. Do not re-introduce it on the hot path.
 async function runSmokeAssertions(win: BrowserWindow): Promise<void> {
@@ -103,9 +107,11 @@ function registerCriticalHandlers(): void {
   registerDockWindowHandlers({ createWindow })
   registerWindowPanelHandlers()
   registerDragHandlers({ createWindow })
-  // Resource profiler — no-op unless CATE_PERF=1.
+  // Resource profiler — no-op unless ORQUESTRA_PERF=1.
   startPerfMonitor()
   ipcMain.handle(PERF_GET, () => getLatestSnapshot())
+  // App auth (Supabase login) — must be ready before the renderer mounts.
+  registerAppAuthHandlers()
 }
 
 /**
@@ -121,6 +127,8 @@ function registerDeferredHandlers(): void {
   registerAuthHandlers(authManager)
   registerAgentHandlers(authManager, agentManager)
   registerSkillHandlers()
+  registerAcpHandlers()
+  registerApiOrchestratorHandlers()
   registerRuntimeHandlers()
 }
 
@@ -129,13 +137,13 @@ function registerDeferredHandlers(): void {
 // =============================================================================
 
 // Set app name before menu and window creation
-app.setName('Cate')
+app.setName('Orquestra')
 
 // Windows: the toast notification system keys off the AppUserModelID, and it
 // must match the install shortcut's ID (electron-builder uses `appId`) for the
 // notification 'click' event to fire reliably. No-op on macOS/Linux.
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.cate.app')
+  app.setAppUserModelId('com.orquestra.app')
 }
 
 // In dev mode, use a separate userData directory so dev and production don't collide
@@ -147,7 +155,7 @@ if (!app.isPackaged) {
 // dedicated dir that's wiped on every launch, so the app boots exactly like a
 // brand-new install: telemetry notice + onboarding tour, empty session, no
 // recent projects or saved window geometry. Dev-only; never in a packaged app.
-if (!app.isPackaged && process.env.CATE_FRESH_USERDATA === '1') {
+if (!app.isPackaged && process.env.ORQUESTRA_FRESH_USERDATA === '1') {
   const fs = require('fs') as typeof import('fs')
   const dir = path.join(app.getPath('userData'), 'FirstStart')
   try { fs.rmSync(dir, { recursive: true, force: true }) } catch { /* noop */ }
@@ -165,8 +173,8 @@ if (!app.isPackaged && process.env.CATE_FRESH_USERDATA === '1') {
 // acknowledged the current TELEMETRY_NOTICE_VERSION (exactly like a real user
 // updating into this release). On major/minor bumps the post-update feedback
 // dialog appears alongside it; a patch bump shows the notice only. See dev:update:*.
-if (!app.isPackaged && (process.env.CATE_SIMULATE_UPDATE === 'major' || process.env.CATE_SIMULATE_UPDATE === 'minor' || process.env.CATE_SIMULATE_UPDATE === 'patch')) {
-  const level = process.env.CATE_SIMULATE_UPDATE
+if (!app.isPackaged && (process.env.ORQUESTRA_SIMULATE_UPDATE === 'major' || process.env.ORQUESTRA_SIMULATE_UPDATE === 'minor' || process.env.ORQUESTRA_SIMULATE_UPDATE === 'patch')) {
+  const level = process.env.ORQUESTRA_SIMULATE_UPDATE
   const fs = require('fs') as typeof import('fs')
   const dir = path.join(app.getPath('userData'), `SimUpdate-${level}`)
   try { fs.rmSync(dir, { recursive: true, force: true }) } catch { /* noop */ }
@@ -177,8 +185,8 @@ if (!app.isPackaged && (process.env.CATE_SIMULATE_UPDATE === 'major' || process.
 }
 
 // In E2E mode, use a fresh tmpdir per launch so Playwright runs are isolated
-// from each other and from local dev state. The harness sets CATE_E2E=1.
-if (process.env.CATE_E2E === '1') {
+// from each other and from local dev state. The harness sets ORQUESTRA_E2E=1.
+if (process.env.ORQUESTRA_E2E === '1') {
   // The e2e window is never shown, so Chromium throttles it. Per-window
   // backgroundThrottling:false isn't enough on Windows: its native occlusion
   // detection marks a never-mapped window as occluded and freezes the
@@ -194,7 +202,7 @@ if (process.env.CATE_E2E === '1') {
 
   const fs = require('fs') as typeof import('fs')
   const os = require('os') as typeof import('os')
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-e2e-'))
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-e2e-'))
   app.setPath('userData', tmp)
   // Keep the e2e app out of the macOS dock / app-switcher so launching it never
   // foregrounds the shared Electron bundle (and a running `npm run dev`).
@@ -208,7 +216,7 @@ registerOpenFileHandler()
 // Build application menu
 buildApplicationMenu()
 
-log.info('Cate v%s starting (electron %s, node %s, platform %s)', app.getVersion(), process.versions.electron, process.versions.node, process.platform)
+log.info('Orquestra v%s starting (electron %s, node %s, platform %s)', app.getVersion(), process.versions.electron, process.versions.node, process.platform)
 
 // Load persisted settings synchronously so window-creation code paths can read
 // them before the async electron-store finishes initializing.
@@ -229,7 +237,7 @@ if (getSettingSync('disableGpuRasterization')) {
 }
 
 // Scope the onboarding tour to genuine first installs. Anyone who has launched
-// Cate before is marked past it, so an update never replays the tour. The
+// Orquestra before is marked past it, so an update never replays the tour. The
 // telemetry notice (WelcomeDialog) intentionally has NO such clause — every
 // user whose acknowledged notice version is below TELEMETRY_NOTICE_VERSION
 // sees it once, updaters included.
@@ -318,7 +326,7 @@ app.whenReady().then(async () => {
       applicationName: app.getName(),
       applicationVersion: app.getVersion(),
       version: app.getVersion(),
-      copyright: `© ${new Date().getFullYear()} Cate`,
+      copyright: `© ${new Date().getFullYear()} Orquestra`,
     })
   }
 
@@ -340,10 +348,13 @@ app.whenReady().then(async () => {
 
   installWebContentsSecurity()
   installProxyAuthHandler()
+  // Initialize app auth (Supabase) before critical handlers so the renderer
+  // can query auth state on the very first IPC call.
+  electronAuth.init(app.getPath('userData'))
   registerCriticalHandlers()
   log.info('Critical IPC handlers registered')
 
-  // Install the cate-theme authoring skill into ~/.claude/skills (copy-if-missing).
+  // Install the orquestra-theme authoring skill into ~/.claude/skills (copy-if-missing).
   void installThemeSkill()
 
   const mainWin = createWindow({ type: 'main' })
@@ -374,7 +385,7 @@ app.whenReady().then(async () => {
     // Detect a version change since last launch and emit an app_updated event
     // before app_start, so the upgrade path lands in analytics in order.
     fireStartupTelemetry(mainWin)
-    if (process.env.CATE_SMOKE_TEST === '1') {
+    if (process.env.ORQUESTRA_SMOKE_TEST === '1') {
       runSmokeAssertions(mainWin)
         .then(() => app.exit(0))
         .catch((err) => {

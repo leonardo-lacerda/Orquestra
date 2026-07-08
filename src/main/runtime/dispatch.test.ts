@@ -3,7 +3,7 @@ import { runtimes } from './runtimeManager'
 import { parseLocator, LOCAL_RUNTIME_ID } from './locator'
 import type { Runtime, FileHost, VcsHost, ProcessHost, AgentHost } from './types'
 
-// Prove the decode-and-dispatch layer routes a `cate-runtime://` URI to a
+// Prove the decode-and-dispatch layer routes a `orquestra-runtime://` URI to a
 // registered (non-local) runtime, while bare local paths still parse to the
 // LOCAL runtime id. This is exactly what every IPC handler does:
 //   const { runtimeId, path } = parseLocator(raw)
@@ -43,11 +43,11 @@ describe('runtime dispatch', () => {
     runtimes.unregister('srv_test')
   })
 
-  test('a cate-runtime:// path resolves to the registered runtime and forwards the decoded path', async () => {
+  test('a orquestra-runtime:// path resolves to the registered runtime and forwards the decoded path', async () => {
     const calls: string[] = []
     runtimes.register(makeStub('srv_test', calls))
 
-    const raw = 'cate-runtime://srv_test/home/me/proj/file.ts'
+    const raw = 'orquestra-runtime://srv_test/home/me/proj/file.ts'
     const { runtimeId, path } = parseLocator(raw)
     expect(runtimeId).toBe('srv_test')
 

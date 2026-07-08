@@ -35,6 +35,22 @@ import {
 import { createTerminalLinkHandler, makeTerminalKeyEventHandler } from './terminalInput'
 import { registerOsc52ClipboardHandler } from './terminalOsc52Clipboard'
 import { createFileLinkProvider, resolveLinkRoot } from './terminalFileLinkProvider'
+
+/**
+ * Get the xterm terminal's DOM element. xterm's TypeScript types do not expose
+ * `element` publicly, but it is present at runtime.
+ */
+function getTerminalElement(terminal: Terminal): HTMLElement | undefined {
+  return (terminal as unknown as { element?: HTMLElement }).element
+}
+
+/**
+ * Delay before restoring the real terminal size after a reconnect.
+ * The initial resize to (cols-1, rows) triggers a SIGWINCH-driven TUI repaint.
+ * This delay lets the TUI finish redrawing before the real size is applied,
+ * preventing frame corruption.
+ */
+const RECONNECT_RESIZE_DELAY_MS = 150
 import { getActiveTheme } from '../themeManager'
 import { useStatusStore } from '../../stores/statusStore'
 import { awaitWorkspaceSync, useAppStore } from '../../stores/appStore'
@@ -349,16 +365,20 @@ export async function getOrCreate(panelId: string, opts: CreateOpts): Promise<Re
       workspaceId: opts.workspaceId,
     })
 
-    // If the entry was disposed while we were waiting, dispose() couldn't kill
-    // the PTY (ptyId was still '') — kill the freshly-created one here so it
-    // doesn't leak, then bail out.
+    // Register the ptyId in the registry ASAP so concurrent dispose() can
+    // find it and kill the PTY.
+    setPtyForPanel(panelId, ptyId)
+
+    // If the entry was disposed while we were waiting, dispose() couldn't have
+    // killed the PTY (ptyId was '' when it ran) — kill the freshly-spawned one
+    // here so it doesn't leak, then bail out.
     if (!registry.has(panelId)) {
       electronAPI.terminalKill(ptyId).catch((err) => log.warn('[terminal] Kill failed:', err))
       terminal.dispose()
+      // Clean up the pty-panel mapping setPtyForPanel created above
+      ptyToPanel.delete(ptyId)
       return entry
     }
-
-    setPtyForPanel(panelId, ptyId)
 
     // 6. Wire PTY<->xterm listeners + shell registration (shared with
     //    reconnectTerminal via wireTerminalListeners). freshSpawn: this is a
@@ -497,7 +517,7 @@ export function finalizeReconnect(panelId: string): void {
     if (e?.ptyId === ptyId) {
       electronAPI.terminalResize(ptyId, e.terminal.cols, e.terminal.rows)
     }
-  }, 150)
+  }, RECONNECT_RESIZE_DELAY_MS)
 }
 
 /**
@@ -540,7 +560,7 @@ function teardownEntry(entry: RegistryEntry): void {
   cleanupListeners.length = 0
 
   // Detach DOM element before disposing
-  const el = (terminal as unknown as { element?: HTMLElement }).element
+  const el = getTerminalElement(terminal)
   if (el?.parentElement) {
     el.parentElement.removeChild(el)
   }

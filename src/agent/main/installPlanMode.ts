@@ -1,12 +1,12 @@
 // =============================================================================
-// installPlanMode — copy the bundled cate-plan-mode extension into a
+// installPlanMode — copy the bundled orquestra-plan-mode extension into a
 // workspace's pi-agent extensions dir on first use, where pi auto-discovers it.
 //
-// Source lives in our own tree at src/agent/extensions/cate-plan-mode/. Pi
+// Source lives in our own tree at src/agent/extensions/orquestra-plan-mode/. Pi
 // loads .ts directly via jiti, so we just ship the raw .ts and .json files.
 //
 // Dev:  src/ is on disk under app.getAppPath().
-// Prod: src/agent/extensions/cate-plan-mode/ is copied into resources via
+// Prod: src/agent/extensions/orquestra-plan-mode/ is copied into resources via
 //       electron-builder.yml `extraResources`, so we resolve from
 //       process.resourcesPath there.
 //
@@ -29,14 +29,14 @@ import type { Runtime } from '../../main/runtime/types'
  *  then production extraResources copy. */
 function sourceDir(): string | null {
   return findSourceDir([
-    path.join(app.getAppPath(), 'src', 'agent', 'extensions', 'cate-plan-mode'),
-    path.join(process.resourcesPath ?? '', 'cate-extensions', 'cate-plan-mode'),
+    path.join(app.getAppPath(), 'src', 'agent', 'extensions', 'orquestra-plan-mode'),
+    path.join(process.resourcesPath ?? '', 'orquestra-extensions', 'orquestra-plan-mode'),
   ])
 }
 
 /** Copy a single source file (read locally) to a host destination, overwriting
  *  only when the host copy differs from the bundled source. This is a
- *  Cate-managed extension, so the bundled version is authoritative — comparing
+ *  Orquestra-managed extension, so the bundled version is authoritative — comparing
  *  first means we still skip the write when nothing changed (the common case),
  *  but a shipped update reliably reaches hosts that already have an older copy. */
 async function copyIfChanged(
@@ -66,7 +66,7 @@ export async function installPlanModeExtension(runtime: Runtime, cwd: string): P
       log.warn('[installPlanMode] source dir not found — plan mode extension not installed')
       return
     }
-    const destDir = hostJoin(runtime.id, home, 'extensions', 'cate-plan-mode')
+    const destDir = hostJoin(runtime.id, home, 'extensions', 'orquestra-plan-mode')
     await copyIfChanged(runtime, path.join(src, 'index.ts'), destDir, 'index.ts')
     await copyIfChanged(runtime, path.join(src, 'package.json'), destDir, 'package.json')
   } catch (err) {

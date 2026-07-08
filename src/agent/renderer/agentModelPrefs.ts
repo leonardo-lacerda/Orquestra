@@ -3,7 +3,7 @@
 // chat. Persisted in settings.json (key `agentDefaultModel`) via the settings
 // store, so it is hand-editable and exportable alongside the rest of settings.
 // (It lived in renderer localStorage before; see settingsStore for the one-time
-// migration of the legacy `cate.agent.defaultModel.v1` key.)
+// migration of the legacy `orquestra.agent.defaultModel.v1` key.)
 // =============================================================================
 
 import type { AgentModelRef } from '../../shared/types'

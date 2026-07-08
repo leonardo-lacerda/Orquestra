@@ -52,7 +52,7 @@ describe('file exclusions across explorer + search', () => {
     exclusions = []
     // realpath so the registered allowed root matches validatePathStrict's
     // symlink-resolved comparison (e.g. /tmp → /private/tmp on macOS).
-    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'cate-excl-')))
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-excl-')))
     addAllowedRoot(root)
 
     await fs.writeFile(path.join(root, 'keep.txt'), 'alpha', 'utf8')

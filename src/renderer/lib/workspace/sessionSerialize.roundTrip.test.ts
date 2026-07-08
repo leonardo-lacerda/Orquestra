@@ -1,6 +1,6 @@
 // =============================================================================
 // Session persistence round-trip — SessionSnapshot → on-disk project files
-// (.cate/workspace.json + .cate/session.json, through real JSON) → snapshot.
+// (.orquestra/workspace.json + .orquestra/session.json, through real JSON) → snapshot.
 // Builds the dock layout and canvas geometry with the REAL dockStore /
 // canvasStore so this exercises the same shapes saveSession persists, and
 // asserts the shareable / machine-local split: workspace.json carries no
@@ -25,7 +25,7 @@ import type {
 } from '../../../shared/types'
 
 const ROOT = '/Users/dev/my-repo'
-const WORKTREE_PATH = `${ROOT}/.cate/worktrees/fix-login`
+const WORKTREE_PATH = `${ROOT}/.orquestra/worktrees/fix-login`
 
 function panel(p: Partial<PanelState> & Pick<PanelState, 'id' | 'type'>): PanelState {
   return { title: p.id, isDirty: false, ...p }

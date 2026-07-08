@@ -37,6 +37,7 @@ import { broadcastToAll } from '../../main/windowRegistry'
 import { installSubagentExtension } from './installSubagents'
 import { installPlanModeExtension } from './installPlanMode'
 import { installAskUserExtension } from './installAskUser'
+import { installMaestroExtension } from './installMaestro'
 import { hostAgentDir, prepareAgentDir, watchWorkspaceAuth, pushSharedToWorkspace } from './agentDir'
 import { mirrorModelsToWorkspace } from './customModels'
 import type { AuthManager } from './authManager'
@@ -72,7 +73,7 @@ export class AgentManager {
 
   constructor(authManager: AuthManager) {
     this.authManager = authManager
-    // When the user changes credentials in cate's UI, mirror the shared
+    // When the user changes credentials in orquestra's UI, mirror the shared
     // auth.json into every open workspace so their pi processes see it, then
     // tell every renderer so model pickers / provider status refresh without a
     // panel reload (the OAuth `done` event only reaches the window that started
@@ -99,7 +100,7 @@ export class AgentManager {
   }
 
   /** Re-mirror the shared models.json into every open workspace, so the custom
-   *  OpenAI provider edited in cate's UI reaches live pi processes (picked up
+   *  OpenAI provider edited in orquestra's UI reaches live pi processes (picked up
    *  on their next model-list fetch). */
   syncCustomModelsToOpenSessions(): void {
     for (const session of this.sessions.values()) {
@@ -128,8 +129,8 @@ export class AgentManager {
       const { runtimeId, path: cwd } = parseLocator(opts.cwd)
       const runtime = runtimes.resolve(runtimeId)
 
-      // Seed the host's <cwd>/.cate/pi-agent: auth.json + models.json via the
-      // runtime (so it lands on the remote host too), plus Cate's bundled
+      // Seed the host's <cwd>/.orquestra/pi-agent: auth.json + models.json via the
+      // runtime (so it lands on the remote host too), plus Orquestra's bundled
       // extensions (subagent, plan-mode, ask-user). PI_CODING_AGENT_DIR points
       // pi at that dir.
       await prepareAgentDir(runtime, cwd)
@@ -137,6 +138,7 @@ export class AgentManager {
       await installSubagentExtension(runtime, cwd)
       await installPlanModeExtension(runtime, cwd)
       await installAskUserExtension(runtime, cwd)
+      await installMaestroExtension(runtime, cwd)
 
       const extraArgs: string[] = []
       if (opts.sessionFile) extraArgs.push('--session', opts.sessionFile)

@@ -5,13 +5,13 @@ function devOnlyFlagEnabled(name: string): boolean {
 }
 
 export function disableTrustScoping(): boolean {
-  return devOnlyFlagEnabled('CATE_DISABLE_TRUST_SCOPING')
+  return devOnlyFlagEnabled('ORQUESTRA_DISABLE_TRUST_SCOPING')
 }
 
 export function disableWebviewHardening(): boolean {
-  return devOnlyFlagEnabled('CATE_DISABLE_WEBVIEW_HARDENING')
+  return devOnlyFlagEnabled('ORQUESTRA_DISABLE_WEBVIEW_HARDENING')
 }
 
 export function disableRendererSandbox(): boolean {
-  return devOnlyFlagEnabled('CATE_DISABLE_RENDERER_SANDBOX')
+  return devOnlyFlagEnabled('ORQUESTRA_DISABLE_RENDERER_SANDBOX')
 }

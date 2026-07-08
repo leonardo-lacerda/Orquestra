@@ -1,8 +1,8 @@
 // =============================================================================
-// installThemeSkill — copy the bundled cate-theme authoring skill into
-// ~/.claude/skills/cate-theme/ on first launch, where Claude Code discovers it.
+// installThemeSkill — copy the bundled orquestra-theme authoring skill into
+// ~/.claude/skills/orquestra-theme/ on first launch, where Claude Code discovers it.
 //
-// Source lives in our tree at skills/cate-theme/ (committed). It is packaged
+// Source lives in our tree at skills/orquestra-theme/ (committed). It is packaged
 // into resources via electron-builder.yml `extraResources`, so we resolve the
 // dev path (app.getAppPath()) first and fall back to process.resourcesPath.
 //
@@ -20,8 +20,8 @@ import log from './logger'
  *  production extraResources copy. */
 function sourceDir(): string | null {
   const candidates = [
-    path.join(app.getAppPath(), 'skills', 'cate-theme'),
-    path.join(process.resourcesPath ?? '', 'skills', 'cate-theme'),
+    path.join(app.getAppPath(), 'skills', 'orquestra-theme'),
+    path.join(process.resourcesPath ?? '', 'skills', 'orquestra-theme'),
   ]
   for (const c of candidates) {
     if (c && fs.existsSync(c)) return c
@@ -48,10 +48,10 @@ export async function installThemeSkill(): Promise<void> {
   try {
     const src = sourceDir()
     if (!src) {
-      log.warn('[installThemeSkill] source dir not found — cate-theme skill not installed')
+      log.warn('[installThemeSkill] source dir not found — orquestra-theme skill not installed')
       return
     }
-    const destDir = path.join(os.homedir(), '.claude', 'skills', 'cate-theme')
+    const destDir = path.join(os.homedir(), '.claude', 'skills', 'orquestra-theme')
     await copyIfMissing(path.join(src, 'SKILL.md'), path.join(destDir, 'SKILL.md'))
     await copyIfMissing(path.join(src, 'theme.schema.json'), path.join(destDir, 'theme.schema.json'))
 

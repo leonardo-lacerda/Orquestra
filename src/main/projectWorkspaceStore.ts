@@ -16,31 +16,31 @@ import { quarantineCorruptFile } from './quarantineCorruptFile'
 import type { ProjectWorkspaceFile, ProjectSessionFile } from '../shared/types'
 import { toRelativePath } from '../shared/pathUtils'
 import { broadcastToAll } from './windowRegistry'
-import { ensureCateGitignore, CATE_GITIGNORE_CONTENT } from './cateGitignore'
+import { ensureOrquestraGitignore, ORQUESTRA_GITIGNORE_CONTENT } from './orquestraGitignore'
 import { parseLocator, isLocalLocator } from './runtime/locator'
 import { runtimes } from './runtime/runtimeManager'
 
-const CATE_DIR = '.cate'
+const ORQUESTRA_DIR = '.orquestra'
 const WORKSPACE_FILE = 'workspace.json'
 const SESSION_FILE = 'session.json'
 
-function cateDir(rootPath: string): string {
-  return path.join(rootPath, CATE_DIR)
+function orquestraDir(rootPath: string): string {
+  return path.join(rootPath, ORQUESTRA_DIR)
 }
 
 function workspacePath(rootPath: string): string {
-  return path.join(rootPath, CATE_DIR, WORKSPACE_FILE)
+  return path.join(rootPath, ORQUESTRA_DIR, WORKSPACE_FILE)
 }
 
 function sessionPath(rootPath: string): string {
-  return path.join(rootPath, CATE_DIR, SESSION_FILE)
+  return path.join(rootPath, ORQUESTRA_DIR, SESSION_FILE)
 }
 
 // ---------------------------------------------------------------------------
 // External-edit guard for workspace.json
 //
 // workspace.json is committable and may be edited on disk (by hand or another
-// tool) while Cate is running. But the renderer also autosaves the live layout
+// tool) while Orquestra is running. But the renderer also autosaves the live layout
 // back over it (~30s + on quit), which would clobber any such edit. To prevent
 // that, we remember the hash of the content we last wrote/read per project;
 // before any autosave overwrite we compare it against what's on disk. A mismatch means the file was edited
@@ -302,13 +302,13 @@ export async function saveProjectStateLocal(
   const wsJson = JSON.stringify(workspace, null, 2)
   const sessJson = JSON.stringify(session, null, 2)
   await enqueueSave(rootPath, async () => {
-    await ensureCateGitignore(cateDir(rootPath))
+    await ensureOrquestraGitignore(orquestraDir(rootPath))
     // session.json is machine-local and never hand-edited, so always write it.
     const writes: Promise<void>[] = [atomicWrite(sessionPath(rootPath), sessJson)]
     if (await workspaceEditedExternallyAsync(rootPath)) {
       // Hold the overwrite and ask the renderer to prompt for a reload. The
       // file stays steady until the user reloads or dismisses the prompt.
-      log.info('Skipping workspace.json overwrite for %s — edited externally; prompting reload', cateDir(rootPath))
+      log.info('Skipping workspace.json overwrite for %s — edited externally; prompting reload', orquestraDir(rootPath))
       broadcastToAll(WORKSPACE_EXTERNAL_EDIT, { rootPath })
     } else if (await wouldEmptyOverwriteWorkspace(rootPath, workspaceNodeCount(workspace))) {
       // Data-loss backstop (issue #220): never overwrite a non-empty saved
@@ -319,12 +319,12 @@ export async function saveProjectStateLocal(
       // structurally "valid", so the .bak fallback is never consulted on the
       // next load. This disk-boundary guard is the backstop that also covers
       // deferred/non-selected workspaces serializing a momentarily-empty canvas.
-      log.warn('Refusing to overwrite a non-empty canvas with an empty one for %s (issue #220 guard)', cateDir(rootPath))
+      log.warn('Refusing to overwrite a non-empty canvas with an empty one for %s (issue #220 guard)', orquestraDir(rootPath))
     } else {
       writes.push(atomicWrite(workspacePath(rootPath), wsJson).then(() => rememberWorkspaceContent(rootPath, wsJson)))
     }
     await Promise.all(writes)
-    log.debug('Project state saved to %s', cateDir(rootPath))
+    log.debug('Project state saved to %s', orquestraDir(rootPath))
   })
 }
 
@@ -361,11 +361,11 @@ export function saveProjectStateSync(): void {
     try {
       atomicWriteSync(sessionPath(rootPath), session)
       if (workspaceEditedExternallySync(rootPath)) {
-        log.info('Skipping workspace.json sync overwrite for %s — edited externally', cateDir(rootPath))
+        log.info('Skipping workspace.json sync overwrite for %s — edited externally', orquestraDir(rootPath))
       } else if (wouldEmptyOverwriteWorkspaceSync(rootPath, workspaceNodeCount(JSON.parse(workspace)))) {
         // issue #220 guard: don't let the quit-time fallback flush an empty
         // canvas over a good one (mirrors the async saveProjectStateLocal guard).
-        log.warn('Refusing empty workspace.json sync overwrite for %s (issue #220 guard)', cateDir(rootPath))
+        log.warn('Refusing empty workspace.json sync overwrite for %s (issue #220 guard)', orquestraDir(rootPath))
       } else {
         atomicWriteSync(workspacePath(rootPath), workspace)
         rememberWorkspaceContent(rootPath, workspace)
@@ -394,26 +394,26 @@ function enqueueSave(rootPath: string, task: () => Promise<void>): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
-// Remote (cate-runtime://) project state.
+// Remote (orquestra-runtime://) project state.
 //
-// A remote workspace's tree lives on a runtime, so its `.cate/` files are
+// A remote workspace's tree lives on a runtime, so its `.orquestra/` files are
 // written next to the remote repo THROUGH the runtime file API — the same
-// `.cate/workspace.json` + `session.json` layout as local, just over RPC. This
+// `.orquestra/workspace.json` + `session.json` layout as local, just over RPC. This
 // is what lets remote and local round-trip identically (open/close/reopen).
 //
 // The local-only machinery does NOT apply here: there's no sync quit-time path
 // over an async RPC, the project lock guards local multi-instance writes, and
 // the external-edit SHA guard is tied to the local chokidar watcher. Remote
 // keeps the data-loss backstop (don't clobber a non-empty canvas with an empty
-// one) and writes the same `.cate/.gitignore`.
+// one) and writes the same `.orquestra/.gitignore`.
 // ---------------------------------------------------------------------------
 
-function remoteCateTargets(rootPath: string) {
+function remoteOrquestraTargets(rootPath: string) {
   const { runtimeId, path: base } = parseLocator(rootPath)
-  const dir = path.posix.join(base, CATE_DIR)
+  const dir = path.posix.join(base, ORQUESTRA_DIR)
   return {
     runtime: runtimes.resolve(runtimeId),
-    cateDir: dir,
+    orquestraDir: dir,
     workspaceFile: path.posix.join(dir, WORKSPACE_FILE),
     sessionFile: path.posix.join(dir, SESSION_FILE),
     gitignoreFile: path.posix.join(dir, '.gitignore'),
@@ -425,7 +425,7 @@ async function saveProjectStateRemote(
   workspace: ProjectWorkspaceFile,
   session: ProjectSessionFile,
 ): Promise<void> {
-  const { runtime, workspaceFile, sessionFile, gitignoreFile } = remoteCateTargets(rootPath)
+  const { runtime, workspaceFile, sessionFile, gitignoreFile } = remoteOrquestraTargets(rootPath)
 
   // Data-loss backstop (issue #220), mirrored for remote: never overwrite a
   // non-empty saved canvas with an empty one.
@@ -443,7 +443,7 @@ async function saveProjectStateRemote(
   // Write-once .gitignore so committable workspace.json is the only shared file.
   await runtime.file
     .stat(gitignoreFile)
-    .catch(() => runtime.file.writeFile(gitignoreFile, CATE_GITIGNORE_CONTENT))
+    .catch(() => runtime.file.writeFile(gitignoreFile, ORQUESTRA_GITIGNORE_CONTENT))
 
   await Promise.all([
     runtime.file.writeFile(workspaceFile, JSON.stringify(workspace, null, 2)),
@@ -456,7 +456,7 @@ async function loadProjectStateRemote(rootPath: string): Promise<{
   workspace: ProjectWorkspaceFile
   session: ProjectSessionFile | null
 } | null> {
-  const { runtime, workspaceFile, sessionFile } = remoteCateTargets(rootPath)
+  const { runtime, workspaceFile, sessionFile } = remoteOrquestraTargets(rootPath)
   const wsRaw = await runtime.file.readFile(workspaceFile).catch(() => null)
   if (!wsRaw) return null
   let ws: unknown
@@ -484,7 +484,7 @@ export function registerProjectStateHandlers(): void {
   ipcMain.handle(
     PROJECT_STATE_SAVE,
     async (_event, rootPath: string, workspace: ProjectWorkspaceFile, session: ProjectSessionFile) => {
-      // Remote workspaces save `.cate/` on their runtime. No local lock,
+      // Remote workspaces save `.orquestra/` on their runtime. No local lock,
       // sync-fallback, or external-edit guard applies; just serialize per root.
       if (!isLocalLocator(rootPath)) {
         return enqueueSave(rootPath, () =>
@@ -496,11 +496,11 @@ export function registerProjectStateHandlers(): void {
       const wsJson = JSON.stringify(workspace, null, 2)
       const sessJson = JSON.stringify(session, null, 2)
       lastSavedProjectStates.set(rootPath, { workspace: wsJson, session: sessJson })
-      // If another live Cate instance owns this project, don't autosave over
+      // If another live Orquestra instance owns this project, don't autosave over
       // it — that's the two-writers loop. Re-acquire each time so we resume
       // saving once the owner exits; only skip while it's genuinely held.
       if (!holdsProjectLock(rootPath) && !acquireProjectLock(rootPath)) {
-        log.debug('Skipping save for %s — another Cate instance owns it', cateDir(rootPath))
+        log.debug('Skipping save for %s — another Orquestra instance owns it', orquestraDir(rootPath))
         lastSavedProjectStates.delete(rootPath) // keep the quit-time sync fallback out too
         return
       }

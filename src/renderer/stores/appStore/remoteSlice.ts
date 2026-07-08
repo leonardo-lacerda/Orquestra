@@ -31,11 +31,11 @@ export function createRemoteSlice(set: AppSet, get: AppGet): RemoteSliceActions 
       if (!ws) return Promise.resolve(false)
 
       // Don't open the same folder twice in this instance. Two tabs on one root
-      // would share its .cate/workspace.json + session.json and clobber each
+      // would share its .orquestra/workspace.json + session.json and clobber each
       // other's autosave. The project lock can't catch this — it's keyed on pid,
       // so two tabs in the SAME process always re-acquire it. Redirect to the
       // workspace that already has this folder instead of duplicating it. (Main
-      // backstops this with a DUPLICATE_ROOT check on the resolved path, below.)
+      // backstops this with a DUPLIORQUESTRA_ROOT check on the resolved path, below.)
       const duplicate = get().workspaces.find((w) => w.id !== wsId && w.rootPath === rootPath)
       if (duplicate) {
         // Just focus the existing one. selectWorkspace already discards a
@@ -83,7 +83,7 @@ export function createRemoteSlice(set: AppSet, get: AppGet): RemoteSliceActions 
           )),
         }))
         window.electronAPI.recentProjectsAdd(result.workspace.rootPath)
-        // Just pointed a (local) workspace at a folder — load its saved .cate/
+        // Just pointed a (local) workspace at a folder — load its saved .orquestra/
         // layout if it has one. Awaited so a caller that then spawns a terminal
         // does so only after any restore (matching app-startup ordering).
         return hydrateWorkspaceFromDisk(wsId).then(() => true)
@@ -143,7 +143,7 @@ export function createRemoteSlice(set: AppSet, get: AppGet): RemoteSliceActions 
       // we never set the phase ourselves. (A fresh remote with no daemon lands in
       // 'missing' → the canvas lock offers Install.)
       await get().ensureWorkspaceRuntime(wsId)
-      // Runtime is live now, so its .cate/ (next to the remote repo) is
+      // Runtime is live now, so its .orquestra/ (next to the remote repo) is
       // readable: load any saved layout for a reconnected workspace. Awaited so a
       // caller that then spawns a terminal does so only after the restore.
       await hydrateWorkspaceFromDisk(wsId)

@@ -14,6 +14,7 @@ export const TERMINAL_LOG_READ = 'terminal:logRead'
 export const TERMINAL_SCROLLBACK_SAVE = 'terminal:scrollbackSave'
 export const TERMINAL_SET_VISIBILITY = 'terminal:setVisibility'
 export const TERMINAL_CLIPBOARD_WRITE = 'terminal:clipboardWrite'
+export const TERMINAL_SET_MAESTRO = 'terminal:setMaestro'      // renderer -> main
 
 // Filesystem
 export const FS_READ_FILE = 'fs:readFile'
@@ -110,11 +111,11 @@ export const UI_STATE_SET = 'uiState:set'        // renderer -> main
 export const SESSION_FLUSH_SAVE = 'session:flushSave' // main -> renderer
 export const SESSION_FLUSH_SAVE_DONE = 'session:flushSaveDone' // renderer -> main
 
-// Project-local workspace persistence (.cate/)
+// Project-local workspace persistence (.orquestra/)
 export const PROJECT_STATE_SAVE = 'project:stateSave'     // renderer -> main
 export const PROJECT_STATE_LOAD = 'project:stateLoad'     // renderer -> main
 // Fired when a project's workspace.json is found to differ on disk from what
-// Cate last wrote (edited externally) — or back in sync after a reload.
+// Orquestra last wrote (edited externally) — or back in sync after a reload.
 export const WORKSPACE_EXTERNAL_EDIT = 'project:externalEdit' // main -> renderer
 // Renderer tells main the user declined the reload prompt — resume saving so
 // the current in-app layout overwrites the external edit.
@@ -218,7 +219,7 @@ export const SIDEBAR_SESSION_GET = 'sidebar-session:get'
 export const SIDEBAR_SESSION_SET = 'sidebar-session:set'
 
 // Remote projects (persisted restore snapshots + reconnect info for
-// cate-runtime:// workspaces, which can't use the local .cate/ files)
+// orquestra-runtime:// workspaces, which can't use the local .orquestra/ files)
 export const REMOTE_PROJECTS_GET = 'remote-projects:get'
 export const REMOTE_PROJECTS_SET = 'remote-projects:set'
 
@@ -396,5 +397,39 @@ export const RUNTIME_LOCAL_STATUS = 'runtime:local-status' // renderer -> main (
 export const RUNTIME_PICK_SSH_KEY = 'runtime:pick-ssh-key' // renderer -> main (native file picker for an SSH private key)
 
 
-// Performance profiler (only active under CATE_PERF=1)
+// Performance profiler (only active under ORQUESTRA_PERF=1)
 export const PERF_GET = 'perf:get' // renderer -> main (pull latest resource snapshot)
+
+// Terminal connections — agent orchestration (PTY piping between terminals)
+export const TERMINAL_PIPE_CREATE = 'terminal:pipeCreate'   // renderer -> main
+export const TERMINAL_PIPE_DESTROY = 'terminal:pipeDestroy' // renderer -> main
+
+// ACP — Agent Client Protocol (structured agent communication)
+export const ACP_START_AGENT = 'acp:startAgent'           // renderer -> main
+export const ACP_STOP_AGENT = 'acp:stopAgent'             // renderer -> main
+export const ACP_CREATE_SESSION = 'acp:createSession'     // renderer -> main
+export const ACP_SEND_PROMPT = 'acp:sendPrompt'           // renderer -> main
+export const ACP_CANCEL_SESSION = 'acp:cancelSession'     // renderer -> main
+export const ACP_CLOSE_SESSION = 'acp:closeSession'       // renderer -> main
+export const ACP_SESSION_UPDATE = 'acp:sessionUpdate'     // main -> renderer
+export const ACP_SESSION_STATUS = 'acp:sessionStatus'     // main -> renderer
+export const ACP_REQUEST_PERMISSION = 'acp:requestPermission'   // agent -> renderer
+export const ACP_PERMISSION_RESPONSE = 'acp:permissionResponse' // renderer -> main
+
+// API Orchestrator — direct HTTP calls to AI APIs
+export const API_ORCHESTRATE = 'api:orchestrate'             // renderer -> main
+
+// Maestro — canvas manipulation from inside terminals
+export const MAESTRO_RECRUIT = 'maestro:recruit'             // main -> renderer
+export const MAESTRO_DISMISS = 'maestro:dismiss'             // main -> renderer
+export const MAESTRO_CONNECT = 'maestro:connect'             // main -> renderer
+export const MAESTRO_LIST = 'maestro:list'                   // main -> renderer
+export const ORQUESTRA_TRACK_WORKER = "orquestra:trackWorker"  // renderer -> main
+export const MAESTRO_REASSIGN = 'maestro:reassign'           // main -> renderer
+
+// App-level auth (Supabase login for the desktop app itself)
+export const APP_AUTH_RESTORE = 'app-auth:restore'           // renderer -> main (try restore session)
+export const APP_AUTH_SIGN_IN = 'app-auth:signIn'            // renderer -> main
+export const APP_AUTH_SIGN_OUT = 'app-auth:signOut'          // renderer -> main
+export const APP_AUTH_STATE = 'app-auth:state'               // main -> renderer (push state change)
+export const APP_AUTH_REFRESH_SUB = 'app-auth:refreshSub'    // renderer -> main

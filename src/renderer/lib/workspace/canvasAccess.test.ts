@@ -56,6 +56,8 @@ function fakeCanvasOps(nodes: Record<string, unknown>) {
         nodes,
         zoomLevel: 2,
         viewportOffset: { x: 5, y: 6 },
+        drawings: [],
+        connections: {},
         nodeForPanel: (panelId: string) =>
           Object.values(nodes).some((n: any) => n.panelId === panelId) ? 'node-x' : undefined,
       }),

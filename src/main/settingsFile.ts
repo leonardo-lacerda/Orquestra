@@ -82,6 +82,7 @@ const SETTINGS_SCHEMA: Record<keyof AppSettings, string> = {
   agentDefaultModel: 'object',
   sidebarLayout: 'object',
   customShortcuts: 'object',
+  language: 'string',
 }
 
 const SETTINGS_KEYS = Object.keys(SETTINGS_SCHEMA) as Array<keyof AppSettings>
@@ -217,7 +218,7 @@ export async function ensureSettingsFile(): Promise<string> {
 
 /**
  * Start watching settings.json for EXTERNAL edits. When the user edits the file
- * (e.g. in a Cate editor panel) and saves, `onExternal` fires with the new
+ * (e.g. in a Orquestra editor panel) and saves, `onExternal` fires with the new
  * settings and the list of keys that changed. The factory reports the whole new
  * value; we diff it against the value we last reported to derive changed keys.
  */

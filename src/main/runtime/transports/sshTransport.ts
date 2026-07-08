@@ -4,7 +4,7 @@
 // incl. the matching node-pty prebuild + a bundled Node runtime), so the host
 // needs nothing preinstalled (server-side `git` is still needed for VCS).
 //
-// On connect the transport installs the daemon into ~/.cate/runtime/<ver>/<target>:
+// On connect the transport installs the daemon into ~/.orquestra/runtime/<ver>/<target>:
 //   1. REMOTE PULL — the host downloads its own tarball straight from the
 //      GitHub release (curl/wget). Bytes never transit the laptop; this is the
 //      fast path and works whenever the host has internet.
@@ -139,7 +139,7 @@ export class SshTransport implements RuntimeTransport {
     if (!this.target) this.target = await this.probeTarget()
     if (!this.installDir) {
       const { stdout: home } = await this.exec('echo $HOME')
-      this.installDir = `${home.trim()}/.cate/runtime/${version}/${this.target}`
+      this.installDir = `${home.trim()}/.orquestra/runtime/${version}/${this.target}`
     }
     return this.installDir
   }
@@ -157,7 +157,7 @@ export class SshTransport implements RuntimeTransport {
   async uninstall(): Promise<void> {
     await this.ensureConnected()
     const { stdout: home } = await this.exec('echo $HOME')
-    await this.exec(`rm -rf ${shq(`${home.trim()}/.cate/runtime`)}`)
+    await this.exec(`rm -rf ${shq(`${home.trim()}/.orquestra/runtime`)}`)
     this.installDir = '' // force a fresh resolve on the next probe/install
   }
 
@@ -216,8 +216,8 @@ export class SshTransport implements RuntimeTransport {
     const remoteTar = `${this.installDir}/pkg.tgz`
     await this.exec(`mkdir -p ${D}`)
     await this.sftpPut(localTar, remoteTar)
-    const extract = await this.exec(`cd ${D} && ${buildExtractCommand(shq(marker), 'CATE_EXTRACT_OK')}`)
-    if (!extract.stdout.includes('CATE_EXTRACT_OK')) {
+    const extract = await this.exec(`cd ${D} && ${buildExtractCommand(shq(marker), 'ORQUESTRA_EXTRACT_OK')}`)
+    if (!extract.stdout.includes('ORQUESTRA_EXTRACT_OK')) {
       throw new Error(`remote extract failed: ${extract.stderr || extract.stdout}`)
     }
   }

@@ -24,21 +24,21 @@ describe('locator', () => {
     })
 
     test('decodes a remote URI into runtime + posix path', () => {
-      expect(parseLocator('cate-runtime://srv_a1b2c3/home/me/proj')).toEqual({
+      expect(parseLocator('orquestra-runtime://srv_a1b2c3/home/me/proj')).toEqual({
         runtimeId: 'srv_a1b2c3',
         path: '/home/me/proj',
       })
     })
 
     test('percent-decodes path segments', () => {
-      expect(parseLocator('cate-runtime://wsl_ubuntu/home/my%20proj/a%23b.ts')).toEqual({
+      expect(parseLocator('orquestra-runtime://wsl_ubuntu/home/my%20proj/a%23b.ts')).toEqual({
         runtimeId: 'wsl_ubuntu',
         path: '/home/my proj/a#b.ts',
       })
     })
 
     test('handles an authority with no path component', () => {
-      expect(parseLocator('cate-runtime://srv_x')).toEqual({
+      expect(parseLocator('orquestra-runtime://srv_x')).toEqual({
         runtimeId: 'srv_x',
         path: '',
       })
@@ -54,7 +54,7 @@ describe('locator', () => {
 
     test('remote runtime yields a percent-encoded URI', () => {
       expect(formatLocator({ runtimeId: 'srv_x', path: '/home/my proj/a#b.ts' })).toBe(
-        'cate-runtime://srv_x/home/my%20proj/a%23b.ts',
+        'orquestra-runtime://srv_x/home/my%20proj/a%23b.ts',
       )
     })
   })
@@ -75,8 +75,8 @@ describe('locator', () => {
     const canonicalStrings = [
       '/Users/anton/proj',
       'C:\\Users\\anton\\proj',
-      'cate-runtime://srv_a1b2c3/home/me/proj',
-      'cate-runtime://wsl_ubuntu/home/my%20proj/a%23b.ts',
+      'orquestra-runtime://srv_a1b2c3/home/me/proj',
+      'orquestra-runtime://wsl_ubuntu/home/my%20proj/a%23b.ts',
     ]
 
     test.each(canonicalStrings)('canonical string -> struct -> string is stable (%s)', (s) => {
@@ -91,7 +91,7 @@ describe('locator', () => {
     })
 
     test('remote URIs are not local', () => {
-      expect(isLocalLocator('cate-runtime://srv_x/home/me')).toBe(false)
+      expect(isLocalLocator('orquestra-runtime://srv_x/home/me')).toBe(false)
     })
   })
 })

@@ -34,7 +34,7 @@ interface ChatThreadProps {
   onFork?: (entryId: string) => void
   /** Prefill the composer with a user message's text (no history mutation). */
   onEditResend?: (text: string) => void
-  /** Plan Ready card actions — see cate-plan-mode extension. */
+  /** Plan Ready card actions — see orquestra-plan-mode extension. */
   onImplementPlan?: () => void
   onRefinePlan?: (text: string) => void
   onClearAndImplement?: () => void
@@ -215,7 +215,7 @@ export function ChatThread({ messages, running, forkMap, onFork, onEditResend, o
         <button
           onClick={() => { scrollToBottom(true); setAtBottom(true) }}
           aria-label="Scroll to bottom"
-          className="absolute bottom-3 right-3 z-10 p-2 rounded-full bg-surface-2 border border-strong text-muted hover:text-primary shadow-lg cate-fade-in"
+          className="absolute bottom-3 right-3 z-10 p-2 rounded-full bg-surface-2 border border-strong text-muted hover:text-primary shadow-lg orquestra-fade-in"
         >
           <ArrowDown size={14} weight="bold" />
         </button>

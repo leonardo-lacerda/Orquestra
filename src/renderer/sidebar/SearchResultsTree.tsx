@@ -59,11 +59,11 @@ const extOf = (name: string): string => {
  *  / terminal / agent drop targets all accept it. For a line drag, also carry
  *  the line + column so canvas/dock drops can open at the match. */
 function setFileDrag(e: React.DragEvent, path: string, line?: number, column?: number): void {
-  e.dataTransfer.setData('application/cate-file', path)
-  e.dataTransfer.setData('application/cate-files', JSON.stringify([path]))
+  e.dataTransfer.setData('application/orquestra-file', path)
+  e.dataTransfer.setData('application/orquestra-files', JSON.stringify([path]))
   e.dataTransfer.setData('text/plain', path)
   if (line != null) {
-    e.dataTransfer.setData('application/cate-file-line', JSON.stringify({ path, line, column: column ?? 1 }))
+    e.dataTransfer.setData('application/orquestra-file-line', JSON.stringify({ path, line, column: column ?? 1 }))
   }
   e.dataTransfer.effectAllowed = 'copy'
 }

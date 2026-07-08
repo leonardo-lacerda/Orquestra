@@ -18,7 +18,10 @@ export type { SidebarView, SidebarLayout }
 export type SidebarSide = 'left' | 'right'
 
 /** Active canvas interaction tool (Figma-style). */
-export type CanvasTool = 'select' | 'hand'
+export type CanvasTool = 'select' | 'hand' | 'draw'
+
+import type { DrawingTool as _DrawingTool } from '../../shared/types'
+export type { _DrawingTool as DrawingTool }
 
 const ALL_VIEWS: SidebarView[] = ['workspaces', 'explorer', 'git', 'search']
 
@@ -57,6 +60,8 @@ interface UIStoreState {
   marquee: { startX: number; startY: number; currentX: number; currentY: number } | null
   /** Active canvas tool. Sticky: toggled via the toolbar or the Space key. */
   activeTool: CanvasTool
+  /** Active drawing sub-tool when in draw mode. */
+  activeDrawingTool: _DrawingTool
   /** Active view on the left sidebar, null = collapsed */
   activeLeftSidebarView: SidebarView | null
   /** Active view on the right sidebar, null = collapsed */
@@ -85,6 +90,7 @@ interface UIStoreActions {
   setFileExplorerVisible: (visible: boolean) => void
   setMarquee: (marquee: { startX: number; startY: number; currentX: number; currentY: number } | null) => void
   setActiveTool: (tool: CanvasTool) => void
+  setActiveDrawingTool: (tool: _DrawingTool) => void
   setActiveLeftSidebarView: (view: SidebarView | null) => void
   setActiveRightSidebarView: (view: SidebarView | null) => void
   moveSidebarView: (view: SidebarView, targetSide: SidebarSide, targetIndex: number) => void
@@ -115,6 +121,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   fileExplorerVisible: false,
   marquee: null,
   activeTool: 'select',
+  activeDrawingTool: 'rect',
   activeLeftSidebarView: 'workspaces',
   activeRightSidebarView: null,
   draggingView: null,
@@ -180,6 +187,10 @@ export const useUIStore = create<UIStore>((set, get) => ({
 
   setActiveTool(tool) {
     set({ activeTool: tool })
+  },
+
+  setActiveDrawingTool(tool) {
+    set({ activeDrawingTool: tool, activeTool: 'draw' })
   },
 
   setActiveLeftSidebarView(view) {

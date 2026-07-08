@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Plus, X } from '@phosphor-icons/react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { SettingRow, Toggle, SearchableBlock, TextInput } from './SettingsComponents'
 
 export function WorktreeSettings() {
   const store = useSettingsStore()
+  const { t } = useTranslation()
   const paths = store.worktreeSymlinkPaths ?? []
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -33,8 +35,8 @@ export function WorktreeSettings() {
   return (
     <div className="flex flex-col gap-1">
       <SettingRow
-        label="Close panels when discarding a worktree"
-        description="Discarding a worktree also closes its terminals and agent panels."
+        label={t('worktree.closeOnDelete')}
+        description={t('worktree.closeOnDelete.desc')}
       >
         <Toggle
           checked={store.closeWorktreePanelsOnDelete}
@@ -45,8 +47,7 @@ export function WorktreeSettings() {
       <SearchableBlock keywords="worktree symlink node_modules link paths build artifacts">
         <div className="flex flex-col gap-1 pt-3">
           <p className="text-xs text-muted mb-3">
-            Paths symlinked from the workspace root into every new worktree (e.g.
-            node_modules) so they don't need rebuilding. Leave empty to disable.
+            {t('worktree.symlinkPaths.desc')}
           </p>
 
           <div className="flex gap-1.5">
@@ -59,7 +60,7 @@ export function WorktreeSettings() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') add()
               }}
-              placeholder="Add a path, e.g. node_modules"
+              placeholder={t('worktree.addPlaceholder')}
               layoutClassName="flex-1 px-2"
             />
             <button
@@ -67,7 +68,7 @@ export function WorktreeSettings() {
               className="flex items-center gap-1 px-2.5 py-1 text-[12px] rounded text-secondary hover:text-primary bg-surface-2 hover:bg-hover border border-subtle"
             >
               <Plus size={12} />
-              Add
+              {t('worktree.addButton')}
             </button>
           </div>
 

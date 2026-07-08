@@ -17,6 +17,7 @@ import { RemoteConnectDialog } from '../dialogs/RemoteConnectDialog'
 import { workspaceRuntime } from '../lib/workspace/workspaceRuntime'
 import { isWorkspaceEffectivelyEmpty } from '../lib/workspace/session'
 import type { RemoteConnectSpec } from '../../shared/types'
+import { useTranslation } from '../i18n/useTranslation'
 
 // Abbreviate home directory in paths
 export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
@@ -24,6 +25,7 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
   const [showRemote, setShowRemote] = useState(false)
   const [remotePending, setRemotePending] = useState(false)
   const [remoteError, setRemoteError] = useState<string | null>(null)
+  const { t } = useTranslation()
 
   const connectRemote = useCallback(
     async (spec: RemoteConnectSpec) => {
@@ -34,11 +36,6 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
       setRemotePending(false)
       if (ok) {
         setShowRemote(false)
-        // The workspace is registered; the probe drives its phase. Only spawn a
-        // terminal if it actually connected — otherwise the canvas lock shows
-        // the probed state (missing → Install, unreachable → Retry/Edit). Skip it
-        // when connect restored a saved .cate/ layout, so we don't stack a stray
-        // terminal on top of the restored panels.
         const ws = useAppStore.getState().workspaces.find((w) => w.id === workspaceId)
         if (workspaceRuntime(ws).editable && isWorkspaceEffectivelyEmpty(workspaceId)) {
           app.createTerminal(workspaceId)
@@ -60,7 +57,6 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
     if (!path) return
     const app = useAppStore.getState()
     const ok = await app.setWorkspaceRootPath(workspaceId, path)
-    // Skip the starter terminal if a saved .cate/ layout was just restored.
     if (ok && isWorkspaceEffectivelyEmpty(workspaceId)) app.createTerminal(workspaceId)
   }, [workspaceId])
 
@@ -68,7 +64,6 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
     async (path: string) => {
       const app = useAppStore.getState()
       const ok = await app.setWorkspaceRootPath(workspaceId, path)
-      // Skip the starter terminal if a saved .cate/ layout was just restored.
       if (ok && isWorkspaceEffectivelyEmpty(workspaceId)) app.createTerminal(workspaceId)
     },
     [workspaceId],
@@ -101,7 +96,7 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
             <path d="M38.1825 135C29.4225 135 21.9825 133.38 15.8625 130.14C9.7425 126.78 5.3625 122.16 2.7225 116.28C0.0824997 110.28 -0.6375 103.32 0.5625 95.4L9.3825 39.6C10.7025 31.56 13.6425 24.6 18.2025 18.72C22.7625 12.84 28.5825 8.27999 35.6625 5.04C42.8625 1.68 50.8425 0 59.6025 0C68.4825 0 75.9225 1.68 81.9225 5.04C87.9225 8.27999 92.3025 12.84 95.0625 18.72C97.8225 24.6 98.5425 31.56 97.2225 39.6H70.2225C71.1825 34.32 70.4025 30.3 67.8825 27.54C65.3625 24.78 61.4025 23.4 56.0025 23.4C50.6025 23.4 46.2225 24.78 42.8625 27.54C39.5025 30.3 37.3425 34.32 36.3825 39.6L27.5625 95.4C26.7225 100.56 27.5625 104.58 30.0825 107.46C32.6025 110.22 36.5625 111.6 41.9625 111.6C47.3625 111.6 51.7425 110.22 55.1025 107.46C58.4625 104.58 60.5625 100.56 61.4025 95.4H88.4025C87.2025 103.32 84.2625 110.28 79.5825 116.28C75.0225 122.16 69.2025 126.78 62.1225 130.14C55.0425 133.38 47.0625 135 38.1825 135Z" fill="currentColor"/>
           </svg>
           <p className="text-sm text-muted mt-1">
-            Infinite canvas for coding
+            {t('welcome.tagline')}
           </p>
         </div>
 
@@ -110,34 +105,34 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
           {/* Start actions */}
           <div data-onboarding="welcome-actions" className="flex-1">
             <h2 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">
-              Start
+              {t('welcome.start')}
             </h2>
             <div className="flex flex-col gap-1">
               <ActionItem
                 icon={<FolderOpen size={16} />}
-                label="Open Folder..."
+                label={t('welcome.openFolder')}
                 onClick={openFolder}
               />
               <ActionItem
                 icon={<CloudArrowUp size={16} />}
-                label="Connect to Remote..."
+                label={t('welcome.connectRemote')}
                 onClick={() => { setRemoteError(null); setShowRemote(true) }}
               />
               <ActionItem
                 icon={<Terminal size={16} />}
-                label="New Terminal"
+                label={t('welcome.newTerminal')}
                 shortcut="⌘T"
                 onClick={newTerminal}
               />
               <ActionItem
                 icon={<FileCode size={16} />}
-                label="New Editor"
+                label={t('welcome.newEditor')}
                 shortcut="⌘⇧E"
                 onClick={newEditor}
               />
               <ActionItem
                 icon={<Globe size={16} />}
-                label="New Browser"
+                label={t('welcome.newBrowser')}
                 shortcut="⌘⇧B"
                 onClick={newBrowser}
               />
@@ -148,13 +143,11 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
           {recentProjects.length > 0 && (
             <div className="flex-1">
               <h2 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">
-                Recent
+                {t('welcome.recent')}
               </h2>
               <div className="flex flex-col gap-0.5">
                 {recentProjects.map((projectPath) => {
                   const { runtimeId, path: decodedPath } = parseLocator(projectPath)
-                  // Local paths are OS-native — split on `\` too so Windows paths
-                  // ("C:\Users\foo\proj") don't render as one long segment.
                   const sep = runtimeId === LOCAL_RUNTIME_ID ? /[\\/]/ : /\//
                   const name = workspaceDisplayName(projectPath) || projectPath
                   const parentPath = decodedPath.split(sep).slice(0, -1).join('/')
@@ -188,15 +181,15 @@ export default function WelcomePage({ workspaceId }: { workspaceId: string }) {
         {/* Keyboard shortcuts */}
         <div className="mt-10 pt-6">
           <h2 className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3">
-            Keyboard Shortcuts
+            {t('welcome.keyboardShortcuts')}
           </h2>
           <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-            <ShortcutRow keys="⌘T" label="New Terminal" />
-            <ShortcutRow keys="⌘⇧B" label="New Browser" />
-            <ShortcutRow keys="⌘⇧E" label="New Editor" />
-            <ShortcutRow keys="⌘K" label="Command Palette" />
-            <ShortcutRow keys="⌘\" label="Toggle Sidebar" />
-            <ShortcutRow keys="⌘0" label="Reset Zoom" />
+            <ShortcutRow keys="⌘T" label={t('welcome.shortcut.newTerminal')} />
+            <ShortcutRow keys="⌘⇧B" label={t('welcome.shortcut.newBrowser')} />
+            <ShortcutRow keys="⌘⇧E" label={t('welcome.shortcut.newEditor')} />
+            <ShortcutRow keys="⌘K" label={t('welcome.shortcut.commandPalette')} />
+            <ShortcutRow keys="⌘\" label={t('welcome.shortcut.toggleSidebar')} />
+            <ShortcutRow keys="⌘0" label={t('welcome.shortcut.resetZoom')} />
           </div>
         </div>
       </div>

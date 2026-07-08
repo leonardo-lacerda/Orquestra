@@ -393,13 +393,13 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
       e.dataTransfer.dropEffect = 'copy'
       return
     }
-    if (!e.dataTransfer.types.includes('application/cate-file')) return
+    if (!e.dataTransfer.types.includes('application/orquestra-file')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
   }, [])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
-    if (!isExternalFileDrag(e) && !e.dataTransfer.types.includes('application/cate-file')) return
+    if (!isExternalFileDrag(e) && !e.dataTransfer.types.includes('application/orquestra-file')) return
     e.preventDefault()
     dragCounterRef.current++
     setIsDragOver(true)
@@ -433,7 +433,7 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
     setIsDragOver(false)
     if (!window.electronAPI) return
 
-    const raw = e.dataTransfer.getData('application/cate-files')
+    const raw = e.dataTransfer.getData('application/orquestra-files')
     if (!raw) return
     const sourcePaths: string[] = JSON.parse(raw)
 
@@ -480,8 +480,8 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
           const dragPaths = isSelected && selectedPaths.size > 1
             ? [...selectedPaths]
             : [node.path]
-          e.dataTransfer.setData('application/cate-file', dragPaths[0])
-          e.dataTransfer.setData('application/cate-files', JSON.stringify(dragPaths))
+          e.dataTransfer.setData('application/orquestra-file', dragPaths[0])
+          e.dataTransfer.setData('application/orquestra-files', JSON.stringify(dragPaths))
           e.dataTransfer.effectAllowed = 'copyMove'
         }}
         onDragOver={node.isDirectory ? handleDragOver : undefined}

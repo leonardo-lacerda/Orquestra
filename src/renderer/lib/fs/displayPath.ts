@@ -2,9 +2,9 @@
 //
 // Workspace roots and file paths are LOCATOR strings (see
 // src/main/runtime/locator.ts): a bare absolute path is local; a
-// `cate-runtime://<runtimeId>/<percent-encoded-posix-path>` URI is remote.
+// `orquestra-runtime://<runtimeId>/<percent-encoded-posix-path>` URI is remote.
 // Naively splitting the raw locator on `/` leaks the scheme and percent-
-// encoding into the UI ("cate-runtime:", "%20", the runtime id segment).
+// encoding into the UI ("orquestra-runtime:", "%20", the runtime id segment).
 // These helpers decode the locator first so both local and remote paths render
 // cleanly. LOCAL output is byte-identical to the old split-based logic.
 

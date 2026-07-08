@@ -31,6 +31,8 @@ export interface CanvasOperations {
     nodes: Record<CanvasNodeId, CanvasNodeState>,
     viewportOffset: Point,
     zoomLevel: number,
+    connections?: Record<string, import('../../../shared/types').TerminalConnection>,
+    drawings?: import('../../../shared/types').DrawingElement[],
   ) => void
   clearAllNodes: () => void
   focusPanelNode: (panelId: string) => void
@@ -78,8 +80,10 @@ export function createCanvasOps(storeApi: StoreApi<CanvasStore>): CanvasOperatio
       nodes: Record<CanvasNodeId, CanvasNodeState>,
       viewportOffset: Point,
       zoomLevel: number,
+      connections?: Record<string, import('../../../shared/types').TerminalConnection>,
+      drawings?: import('../../../shared/types').DrawingElement[],
     ) {
-      storeApi.getState().loadWorkspaceCanvas(nodes, viewportOffset, zoomLevel)
+      storeApi.getState().loadWorkspaceCanvas(nodes, viewportOffset, zoomLevel, connections, drawings)
     },
 
     clearAllNodes() {

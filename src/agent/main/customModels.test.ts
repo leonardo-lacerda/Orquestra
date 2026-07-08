@@ -30,7 +30,7 @@ const fakeRuntime = {
 let testUserData: string
 
 beforeEach(() => {
-  testUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-models-'))
+  testUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-models-'))
 })
 
 afterEach(() => {
@@ -93,7 +93,7 @@ describe('customModels', () => {
   })
 
   it('mirrors the shared file into a workspace dir', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-ws-'))
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-ws-'))
     try {
       await saveCustomOpenAI({ baseUrl: 'http://x/v1', apiKey: '', models: ['m1'] })
       await mirrorModelsToWorkspace(fakeRuntime, cwd)
@@ -106,7 +106,7 @@ describe('customModels', () => {
   })
 
   it('mirror is a no-op when no shared file exists (never clobbers workspace)', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cate-ws-'))
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-ws-'))
     try {
       await mirrorModelsToWorkspace(fakeRuntime, cwd)
       const dest = path.join(agentDirFor(cwd), 'models.json')

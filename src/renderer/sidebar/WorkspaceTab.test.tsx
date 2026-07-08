@@ -2,7 +2,7 @@
 // E2E rendering tests for terminal panel agent state indicators.
 //
 // These test what the user actually SEES: the shimmer CSS class
-// (cate-notif-pulse) and the await indicator element (cate-await-indicator).
+// (orquestra-notif-pulse) and the await indicator element (orquestra-await-indicator).
 // =============================================================================
 
 import React from 'react'
@@ -49,11 +49,11 @@ function renderRow(agentState: AgentState | undefined) {
 }
 
 function hasShimmer(el: HTMLElement): boolean {
-  return el.querySelector('.cate-notif-pulse') !== null
+  return el.querySelector('.orquestra-notif-pulse') !== null
 }
 
 function hasAwaitIndicator(el: HTMLElement): boolean {
-  return el.querySelector('.cate-await-indicator') !== null
+  return el.querySelector('.orquestra-await-indicator') !== null
 }
 
 describe('TerminalPanelRow rendered indicators', () => {

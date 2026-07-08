@@ -5,7 +5,7 @@ const child = spawn(electron, ['.'], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    CATE_SMOKE_TEST: '1',
+    ORQUESTRA_SMOKE_TEST: '1',
   },
 })
 

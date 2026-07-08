@@ -1,0 +1,8 @@
+{
+  "name": "orquestra-maestro",
+  "description": "Auto-injects the Maestro orchestration system prompt when the crown is active. The terminal automatically knows it must orchestrate other terminals without /maestro command.",
+  "private": true,
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

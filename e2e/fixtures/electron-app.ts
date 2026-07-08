@@ -1,8 +1,8 @@
 // E2E fixture: launch the built Electron app with an isolated userData dir.
 //
-// Each spec calls `launchApp()` in beforeEach. CATE_E2E=1 causes:
+// Each spec calls `launchApp()` in beforeEach. ORQUESTRA_E2E=1 causes:
 //   - main process to point app.setPath('userData', tmpdir)
-//   - renderer to install window.__cateE2E (see src/renderer/lib/e2eHarness.ts)
+//   - renderer to install window.__orquestraE2E (see src/renderer/lib/e2eHarness.ts)
 
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright'
 import path from 'node:path'
@@ -20,17 +20,17 @@ export async function launchApp(opts: { perf?: boolean } = {}): Promise<LaunchRe
     cwd: REPO_ROOT,
     env: {
       ...process.env,
-      CATE_E2E: '1',
+      ORQUESTRA_E2E: '1',
       NODE_ENV: 'production',
       // Activate the resource profiler (main getAppMetrics sampler + counters,
-      // renderer FPS/long-task/render counters, window.__catePerf) for the
+      // renderer FPS/long-task/render counters, window.__orquestraPerf) for the
       // perf-stress spec. Harmless no-op for other specs that don't set it.
-      ...(opts.perf ? { CATE_PERF: '1' } : {}),
+      ...(opts.perf ? { ORQUESTRA_PERF: '1' } : {}),
     },
   })
   const mainWindow = await electronApp.firstWindow()
   await mainWindow.waitForLoadState('domcontentloaded')
-  await mainWindow.waitForFunction(() => window.__cateE2E?.ready === true, { timeout: 15_000 })
+  await mainWindow.waitForFunction(() => window.__orquestraE2E?.ready === true, { timeout: 15_000 })
   // The harness `ready` flag is set by its own effect the moment e2eHarness
   // installs — independent of App's async init(), which restores/creates the
   // workspace and mounts the Canvas. Wait for the Canvas to actually be in the
@@ -81,7 +81,7 @@ export async function getNodeOrigin(
   nodeId: string,
 ): Promise<{ x: number; y: number } | null> {
   return page.evaluate((id) => {
-    const n = window.__cateE2E?.nodes().find((x) => x.id === id)
+    const n = window.__orquestraE2E?.nodes().find((x) => x.id === id)
     return n ? n.origin : null
   }, nodeId)
 }
@@ -90,7 +90,7 @@ export async function seedTerminal(
   page: Page,
   point: { x: number; y: number } = { x: 200, y: 200 },
 ): Promise<string> {
-  const hint = await page.evaluate((p) => window.__cateE2E!.createTerminal(p), point)
+  const hint = await page.evaluate((p) => window.__orquestraE2E!.createTerminal(p), point)
   // createTerminal returns the node id only if the canvas store has already
   // registered the node synchronously; under CI's throttled rAF that can lag,
   // in which case it returns the panel id instead. Resolve the real node id
@@ -98,7 +98,7 @@ export async function seedTerminal(
   const nodeId = await page
     .waitForFunction(
       (h) => {
-        const n = window.__cateE2E!.nodes().find((x) => x.id === h || x.panelId === h)
+        const n = window.__orquestraE2E!.nodes().find((x) => x.id === h || x.panelId === h)
         return n ? n.id : null
       },
       hint,
@@ -116,21 +116,21 @@ export async function seedCanvasPanel(
   page: Page,
   point: { x: number; y: number } = { x: 200, y: 200 },
 ): Promise<string> {
-  return page.evaluate((p) => window.__cateE2E!.createCanvasPanel(p), point)
+  return page.evaluate((p) => window.__orquestraE2E!.createCanvasPanel(p), point)
 }
 
 export async function setZoom(page: Page, zoom: number): Promise<void> {
-  await page.evaluate((z) => window.__cateE2E!.setZoom(z), zoom)
+  await page.evaluate((z) => window.__orquestraE2E!.setZoom(z), zoom)
   await page.waitForTimeout(80)
 }
 
 export async function resetViewport(page: Page): Promise<void> {
-  await page.evaluate(() => window.__cateE2E!.resetViewport())
+  await page.evaluate(() => window.__orquestraE2E!.resetViewport())
   await page.waitForTimeout(30)
 }
 
 export async function dragSnapshot(page: Page) {
-  return page.evaluate(() => window.__cateE2E!.dragSnapshot())
+  return page.evaluate(() => window.__orquestraE2E!.dragSnapshot())
 }
 
 export async function titleBarCentre(

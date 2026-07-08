@@ -8,7 +8,7 @@ import { APP_OPEN_PATH } from '../../shared/ipc-channels'
 // Dock / "Open With..." folder opens (macOS `open-file` event)
 //
 // Fires when the user drops a folder onto the dock icon or opens one with
-// Cate via Finder. We resolve the folder to a directory and forward it to
+// Orquestra via Finder. We resolve the folder to a directory and forward it to
 // the main renderer, which creates a new workspace rooted at that path.
 //
 // The event can fire *before* the window is ready, so we queue paths and

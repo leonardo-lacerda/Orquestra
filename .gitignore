@@ -25,14 +25,14 @@ dev-app-update.yml
 # Claude Code
 .claude/
 
-# Cate workspace + local session state
-.cate/
+# Orquestra workspace + local session state
+.orquestra/
 
 # Local logo scratch dir
 _logos/
 
 # Temp dirs from runtime daemon tests (deleted on teardown; ignored here in
 # case a run is interrupted before afterAll fires)
-cate-local-ws-*/
-cate-local-install-*/
-cate-daemon-ws-*/
+orquestra-local-ws-*/
+orquestra-local-install-*/
+orquestra-daemon-ws-*/

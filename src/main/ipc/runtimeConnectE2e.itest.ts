@@ -17,26 +17,26 @@
 // parameter and BOTH transports.
 //
 // Opt-in only, gated per transport so each block runs where it can:
-//   SSH:  CATE_LIVE_SSH=1   (any host with a reachable server + key)
-//   WSL:  CATE_LIVE_WSL=1   (a Windows host with the named distro installed)
+//   SSH:  ORQUESTRA_LIVE_SSH=1   (any host with a reachable server + key)
+//   WSL:  ORQUESTRA_LIVE_WSL=1   (a Windows host with the named distro installed)
 // A *.itest.ts name keeps the normal vitest `include` from picking it up. NOT CI.
 //
-// Run (SSH):  CATE_LIVE_SSH=1 CATE_LIVE_SSH_HOST=1.2.3.4 CATE_LIVE_SSH_USER=leigh \
-//             CATE_LIVE_SSH_ROOT=/home/leigh CATE_LIVE_SSH_KEY=~/.ssh/id_ed25519 \
+// Run (SSH):  ORQUESTRA_LIVE_SSH=1 ORQUESTRA_LIVE_SSH_HOST=1.2.3.4 ORQUESTRA_LIVE_SSH_USER=leigh \
+//             ORQUESTRA_LIVE_SSH_ROOT=/home/leigh ORQUESTRA_LIVE_SSH_KEY=~/.ssh/id_ed25519 \
 //             npx vitest run --config vitest.live.config.ts \
 //             src/main/ipc/runtimeConnectE2e.itest.ts
 //
-// Run (WSL, on Windows):  set CATE_LIVE_WSL=1 & set CATE_LIVE_WSL_DISTRO=Ubuntu-24.04 ^
-//             & set CATE_LIVE_WSL_PATH=/home/leigh ^
+// Run (WSL, on Windows):  set ORQUESTRA_LIVE_WSL=1 & set ORQUESTRA_LIVE_WSL_DISTRO=Ubuntu-24.04 ^
+//             & set ORQUESTRA_LIVE_WSL_PATH=/home/leigh ^
 //             & npx vitest run --config vitest.live.config.ts src/main/ipc/runtimeConnectE2e.itest.ts
 //
 // Optional SSH extras (each test self-skips when its env is absent):
-//   passphrase: CATE_LIVE_SSH_KEY_ENC=<encrypted key> CATE_LIVE_SSH_PASSPHRASE=...
-//   ssh-agent:  CATE_LIVE_SSH_USE_AGENT=1   (needs a running agent / SSH_AUTH_SOCK)
+//   passphrase: ORQUESTRA_LIVE_SSH_KEY_ENC=<encrypted key> ORQUESTRA_LIVE_SSH_PASSPHRASE=...
+//   ssh-agent:  ORQUESTRA_LIVE_SSH_USE_AGENT=1   (needs a running agent / SSH_AUTH_SOCK)
 //
-// Run it in the NATURAL dev mode (don't set CATE_RUNTIME_DEV=0). isPackaged is
+// Run it in the NATURAL dev mode (don't set ORQUESTRA_RUNTIME_DEV=0). isPackaged is
 // mocked false, so the harness installs from the local dist-runtime tarball via
-// bootstrapDev — self-consistent. Forcing CATE_RUNTIME_DEV=0 takes the
+// bootstrapDev — self-consistent. Forcing ORQUESTRA_RUNTIME_DEV=0 takes the
 // production remote-pull path, which writes a bare-version `.ok` while isInstalled
 // (seeing the same local tarball) expects a version:hash marker — so the next
 // install=false probe reports "not installed". That mismatch is specific to
@@ -63,9 +63,9 @@ vi.mock('electron', () => ({
   app: {
     isPackaged: false,
     getAppPath: () => process.cwd(),
-    getName: () => 'Cate',
+    getName: () => 'Orquestra',
     // userData → a throwaway dir so the real secret / known-hosts stores round-trip
-    // on disk without touching the developer's actual Cate state.
+    // on disk without touching the developer's actual Orquestra state.
     getPath: (name: string) => (name === 'userData' ? H.state.userDataDir : join(H.state.userDataDir, name)),
   },
   // Reversible stand-in for the OS keychain — exercises sshSecretStore's encrypt
@@ -110,7 +110,7 @@ const readJson = (file: string): Record<string, unknown> => {
 }
 
 beforeAll(async () => {
-  H.state.userDataDir = mkdtempSync(join(tmpdir(), 'cate-e2e-'))
+  H.state.userDataDir = mkdtempSync(join(tmpdir(), 'orquestra-e2e-'))
   ;(await import('./runtime')).registerRuntimeHandlers()
   runtimes = (await import('../runtime/runtimeManager')).runtimes
 })
@@ -122,18 +122,18 @@ afterAll(async () => {
 // =============================================================================
 // SSH server
 // =============================================================================
-const LIVE_SSH = process.env.CATE_LIVE_SSH === '1' && !!process.env.CATE_LIVE_SSH_HOST
+const LIVE_SSH = process.env.ORQUESTRA_LIVE_SSH === '1' && !!process.env.ORQUESTRA_LIVE_SSH_HOST
 
-const HOST = process.env.CATE_LIVE_SSH_HOST ?? ''
-const USER = process.env.CATE_LIVE_SSH_USER ?? 'root'
-const PORT = Number(process.env.CATE_LIVE_SSH_PORT ?? '22')
-const ROOT = process.env.CATE_LIVE_SSH_ROOT ?? '/root/'
+const HOST = process.env.ORQUESTRA_LIVE_SSH_HOST ?? ''
+const USER = process.env.ORQUESTRA_LIVE_SSH_USER ?? 'root'
+const PORT = Number(process.env.ORQUESTRA_LIVE_SSH_PORT ?? '22')
+const ROOT = process.env.ORQUESTRA_LIVE_SSH_ROOT ?? '/root/'
 const expandTilde = (p: string): string => p.replace(/^~(?=$|\/)/, homedir())
-const KEY = expandTilde(process.env.CATE_LIVE_SSH_KEY ?? join(homedir(), '.ssh', 'id_ed25519'))
+const KEY = expandTilde(process.env.ORQUESTRA_LIVE_SSH_KEY ?? join(homedir(), '.ssh', 'id_ed25519'))
 
-const ENC_KEY = process.env.CATE_LIVE_SSH_KEY_ENC ? expandTilde(process.env.CATE_LIVE_SSH_KEY_ENC) : ''
-const PASSPHRASE = process.env.CATE_LIVE_SSH_PASSPHRASE ?? ''
-const USE_AGENT = process.env.CATE_LIVE_SSH_USE_AGENT === '1' && !!process.env.SSH_AUTH_SOCK
+const ENC_KEY = process.env.ORQUESTRA_LIVE_SSH_KEY_ENC ? expandTilde(process.env.ORQUESTRA_LIVE_SSH_KEY_ENC) : ''
+const PASSPHRASE = process.env.ORQUESTRA_LIVE_SSH_PASSPHRASE ?? ''
+const USE_AGENT = process.env.ORQUESTRA_LIVE_SSH_USE_AGENT === '1' && !!process.env.SSH_AUTH_SOCK
 
 /** Live runtime daemons on the SSH server (one per live transport; >1 = leak). */
 function serverDaemonCount(): number {
@@ -282,10 +282,10 @@ describe.skipIf(!LIVE_SSH)('SSH runtime connect — full e2e through the IPC han
 // =============================================================================
 // WSL distro (Windows only — drives the WslTransport branch of buildTransport).
 // =============================================================================
-const LIVE_WSL = process.env.CATE_LIVE_WSL === '1' && !!process.env.CATE_LIVE_WSL_DISTRO
+const LIVE_WSL = process.env.ORQUESTRA_LIVE_WSL === '1' && !!process.env.ORQUESTRA_LIVE_WSL_DISTRO
 
-const WSL_DISTRO = process.env.CATE_LIVE_WSL_DISTRO ?? ''
-const WSL_PATH = process.env.CATE_LIVE_WSL_PATH ?? '/root'
+const WSL_DISTRO = process.env.ORQUESTRA_LIVE_WSL_DISTRO ?? ''
+const WSL_PATH = process.env.ORQUESTRA_LIVE_WSL_PATH ?? '/root'
 
 describe.skipIf(!LIVE_WSL)('WSL runtime connect — full e2e through the IPC handlers', () => {
   let connection: Extract<RuntimeConnection, { kind: 'wsl' }>
@@ -303,7 +303,7 @@ describe.skipIf(!LIVE_WSL)('WSL runtime connect — full e2e through the IPC han
 
   test('an unknown distro is rejected with a clear message (buildTransport guard)', async () => {
     const bogus: RuntimeConnection = {
-      kind: 'wsl', runtimeId: 'wsl_bogus_0000000000', distro: 'cate-no-such-distro', distroPath: WSL_PATH,
+      kind: 'wsl', runtimeId: 'wsl_bogus_0000000000', distro: 'orquestra-no-such-distro', distroPath: WSL_PATH,
     }
     const mark = H.captured.length
     const res = await invoke(RUNTIME_ENSURE, bogus)

@@ -2,12 +2,31 @@
 // Type declaration for window.electronAPI exposed via contextBridge
 // =============================================================================
 
-import type { AgentCreateOptions, AgentEventEnvelope, AgentExtensionUIResponse, AgentImageAttachment, AgentModelRef, AgentModelDescriptor, AgentRpcState, AgentSessionListEntry, AgentSessionStats, AgentSlashCommand, AgentThinkingLevel, AppSettings, AgentState, AuthProviderDescriptor, AuthProviderStatus, CanvasLayoutSnapshot, CateWindowParams, CustomOpenAIProvider, DockWindowInitPayload, DockWindowSyncState, DetachedDockWindowSnapshot, WindowPanelInfo, WindowPanelReport, DockStateSnapshot, FileSearchOptions, FileSearchResult, FileTreeNode, GitInfo, SearchOptions, SearchResultBatch, SearchDoneEvent, NotificationAction, OAuthFlowEvent, PanelState, PanelTransferSnapshot, PerfSnapshot, Point, SessionSnapshot, SidebarSession, TerminalActivity, WorkspaceInfo, WorkspaceMutationResult, RemoteConnectSpec, RuntimeConnectResult, RuntimeStatusEvent, RuntimeConnection, RuntimePhase, RemoteProjectEntry, SshHostEntry, UIState } from './types'
+import type { AgentCreateOptions, AgentEventEnvelope, AgentExtensionUIResponse, AgentImageAttachment, AgentModelRef, AgentModelDescriptor, AgentRpcState, AgentSessionListEntry, AgentSessionStats, AgentSlashCommand, AgentThinkingLevel, AppSettings, AgentState, AuthProviderDescriptor, AuthProviderStatus, CanvasLayoutSnapshot, OrquestraWindowParams, CustomOpenAIProvider, DockWindowInitPayload, DockWindowSyncState, DetachedDockWindowSnapshot, WindowPanelInfo, WindowPanelReport, DockStateSnapshot, FileSearchOptions, FileSearchResult, FileTreeNode, GitInfo, SearchOptions, SearchResultBatch, SearchDoneEvent, NotificationAction, OAuthFlowEvent, PanelState, PanelTransferSnapshot, PerfSnapshot, Point, SessionSnapshot, SidebarSession, TerminalActivity, WorkspaceInfo, WorkspaceMutationResult, RemoteConnectSpec, RuntimeConnectResult, RuntimeStatusEvent, RuntimeConnection, RuntimePhase, RemoteProjectEntry, SshHostEntry, UIState } from './types'
+import type { AcpAgentConfig, AcpAgentInfo, AcpSessionInfo, AcpSessionUpdate, AcpPermissionRequest, ApiOrchestratorConfig } from './acp-types'
 import type { SavedSkill, InstalledSkill, SkillEntry, SkillSource, SkillTargetId } from './skills'
 
 /** Lifecycle state of the auto-updater, surfaced to the renderer for the
  *  in-app "update ready" modal. `downloaded` is the one the modal acts on. */
 export type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
+
+/** Subscription info returned by the app auth system. */
+export interface AuthSubscriptionInfo {
+  id: string
+  status: string
+  plan: string | null
+  currentPeriodEnd: string | null
+  trialEnd: string | null
+  cancelAtPeriodEnd: boolean
+}
+
+/** Auth state pushed from main to renderer. */
+export interface AppAuthState {
+  authorized: boolean
+  user: { id: string; email: string } | null
+  subscription: AuthSubscriptionInfo | null
+  reason?: string
+}
 export interface UpdateStatus {
   state: UpdateState
   /** Version of the update in flight, or null when unknown. */
@@ -31,17 +50,17 @@ export interface NativeContextMenuItem {
 }
 
 export interface ElectronAPI {
-  /** True when launched with CATE_E2E=1 (Playwright). Renderer uses this to
-   *  install the test harness on window.__cateE2E. */
+  /** True when launched with ORQUESTRA_E2E=1 (Playwright). Renderer uses this to
+   *  install the test harness on window.__orquestraE2E. */
   isE2E: boolean
 
-  /** True when launched with CATE_PERF=1. Renderer mounts the resource HUD. */
+  /** True when launched with ORQUESTRA_PERF=1. Renderer mounts the resource HUD. */
   isPerf: boolean
 
   /** Pull the latest main-process resource snapshot (null until first sample). */
   perfGetSnapshot(): Promise<PerfSnapshot | null>
 
-  /** Set this window's UI zoom factor (Cate chrome only). Clamped to 0.5–2.0. */
+  /** Set this window's UI zoom factor (Orquestra chrome only). Clamped to 0.5–2.0. */
   setUiScale(scale: number): void
 
   // ---------------------------------------------------------------------------
@@ -84,8 +103,16 @@ export interface ElectronAPI {
   /** Notify main of a terminal panel's on-screen visibility. Used by the
    *  idle-suspend logic to SIGSTOP terminals that are offscreen and silent. */
   terminalSetVisibility(terminalId: string, visible: boolean): Promise<void>
+  terminalSetMaestro(terminalId: string, enabled: boolean, workspacePath?: string): Promise<void>
+  orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
 
   terminalClipboardWrite(text: string): Promise<void>
+
+  /** Create a pipe: forward source terminal's PTY output to target terminal. */
+  terminalPipeCreate(sourceId: string, targetId: string): Promise<void>
+
+  /** Destroy a pipe between two terminals. */
+  terminalPipeDestroy(sourceId: string, targetId: string): Promise<void>
 
   // ---------------------------------------------------------------------------
   // Filesystem
@@ -406,14 +433,14 @@ export interface ElectronAPI {
   /** Notify the main process that the flush save completed. */
   sessionFlushSaveDone(): void
 
-  /** Save project-local workspace + session state to .cate/ directory. */
+  /** Save project-local workspace + session state to .orquestra/ directory. */
   projectStateSave(
     rootPath: string,
     workspace: import('./types').ProjectWorkspaceFile,
     session: import('./types').ProjectSessionFile,
   ): Promise<void>
 
-  /** Load project-local state from .cate/ directory. Returns null if not found. */
+  /** Load project-local state from .orquestra/ directory. Returns null if not found. */
   projectStateLoad(rootPath: string): Promise<{
     workspace: import('./types').ProjectWorkspaceFile
     session: import('./types').ProjectSessionFile | null
@@ -424,7 +451,7 @@ export interface ElectronAPI {
   // ---------------------------------------------------------------------------
 
   /** Subscribe to folder/file paths forwarded from the OS — e.g. the user
-   *  dropped a folder on the dock icon or opened one via "Open With Cate".
+   *  dropped a folder on the dock icon or opened one via "Open With Orquestra".
    *  Returns an unsubscribe function. */
   onOpenPath(callback: (filePath: string) => void): () => void
 
@@ -538,10 +565,10 @@ export interface ElectronAPI {
   /** Persist the sidebar arrangement (workspace order + active workspace). */
   sidebarSessionSet(session: SidebarSession): Promise<void>
 
-  /** Get persisted remote-workspace restore entries (cate-runtime:// only). */
+  /** Get persisted remote-workspace restore entries (orquestra-runtime:// only). */
   remoteProjectsGet(): Promise<RemoteProjectEntry[]>
 
-  /** Persist remote-workspace restore entries (cate-runtime:// only). */
+  /** Persist remote-workspace restore entries (orquestra-runtime:// only). */
   remoteProjectsSet(entries: RemoteProjectEntry[]): Promise<void>
 
   // ---------------------------------------------------------------------------
@@ -676,11 +703,11 @@ export interface ElectronAPI {
   onDragEnd(callback: (dragId?: string) => void): () => void
 
   /** Subscribe to native-fullscreen state changes. Fires with the new boolean
-   *  whenever any Cate window enters or leaves macOS native fullscreen. */
+   *  whenever any Orquestra window enters or leaves macOS native fullscreen. */
   onFullscreenChange(callback: (isFullscreen: boolean) => void): () => void
 
   /** Subscribe to external edits of a project's workspace.json. Fires when the
-   *  on-disk file is found to differ from what Cate last wrote (i.e. a reload
+   *  on-disk file is found to differ from what Orquestra last wrote (i.e. a reload
    *  should be offered). */
   onWorkspaceExternalEdit(callback: (payload: { rootPath: string }) => void): () => void
 
@@ -956,7 +983,7 @@ export interface ElectronAPI {
   /** Available slash commands (skills, prompt templates, extension commands). */
   agentGetCommands(panelId: string): Promise<AgentSlashCommand[]>
 
-  /** Open <cwd>/.cate/pi-agent/{agents|prompts} in the OS file manager. */
+  /** Open <cwd>/.orquestra/pi-agent/{agents|prompts} in the OS file manager. */
   agentOpenSkillsFolder(cwd: string, kind: 'agents' | 'prompts'): Promise<void>
 
   /** Open a single agent/prompt file in the OS default editor. */
@@ -968,7 +995,7 @@ export interface ElectronAPI {
   /** Create a new agent/prompt file from a template, then open it. */
   agentCreateSkill(cwd: string, kind: 'agents' | 'prompts', name: string): Promise<string>
 
-  /** List user files under <cwd>/.cate/pi-agent/{agents|prompts}. */
+  /** List user files under <cwd>/.orquestra/pi-agent/{agents|prompts}. */
   agentListSkillFiles(cwd: string, kind: 'agents' | 'prompts'): Promise<Array<{ name: string; description?: string; path: string }>>
 
   // ---------------------------------------------------------------------------
@@ -986,9 +1013,9 @@ export interface ElectronAPI {
   skillsInstall(entry: SkillEntry, targetId: SkillTargetId, cwd: string): Promise<{ ok: boolean; error?: string; warnings?: string[]; installed?: InstalledSkill }>
   /** Uninstall a skill from a workspace agent. */
   skillsUninstall(skillId: string, name: string, targetId: SkillTargetId, cwd: string): Promise<{ ok: boolean; error?: string }>
-  /** Installs recorded in this workspace's .cate/skills.json. */
+  /** Installs recorded in this workspace's .orquestra/skills.json. */
   skillsListInstalled(cwd: string): Promise<InstalledSkill[]>
-  /** Skills saved to the user's Cate library (cached in userData). */
+  /** Skills saved to the user's Orquestra library (cached in userData). */
   skillsListSaved(): Promise<SavedSkill[]>
   /** Save a skill to the library: fetch its files + cache them in userData. */
   skillsSave(entry: SkillEntry): Promise<{ ok: boolean; error?: string }>
@@ -1037,6 +1064,71 @@ export interface ElectronAPI {
 
   /** Disconnect a provider (clears stored credentials). */
   authDelete(providerId: string): Promise<void>
+
+  // ---------------------------------------------------------------------------
+  // ACP — Agent Client Protocol
+  // ---------------------------------------------------------------------------
+
+  /** Spawn an ACP-compatible agent CLI. Returns agent info including its id. */
+  acpStartAgent(config: AcpAgentConfig): Promise<AcpAgentInfo>
+
+  /** Stop a running ACP agent by id. */
+  acpStopAgent(agentId: string): Promise<void>
+
+  /** Create a new ACP session on a running agent. Returns session info. */
+  acpCreateSession(agentId: string): Promise<AcpSessionInfo>
+
+  /** Send a user prompt to an ACP session. */
+  acpSendPrompt(sessionId: string, prompt: string): Promise<void>
+
+  /** Cancel the in-progress turn of an ACP session. */
+  acpCancelSession(sessionId: string): Promise<void>
+
+  /** Close an ACP session (agent may continue running). */
+  acpCloseSession(sessionId: string): Promise<void>
+
+  /** Subscribe to ACP session update events (text chunks, tool calls, diffs, etc.). */
+  onAcpSessionUpdate(callback: (update: AcpSessionUpdate) => void): () => void
+
+  /** Subscribe to ACP session status changes (initializing, idle, running, error, closed). */
+  onAcpSessionStatus(callback: (info: AcpSessionInfo) => void): () => void
+
+  /** Subscribe to ACP permission requests from agents (e.g. "may I write this file?"). */
+  onAcpRequestPermission(callback: (request: AcpPermissionRequest) => void): () => void
+
+  /** Respond to an ACP permission request (approve or deny). */
+  acpPermissionResponse(toolCallId: string, allowed: boolean): void
+
+  /** Call an AI API directly and return the response text. */
+  apiOrchestrate(config: ApiOrchestratorConfig, task: string, workerCount: number): Promise<string>
+
+  // Maestro — canvas manipulation from inside terminals
+  terminalSetMaestro(terminalId: string, enabled: boolean, workspacePath?: string): Promise<void>
+  orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
+  onMaestroRecruit(callback: (maestroId: string, args: { role: string; agent?: string; name?: string }) => void): () => void
+  onMaestroDismiss(callback: (maestroId: string, args: { target: string }) => void): () => void
+  onMaestroConnect(callback: (maestroId: string, args: { target: string; path: string }) => void): () => void
+  onMaestroList(callback: (maestroId: string, args: Record<string, never>) => void): () => void
+  onMaestroReassign(callback: (maestroId: string, args: { target: string; role: string }) => void): () => void
+
+  // ---------------------------------------------------------------------------
+  // App Auth — Supabase login for the desktop app
+  // ---------------------------------------------------------------------------
+
+  /** Try to restore a saved Supabase session on app startup. Returns the auth state. */
+  appAuthRestore(): Promise<AppAuthState>
+
+  /** Sign in with email + password. Returns the auth state. */
+  appAuthSignIn(email: string, password: string): Promise<AppAuthState>
+
+  /** Sign out the current user. Returns the auth state. */
+  appAuthSignOut(): Promise<AppAuthState>
+
+  /** Re-check subscription status for the current user. */
+  appAuthRefreshSubscription(): Promise<AppAuthState>
+
+  /** Subscribe to auth state pushes from main (e.g. session expiry detected). */
+  onAppAuthState(callback: (state: AppAuthState) => void): () => void
 }
 
 declare global {

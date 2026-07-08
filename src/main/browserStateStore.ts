@@ -1,7 +1,7 @@
 // =============================================================================
 // browserStateStore — global, hand-editable browser history + bookmarks under
 // <userData>/, via ./jsonStateFile. Shared across ALL workspaces and windows so
-// Cate's browser panels behave like one consistent browser. Cookies/logins are
+// Orquestra's browser panels behave like one consistent browser. Cookies/logins are
 // already shared via the `persist:browser-shared` partition (see BrowserPanel);
 // this adds the history + bookmarks Chromium does not expose through <webview>.
 // =============================================================================

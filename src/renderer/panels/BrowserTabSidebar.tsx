@@ -2,7 +2,7 @@
 // BrowserTabSidebar — a vertical tab sidebar (Arc/Edge-style) for a browser
 // panel. Pinned ("fixed") tabs render as a compact icon grid at the top; the
 // rest are a vertical list. "New tab" sits at the bottom. Replaces the
-// horizontal tab strip, which stacked awkwardly under Cate's own panel tab.
+// horizontal tab strip, which stacked awkwardly under Orquestra's own panel tab.
 // =============================================================================
 import { Plus, X, Globe } from '@phosphor-icons/react'
 import type { BrowserTab } from '../../shared/types'

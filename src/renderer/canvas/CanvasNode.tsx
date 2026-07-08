@@ -31,8 +31,11 @@ import DockSplitContainer from '../docking/DockSplitContainer'
 import { confirmCloseDirtyPanels } from '../lib/confirmCloseDirty'
 import { confirmCloseRunningTerminals } from '../lib/confirmCloseTerminal'
 import { collectPanelIds } from '../lib/canvas/collectPanelIds'
-import { ArrowsOutSimple, ArrowsInSimple, X, Lock, LockOpen } from '@phosphor-icons/react'
+import { ArrowsOutSimple, ArrowsInSimple, X, Lock, LockOpen, Crown, Gear } from '@phosphor-icons/react'
 import { PANEL_DEFINITIONS } from '../../shared/panels'
+import { terminalRegistry } from '../lib/terminal/terminalRegistry'
+import ConnectionHandles from './ConnectionHandles'
+import { getPendingConnection, endPendingConnection, startPendingConnection } from './ConnectionLayer'
 
 // When the Hand tool is active, a left-press on a node must pan
 // the canvas instead of dragging/resizing the node. These handlers bail out
@@ -408,8 +411,106 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
     return () => canvasApi.getState().setNodeActiveWorktree(nodeId, null)
   }, [nodeId, canvasApi])
 
+  // Maestro mode toggle (terminal panels only)
+  const [maestroEnabled, setMaestroEnabled] = React.useState(false)
+  const [showMaestroSettings, setShowMaestroSettings] = React.useState(false)
+  const maestroSettingsRef = React.useRef<HTMLDivElement>(null)
+
+  const handleToggleMaestro = React.useCallback(() => {
+    if (!node?.panelId || primaryPanelType !== 'terminal') return
+    const next = !maestroEnabled
+    setMaestroEnabled(next)
+    // Resolve panelId → ptyId before sending to main process
+    const ptyId = terminalRegistry.ptyIdForPanel(node.panelId)
+    if (ptyId) {
+      const wsPath = currentWorkspace?.rootPath || ''
+      window.electronAPI?.terminalSetMaestro?.(ptyId, next, wsPath)
+    }
+  }, [node?.panelId, primaryPanelType, maestroEnabled])
+
+  // Close maestro settings popup on outside click
+  React.useEffect(() => {
+    if (!showMaestroSettings) return
+    const handler = (e: MouseEvent) => {
+      if (maestroSettingsRef.current && !maestroSettingsRef.current.contains(e.target as Node)) {
+        setShowMaestroSettings(false)
+      }
+    }
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
+  }, [showMaestroSettings])
+
   const nodeControlButtons = (
     <>
+      {primaryPanelType === 'terminal' && (
+        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+        <GrabButton
+          title={maestroEnabled ? 'Disable Maestro' : 'Enable Maestro'}
+          onClick={(e) => { e.stopPropagation(); handleToggleMaestro() }}
+          color={maestroEnabled ? '#A855F7' : undefined}
+        >
+          <Crown size={TAB_ICON_SIZE} />
+        </GrabButton>
+        {maestroEnabled && (
+          <GrabButton
+            title="Maestro Settings"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowMaestroSettings((v) => !v)
+            }}
+          >
+            <Gear size={TAB_ICON_SIZE} />
+          </GrabButton>
+        )}
+        {showMaestroSettings && (
+          <div
+            ref={maestroSettingsRef}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 4,
+              background: 'var(--surface-2, #1e1e2e)',
+              border: '1px solid var(--border, #333)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              zIndex: 100000,
+              minWidth: 200,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: 'var(--text, #ccc)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6, color: '#A855F7' }}>
+              ⚡ Maestro Settings
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ opacity: 0.6 }}>Status</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
+                  background: maestroEnabled ? '#22c55e' : '#666',
+                }} />
+                {maestroEnabled ? 'Active' : 'Inactive'}
+              </div>
+            </div>
+            {currentWorkspace?.rootPath && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ opacity: 0.6 }}>Workspace</div>
+                <div style={{ fontSize: 11, wordBreak: 'break-all' }}>
+                  {currentWorkspace.rootPath}
+                </div>
+              </div>
+            )}
+            <div style={{ opacity: 0.5, fontSize: 10, marginTop: 4 }}>
+              Workers appear as new terminal panels with orange arrows
+            </div>
+          </div>
+        )}
+        </div>
+      )}
       <GrabButton
         title={node?.isPinned ? 'Unlock' : 'Lock'}
         onClick={(e) => { e.stopPropagation(); handleTogglePin() }}
@@ -517,6 +618,16 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
       if (wasDragged.current) return
       // Hand tool: clicks pan/move only — never select.
       if (useUIStore.getState().activeTool === 'hand') return
+
+      // If there's a pending connection from another node, complete it here
+      const pending = getPendingConnection()
+      if (pending && pending.sourceNodeId !== nodeId) {
+        e.stopPropagation()
+        canvasApi.getState().addConnection(pending.sourceNodeId, nodeId)
+        endPendingConnection()
+        return
+      }
+
       if (e.shiftKey) {
         canvasApi.getState().toggleNodeSelection(nodeId)
         return
@@ -557,10 +668,21 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
       e.preventDefault()
       e.stopPropagation()
       if (!window.electronAPI) return
+      const nodeConnections = canvasApi.getState().getConnections(nodeId)
+      const hasConnections = nodeConnections.length > 0
+
       const id = await window.electronAPI.showContextMenu([
         { id: 'maximize', label: maximized ? 'Restore' : 'Maximize' },
         { id: 'pin', label: node?.isPinned ? 'Unlock' : 'Lock' },
         { type: 'separator' },
+        ...(primaryPanelType === 'terminal' || primaryPanelType === 'agent'
+          ? [{ id: 'connect', label: '🔗 Connect to...' }, { type: 'separator' as const }]
+          : []),
+        ...(hasConnections
+          ? nodeConnections.length === 1
+            ? [{ id: 'disconnect-all', label: '✂️ Disconnect' }, { type: 'separator' as const }]
+            : [{ id: 'disconnect-all', label: `✂️ Disconnect All (${nodeConnections.length})` }, { type: 'separator' as const }]
+          : []),
         { id: 'front', label: 'Move to Front' },
         { id: 'back', label: 'Move to Back' },
         { type: 'separator' },
@@ -572,6 +694,15 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         case 'front': canvasApi.getState().moveToFront(nodeId); break
         case 'back': canvasApi.getState().moveToBack(nodeId); break
         case 'close': handleClose(); break
+        case 'connect': {
+          startPendingConnection(nodeId)
+          break
+        }
+        case 'disconnect-all': {
+          const conns = canvasApi.getState().getConnections(nodeId)
+          for (const c of conns) canvasApi.getState().removeConnection(c.id)
+          break
+        }
       }
     },
     [maximized, node?.isPinned, handleToggleMaximize, handleTogglePin, handleClose, canvasApi, nodeId],
@@ -687,7 +818,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
           onDragEnter={(e) => {
             if (
               e.dataTransfer.types.includes('Files') ||
-              e.dataTransfer.types.includes('application/cate-file')
+              e.dataTransfer.types.includes('application/orquestra-file')
             ) {
               ;(e.currentTarget as HTMLElement).style.pointerEvents = 'none'
             }
@@ -732,6 +863,13 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         </DockStoreProvider>
       </div>
+      {/* Connection handles — only for terminal and agent panels */}
+      <ConnectionHandles
+        nodeId={nodeId}
+        isConnectable={primaryPanelType === 'terminal' || primaryPanelType === 'agent'}
+        nodeOrigin={node.origin}
+        nodeSize={node.size}
+      />
     </div>
 
     {/* Resize band — sits just OUTSIDE the panel border, in the canvas gutter,

@@ -75,7 +75,7 @@ function dirName(path: string): string {
 }
 
 /** Last path segment of a rootPath, for the nested-mode section header.
- *  rootPath may be a locator (`cate-runtime://<id>/<path>`) for a remote
+ *  rootPath may be a locator (`orquestra-runtime://<id>/<path>`) for a remote
  *  workspace, so decode it before taking the basename. */
 function repoDisplayName(rootPath: string): string {
   let p = rootPath

@@ -350,7 +350,7 @@ export default function BrowserPanel({
     // editable surfaces (URL bar, search boxes, external apps that accept text).
     try {
       e.dataTransfer.effectAllowed = 'copy'
-      e.dataTransfer.setData('application/cate-file', screenshot.filePath)
+      e.dataTransfer.setData('application/orquestra-file', screenshot.filePath)
       e.dataTransfer.setData('text/uri-list', `file://${screenshot.filePath}`)
       e.dataTransfer.setData('text/plain', screenshot.filePath)
       // Use the screenshot itself as the drag image so the cursor shows the

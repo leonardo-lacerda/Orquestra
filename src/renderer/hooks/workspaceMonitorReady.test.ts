@@ -37,7 +37,7 @@ describe('isWorkspaceMonitorReady', () => {
 
   it('is false for a remote workspace that is still connecting', () => {
     const w = ws({
-      rootPath: 'cate-runtime://abc/repo',
+      rootPath: 'orquestra-runtime://abc/repo',
       connection: { kind: 'wsl', runtimeId: 'abc', distro: 'Ubuntu', distroPath: '/repo' },
       runtime: { phase: 'connecting' },
     })
@@ -46,7 +46,7 @@ describe('isWorkspaceMonitorReady', () => {
 
   it('is false for a remote workspace with no status yet', () => {
     const w = ws({
-      rootPath: 'cate-runtime://abc/repo',
+      rootPath: 'orquestra-runtime://abc/repo',
       connection: { kind: 'wsl', runtimeId: 'abc', distro: 'Ubuntu', distroPath: '/repo' },
     })
     expect(isWorkspaceMonitorReady(w)).toBe(false)
@@ -54,7 +54,7 @@ describe('isWorkspaceMonitorReady', () => {
 
   it('is true once the remote runtime is connected', () => {
     const w = ws({
-      rootPath: 'cate-runtime://abc/repo',
+      rootPath: 'orquestra-runtime://abc/repo',
       connection: {
         kind: 'server',
         runtimeId: 'abc',

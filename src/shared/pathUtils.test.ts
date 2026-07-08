@@ -26,7 +26,7 @@ describe('toAbsolutePath', () => {
 
   // Regression: the renderer has no Node `process` global. The helper must not
   // reference it, or restoring a workspace throws "process is not defined" and
-  // the canvas fails to rebuild from .cate/workspace.json.
+  // the canvas fails to rebuild from .orquestra/workspace.json.
   it('does not depend on the Node `process` global (renderer-safe)', () => {
     vi.stubGlobal('process', undefined)
     expect(() => toAbsolutePath('src/a.ts', '/Users/x/proj')).not.toThrow()

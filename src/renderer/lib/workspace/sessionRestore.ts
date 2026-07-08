@@ -73,7 +73,7 @@ function resolveSnapshotCanvasPanelId(snapshot: SessionSnapshot): string | null 
 }
 
 /**
- * Re-read the active workspace's .cate/workspace.json from disk and rebuild the
+ * Re-read the active workspace's .orquestra/workspace.json from disk and rebuild the
  * canvas from it, discarding the current in-memory layout. This is how an
  * external edit to the file is applied without quitting the app — the autosave
  * guard in main keeps the edit from being clobbered until this runs.
@@ -86,8 +86,8 @@ export async function reloadActiveWorkspaceFromDisk(): Promise<void> {
   const wsId = appStore.selectedWorkspaceId
   const ws = appStore.workspaces.find((w) => w.id === wsId)
   if (!ws?.rootPath) return
-  // projectStateLoad is locator-aware: a local rootPath reads local .cate/, a
-  // remote cate-runtime:// locator reads .cate/ on the runtime next to the
+  // projectStateLoad is locator-aware: a local rootPath reads local .orquestra/, a
+  // remote orquestra-runtime:// locator reads .orquestra/ on the runtime next to the
   // remote repo. Both paths round-trip through the same restore below.
 
   const projectState = (await window.electronAPI.projectStateLoad(ws.rootPath)) as {
@@ -122,7 +122,7 @@ export async function reloadActiveWorkspaceFromDisk(): Promise<void> {
 /**
  * True when a workspace has no meaningful layout yet: no panels at all, or only
  * canvas panels that hold zero nodes (the blank center canvas a fresh workspace
- * mints). Used to decide whether opening it should load the on-disk `.cate/`
+ * mints). Used to decide whether opening it should load the on-disk `.orquestra/`
  * layout, and whether a just-opened workspace still needs a starter terminal.
  */
 export function isWorkspaceEffectivelyEmpty(wsId: string): boolean {
@@ -139,14 +139,14 @@ export function isWorkspaceEffectivelyEmpty(wsId: string): boolean {
 }
 
 /**
- * Load a workspace's saved layout from its `.cate/` files when it's opened at
+ * Load a workspace's saved layout from its `.orquestra/` files when it's opened at
  * runtime with no live layout yet — the close-then-reopen path. Without this,
  * opening a workspace folder again (after closing it, or via a fresh
  * addWorkspace) comes up as a blank canvas because the layout is only read at
  * app startup, never on a runtime open.
  *
- * Locator-agnostic: a local rootPath reads local `.cate/`, a remote
- * cate-runtime:// locator reads `.cate/` on the runtime next to the remote
+ * Locator-agnostic: a local rootPath reads local `.orquestra/`, a remote
+ * orquestra-runtime:// locator reads `.orquestra/` on the runtime next to the remote
  * repo (projectStateLoad routes either way). For remote, the caller MUST ensure
  * the runtime is connected first (restoreSession spawns terminals / reads
  * files through it).
@@ -286,7 +286,7 @@ async function restoreSessionHydrate(snapshot: SessionSnapshot, workspaceId: str
     for (const [cpId, canvas] of Object.entries(snapshot.canvases)) {
       getOrCreateCanvasStoreForPanel(cpId)
         .getState()
-        .loadWorkspaceCanvas(canvas.canvasNodes, canvas.viewportOffset, canvas.zoomLevel)
+        .loadWorkspaceCanvas(canvas.canvasNodes, canvas.viewportOffset, canvas.zoomLevel, canvas.connections, canvas.drawings)
     }
   }
 

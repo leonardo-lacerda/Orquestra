@@ -11,7 +11,7 @@
 //   - peak per-process CPU (GPU = the shader cost; Tab = renderer)
 //   - territory draws/sec and the scissor's shaded-vs-full-canvas area ratio
 //     (territoryDraw / territoryScissorKpx / territoryFullKpx, instrumented in
-//     territoryGL.draw under CATE_PERF=1)
+//     territoryGL.draw under ORQUESTRA_PERF=1)
 //
 // Thresholds are deliberately GENEROUS — they only catch egregious regressions
 // (sub-20fps drags, multi-second freezes, the terrace silently not rendering).
@@ -33,7 +33,7 @@ let page: Page
 
 test.beforeAll(async () => {
   ;({ electronApp: app, mainWindow: page } = await launchApp({ perf: true }))
-  await page.waitForFunction(() => typeof window.__catePerf === 'object', { timeout: 15_000 })
+  await page.waitForFunction(() => typeof window.__orquestraPerf === 'object', { timeout: 15_000 })
 })
 
 test.afterAll(async () => closeApp(app))
@@ -41,7 +41,7 @@ test.afterAll(async () => closeApp(app))
 // Each scenario seeds its own world; clear the canvas first so node counts and
 // layout don't accumulate across tests (the app instance is shared via beforeAll).
 test.beforeEach(async () => {
-  await page.evaluate(() => { window.__cateE2E!.clearCanvas(); window.__cateE2E!.setZoom(1); window.__cateE2E!.resetViewport() })
+  await page.evaluate(() => { window.__orquestraE2E!.clearCanvas(); window.__orquestraE2E!.setZoom(1); window.__orquestraE2E!.resetViewport() })
   await page.waitForTimeout(150)
 })
 
@@ -77,9 +77,9 @@ async function measureTerritory(
 ): Promise<TerritoryMeasurement> {
   const before = await page.evaluate(() => ({
     t: performance.now(),
-    rc: window.__catePerf!.renderCounts(),
+    rc: window.__orquestraPerf!.renderCounts(),
   }))
-  await page.evaluate(() => window.__catePerf!.resetWindow())
+  await page.evaluate(() => window.__orquestraPerf!.resetWindow())
 
   const perProcCpu: Record<string, number> = {}
   const actionP = action()
@@ -93,10 +93,10 @@ async function measureTerritory(
 
   const after = await page.evaluate(() => ({
     t: performance.now(),
-    rc: window.__catePerf!.renderCounts(),
-    fps: window.__catePerf!.fps(),
-    longTasks: window.__catePerf!.longTasks(),
-    livePanels: window.__cateE2E!.worktreeDebug().taggedNodes,
+    rc: window.__orquestraPerf!.renderCounts(),
+    fps: window.__orquestraPerf!.fps(),
+    longTasks: window.__orquestraPerf!.longTasks(),
+    livePanels: window.__orquestraE2E!.worktreeDebug().taggedNodes,
     mountedNodes: document.querySelectorAll('[data-node-id]').length,
   }))
 
@@ -163,7 +163,7 @@ async function seedWorktreeWorld(
     const col = i % cols
     const row = Math.floor(i / cols)
     const id = await page.evaluate(
-      (p) => window.__cateE2E!.createTerminal(p),
+      (p) => window.__orquestraE2E!.createTerminal(p),
       { x: 60 + col * step.x, y: 60 + row * step.y },
     )
     ids.push(id)
@@ -171,19 +171,19 @@ async function seedWorktreeWorld(
   }
 
   const worktrees = await page.evaluate(
-    (specs) => window.__cateE2E!.seedWorktrees(specs),
+    (specs) => window.__orquestraE2E!.seedWorktrees(specs),
     Array.from({ length: groups }, (_, i) => ({ color: COLORS[i % COLORS.length], label: `wt-${i}` })),
   )
   // Tag each terminal into a worktree round-robin (index 0 = primary).
   for (let i = 0; i < ids.length; i++) {
     await page.evaluate(
-      ({ nodeId, wtId }) => window.__cateE2E!.tagNodeWorktree(nodeId, wtId),
+      ({ nodeId, wtId }) => window.__orquestraE2E!.tagNodeWorktree(nodeId, wtId),
       { nodeId: ids[i], wtId: worktrees[i % worktrees.length].id },
     )
   }
   // Wait for CanvasNode to publish the tags so membership forms 2+ groups.
   await page.waitForFunction(
-    () => window.__cateE2E!.worktreeDebug().distinctGroups >= 2,
+    () => window.__orquestraE2E!.worktreeDebug().distinctGroups >= 2,
     undefined,
     { timeout: 5000 },
   )
@@ -193,7 +193,7 @@ async function seedWorktreeWorld(
 /** Clear seeded nodes between scenarios so counts/layout don't accumulate. */
 async function resetWorld(): Promise<void> {
   await page.evaluate(() => {
-    const h = window.__cateE2E!
+    const h = window.__orquestraE2E!
     h.setZoom(1)
     h.resetViewport()
   })
@@ -203,7 +203,7 @@ async function resetWorld(): Promise<void> {
  *  mounts — otherwise off-screen panels are culled and never reach the shader,
  *  so the terrace would only ever render the few panels visible at zoom 1. */
 async function zoomOut(zoom = 0.4): Promise<void> {
-  await page.evaluate((z) => { window.__cateE2E!.setZoom(z); window.__cateE2E!.resetViewport() }, zoom)
+  await page.evaluate((z) => { window.__orquestraE2E!.setZoom(z); window.__orquestraE2E!.resetViewport() }, zoom)
   await page.waitForTimeout(500)
 }
 
@@ -214,7 +214,7 @@ async function zoomOut(zoom = 0.4): Promise<void> {
 test('terrace engages (sanity: 2+ worktrees, many panels feed the shader)', async () => {
   await seedWorktreeWorld(LOAD, GROUPS, false)
   await zoomOut()
-  const dbg = await page.evaluate(() => window.__cateE2E!.worktreeDebug())
+  const dbg = await page.evaluate(() => window.__orquestraE2E!.worktreeDebug())
   // eslint-disable-next-line no-console
   console.log(`\n  worktree debug: ${JSON.stringify(dbg)}`)
   expect(dbg.liveWorktrees).toBeGreaterThanOrEqual(2)
@@ -237,7 +237,7 @@ test('terrace pan stress (rAF-driven viewport sweep — redraw every frame)', as
   // windowless e2e harness, which doesn't reliably route wheel-pan to the canvas.
   const m = await measureTerritory('terrace pan (90 frames)', 2000, async () => {
     await page.evaluate(async () => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 90; i++) {
         h.setViewport({ x: Math.round(220 * Math.sin(i / 6)), y: Math.round(160 * Math.cos(i / 9)) })
@@ -266,7 +266,7 @@ test('terrace zoom stress (rAF-driven zoom sweep — setView every frame)', asyn
   // keep feeding the shader instead of being culled at zoom 1.
   const m = await measureTerritory('terrace zoom (90 frames)', 2000, async () => {
     await page.evaluate(async () => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 90; i++) {
         h.setZoom(0.4 + 0.2 * Math.sin(i / 7))
@@ -284,8 +284,8 @@ test('terrace zoom stress (rAF-driven zoom sweep — setView every frame)', asyn
 test('terrace node-move stress (per-frame geometry rebuild + GL re-upload + redraw)', async () => {
   await seedWorktreeWorld(LOAD, GROUPS, false)
   await zoomOut()
-  const nodeId = await page.evaluate(() => window.__cateE2E!.nodes()[0]?.id)
-  const start = await page.evaluate((id) => window.__cateE2E!.nodes().find((n) => n.id === id)?.origin, nodeId)
+  const nodeId = await page.evaluate(() => window.__orquestraE2E!.nodes()[0]?.id)
+  const start = await page.evaluate((id) => window.__orquestraE2E!.nodes().find((n) => n.id === id)?.origin, nodeId)
   if (!nodeId || !start) throw new Error('no seeded node')
 
   // Moving a node's origin every frame is the hottest terrace path: the content
@@ -295,7 +295,7 @@ test('terrace node-move stress (per-frame geometry rebuild + GL re-upload + redr
   // node). Drives the node in a circle at rAF cadence.
   const m = await measureTerritory('terrace node-move (90 frames, circular)', 2000, async () => {
     await page.evaluate(async ({ id, sx, sy }) => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 90; i++) {
         const a = (i / 90) * Math.PI * 2
@@ -320,7 +320,7 @@ test('scissor clips empty regions (a tiny cluster shades far less than a full-vi
   // fixed zoom (each setViewport → onChange → paintGL → draw).
   const jiggle = async () => {
     await page.evaluate(async () => {
-      const h = window.__cateE2E!
+      const h = window.__orquestraE2E!
       const raf = () => new Promise((r) => requestAnimationFrame(() => r(null)))
       for (let i = 0; i < 24; i++) { h.setViewport({ x: (i % 6) - 3, y: (i % 4) - 2 }); await raf() }
     })
@@ -328,7 +328,7 @@ test('scissor clips empty regions (a tiny cluster shades far less than a full-vi
 
   // Zoomed IN so the cluster's terrace spans the viewport → scissor ≈ full.
   const zoomedIn = await measureTerritory('scissor · cluster fills viewport (zoom 1.6)', 1200, async () => {
-    await page.evaluate(() => { window.__cateE2E!.setZoom(1.6); window.__cateE2E!.resetViewport() })
+    await page.evaluate(() => { window.__orquestraE2E!.setZoom(1.6); window.__orquestraE2E!.resetViewport() })
     await jiggle()
   })
   report(zoomedIn)
@@ -336,7 +336,7 @@ test('scissor clips empty regions (a tiny cluster shades far less than a full-vi
   // Zoomed OUT so the same cluster is a small island → scissor clips the empty
   // surround and shades far fewer pixels.
   const zoomedOut = await measureTerritory('scissor · cluster is a small island (zoom 0.3)', 1200, async () => {
-    await page.evaluate(() => { window.__cateE2E!.setZoom(0.3); window.__cateE2E!.resetViewport() })
+    await page.evaluate(() => { window.__orquestraE2E!.setZoom(0.3); window.__orquestraE2E!.resetViewport() })
     await jiggle()
   })
   report(zoomedOut)

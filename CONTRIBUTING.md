@@ -1,4 +1,4 @@
-# Contributing to Cate
+# Contributing to Orquestra
 
 Thanks for your interest in contributing! This guide explains how we work so that your time is well spent and nobody is surprised by the outcome.
 
@@ -6,14 +6,14 @@ Please read the [Contribution Workflow](#contribution-workflow) before writing c
 
 ## Contribution Workflow
 
-Cate is an opinionated product with a specific direction. To keep that direction coherent, we ask that you follow these steps.
+Orquestra is an opinionated product with a specific direction. To keep that direction coherent, we ask that you follow these steps.
 
 ### 1. Open an issue first
 
 For anything beyond a trivial fix, **start with an issue**, not a pull request. Describe:
 
 - The problem you want to solve, or the feature you want to add
-- Why it belongs in Cate (the use case, not just the mechanism)
+- Why it belongs in Orquestra (the use case, not just the mechanism)
 - Roughly how you imagine it working
 
 This lets us agree on the *what* and the *shape* before you spend hours on the *how*.
@@ -103,7 +103,7 @@ See the [Architecture section](README.md#architecture) in the README and [`CLAUD
 
 ## Reporting Bugs
 
-Open an [issue](https://github.com/0-AI-UG/cate/issues) with:
+Open an [issue](https://github.com/0-AI-UG/orquestra/issues) with:
 
 - Steps to reproduce
 - Expected vs actual behavior

@@ -25,7 +25,7 @@ import { WindowTypeContext } from '../stores/WindowTypeContext'
 import { useUIStore } from '../stores/uiStore'
 import { useAppStore } from '../stores/appStore'
 import { useWindowPanelStore } from '../stores/windowPanelStore'
-import type { CateWindowType, WindowPanelInfo } from '../../shared/types'
+import type { OrquestraWindowType, WindowPanelInfo } from '../../shared/types'
 
 let host: HTMLDivElement
 let root: Root
@@ -66,7 +66,7 @@ afterEach(() => {
   useUIStore.getState().setShowCommandPalette(false)
 })
 
-function renderPalette(windowType: CateWindowType) {
+function renderPalette(windowType: OrquestraWindowType) {
   act(() => {
     root.render(
       <WindowTypeContext.Provider value={windowType}>

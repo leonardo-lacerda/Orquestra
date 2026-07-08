@@ -81,8 +81,8 @@ export function CursorBlink() {
 
 export function LoadingIndicator() {
   return (
-    <div className="text-[12px] cate-fade-in">
-      <span className="cate-notif-pulse">Loading</span>
+    <div className="text-[12px] orquestra-fade-in">
+      <span className="orquestra-notif-pulse">Loading</span>
     </div>
   )
 }

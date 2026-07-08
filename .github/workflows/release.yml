@@ -79,7 +79,7 @@ jobs:
       # version.ts, piVersion.ts) from package.json / the installed pi BEFORE
       # building the app. `npm run build` bakes RUNTIME_VERSION/PI_VERSION into
       # the app, and the daemon resolves its tarball by that version
-      # (cate-runtime-<RUNTIME_VERSION>-<target>.tgz). A release whose version
+      # (orquestra-runtime-<RUNTIME_VERSION>-<target>.tgz). A release whose version
       # bump only touched package.json (e.g. a beta tag) otherwise leaves the
       # committed version.ts stale, so the app looks for the wrong tarball name —
       # in dev/e2e that means no ripgrep and 0-result content search (which gates
@@ -119,13 +119,13 @@ jobs:
       # installer (electron-builder.yml extraResources → runtime-host.tgz). Build
       # this runner's host-target tarball and stage it under the fixed name so the
       # extraResource exists. Each runner builds only its own host target. On macOS
-      # the build script signs the bundled natives via CATE_MAC_SIGN_IDENTITY
+      # the build script signs the bundled natives via ORQUESTRA_MAC_SIGN_IDENTITY
       # (exported above) before packing, so the tarball notarizes inside the app.
       - name: Build + stage host runtime tarball
         shell: bash
         run: |
           node scripts/build-runtime-tarball.mjs
-          cp dist-runtime/cate-runtime-*.tgz dist-runtime/runtime-host.tgz
+          cp dist-runtime/orquestra-runtime-*.tgz dist-runtime/runtime-host.tgz
 
       # A single macOS .app can run on either CPU (x64 natively on Intel, arm64
       # on Apple Silicon, x64 under Rosetta), and the LOCAL workspace runs the
@@ -145,8 +145,8 @@ jobs:
         run: |
           cp dist-runtime/runtime-host.tgz dist-runtime/runtime-host-arm64.tgz
           gh release download "$TAG_NAME" --repo "${{ github.repository }}" \
-            --pattern 'cate-runtime-*-darwin-x64.tgz' --dir dist-runtime --clobber
-          cp dist-runtime/cate-runtime-*-darwin-x64.tgz dist-runtime/runtime-host-x64.tgz
+            --pattern 'orquestra-runtime-*-darwin-x64.tgz' --dir dist-runtime --clobber
+          cp dist-runtime/orquestra-runtime-*-darwin-x64.tgz dist-runtime/runtime-host-x64.tgz
 
       # The packaged macOS app's MAIN process loads @parcel/watcher (local file
       # watching) at startup, and one .app runs on either CPU (arm64 native, x64
@@ -237,7 +237,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --clobber
 
-  # Per-target cate-runtime daemon tarballs. Built on the matching runner so
+  # Per-target orquestra-runtime daemon tarballs. Built on the matching runner so
   # node-pty's native binary is correct for the target; linux-arm64 is cross-
   # built in a QEMU-emulated container (--docker). Uploaded to the same release
   # so a connecting host can pull its tarball straight from the release URL
@@ -320,7 +320,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          gh release upload "$TAG_NAME" dist-runtime/cate-runtime-*-${{ matrix.target }}.tgz \
+          gh release upload "$TAG_NAME" dist-runtime/orquestra-runtime-*-${{ matrix.target }}.tgz \
             --repo "${{ github.repository }}" \
             --clobber
 
@@ -347,7 +347,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          gh release upload "$TAG_NAME" dist-runtime/cate-pi-*.tgz \
+          gh release upload "$TAG_NAME" dist-runtime/orquestra-pi-*.tgz \
             --repo "${{ github.repository }}" \
             --clobber
 

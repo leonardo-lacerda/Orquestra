@@ -42,8 +42,8 @@ function generateId(): string {
 }
 
 // -----------------------------------------------------------------------------
-// Per-project lock — claim ownership of a project's .cate/workspace.json when
-// it's opened here, so a second Cate (dev vs installed) won't autosave over us.
+// Per-project lock — claim ownership of a project's .orquestra/workspace.json when
+// it's opened here, so a second Orquestra (dev vs installed) won't autosave over us.
 // -----------------------------------------------------------------------------
 
 /** True if any workspace other than `exceptId` is rooted at `rootPath`. */
@@ -62,8 +62,8 @@ function claimProjectLock(rootPath: string, name?: string): void {
   if (acquireProjectLock(rootPath)) return
   void dialog.showMessageBox({
     type: 'warning',
-    message: 'Another Cate instance has this project open',
-    detail: `Changes you make to the workspace${name ? ` "${name}"` : ''} won't be saved while another Cate instance has it open. Close the other instance to resume saving.`,
+    message: 'Another Orquestra instance has this project open',
+    detail: `Changes you make to the workspace${name ? ` "${name}"` : ''} won't be saved while another Orquestra instance has it open. Close the other instance to resume saving.`,
     buttons: ['OK'],
     noLink: true,
   })
@@ -116,7 +116,7 @@ async function createWorkspace(
   const remote = !!rootPath && !isLocalLocator(rootPath)
   if (rootPath) {
     if (remote) {
-      // Remote/WSL: rootPath is a cate-runtime:// locator. The daemon validates
+      // Remote/WSL: rootPath is a orquestra-runtime:// locator. The daemon validates
       // its own filesystem, so we don't realpath/lock/allow-root it locally.
       trustedRoot = rootPath
     } else {
@@ -193,7 +193,7 @@ async function updateWorkspace(id: string, changes: Partial<Omit<WorkspaceInfo, 
   }
 
   // Refuse to point a second workspace at a folder already open here. Two
-  // workspaces sharing one root would share its .cate/ state and clobber each
+  // workspaces sharing one root would share its .orquestra/ state and clobber each
   // other's autosave; the per-pid project lock can't catch a same-instance
   // duplicate. The renderer redirects to the existing tab before reaching this,
   // but the resolved path is the authority — it catches symlink/trailing-slash
@@ -202,7 +202,7 @@ async function updateWorkspace(id: string, changes: Partial<Omit<WorkspaceInfo, 
     return {
       ok: false,
       error: {
-        code: 'DUPLICATE_ROOT',
+        code: 'DUPLIORQUESTRA_ROOT',
         message: `This folder is already open in another workspace: ${nextRootPath}`,
       },
     }

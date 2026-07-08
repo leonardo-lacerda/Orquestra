@@ -1,13 +1,13 @@
 // =============================================================================
 // AgentSettingsView — per-agent settings: the workspace's custom subagents and
-// prompt templates (<cwd>/.cate/pi-agent/{agents,prompts}). Reads/writes through
+// prompt templates (<cwd>/.orquestra/pi-agent/{agents,prompts}). Reads/writes through
 // electronAPI; opening a file routes through openFileAsPanel into a center-dock
 // editor tab (visible in the main window or a detached agent window).
 //
 // Scope: Agents + Prompts only. Skills are managed by the global cross-agent
 // Skills installer (sidebar), not here; the extension marketplace was removed in
-// favor of Cate's bundled, opinionated extension set. Provider sign-in lives in
-// the main Cate Settings (Providers section).
+// favor of Orquestra's bundled, opinionated extension set. Provider sign-in lives in
+// the main Orquestra Settings (Providers section).
 // =============================================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react'
