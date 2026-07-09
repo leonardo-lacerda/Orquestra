@@ -74,6 +74,9 @@ export class SshTransport implements RuntimeTransport {
     await new Promise<void>((resolve, reject) => {
       conn.on('ready', resolve)
       conn.on('error', (err: Error) => reject(hostKeyError ?? err))
+      // A silent connection drop (network idle timeout, server reboot) must
+      // null this.conn so ensureConnected() reconnects on the next call.
+      conn.on('close', () => { this.conn = null })
       conn.connect({
         host: this.opts.host,
         port: this.opts.port ?? 22,

@@ -352,7 +352,7 @@ describe('RuntimeManager LOCAL auto-reconnect (FIX 4)', () => {
     expect(seen).not.toContain('connecting')
   })
 
-  test('a REMOTE drop still reports disconnected (no reconnect)', async () => {
+  test('a REMOTE drop triggers auto-reconnect', async () => {
     vi.useFakeTimers()
     const mgr = new RuntimeManager()
     const transport = new FakeTransport()
@@ -362,7 +362,8 @@ describe('RuntimeManager LOCAL auto-reconnect (FIX 4)', () => {
 
     transport.triggerClose()
     expect(seen).toContain('disconnected')
+    // REMOTE now auto-reconnects with exponential backoff
     await vi.advanceTimersByTimeAsync(1100)
-    expect(seen).not.toContain('connecting') // REMOTE never auto-reconnects
+    expect(seen).toContain('connecting')
   })
 })

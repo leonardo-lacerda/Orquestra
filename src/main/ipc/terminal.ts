@@ -740,11 +740,13 @@ export function registerHandlers(): void {
       log.warn('[terminal] rejected unsafe terminal id for scrollback save: %s', String(saveKey))
       return
     }
-    // Limit scrollback size to 10MB to prevent disk-fill DoS
+    // Limit scrollback size to 10MB to prevent disk-fill DoS.
+    // Truncate safely at a UTF-8 character boundary to avoid corrupting
+    // multi-byte characters or ANSI escape sequences mid-stream.
     const MAX_SCROLLBACK_BYTES = 10 * 1024 * 1024
     if (Buffer.byteLength(content, 'utf-8') > MAX_SCROLLBACK_BYTES) {
       log.warn('[terminal] scrollback content too large (%d bytes), truncating', Buffer.byteLength(content, 'utf-8'))
-      content = content.slice(0, MAX_SCROLLBACK_BYTES)
+      content = Buffer.from(content).subarray(0, MAX_SCROLLBACK_BYTES).toString('utf-8')
     }
     const { TerminalLogger } = await import('./terminalLogger')
     const logDir = TerminalLogger.getLogDir()

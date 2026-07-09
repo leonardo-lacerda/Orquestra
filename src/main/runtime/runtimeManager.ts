@@ -51,6 +51,11 @@ export class RuntimeManager {
    *  can never start (e.g. a corrupt runtime bundle) would otherwise loop forever;
    *  past the cap we leave `unreachable` so the UI's Retry is the way forward. */
   private static readonly LOCAL_MAX_RETRIES = 4
+  /** Per-remote-runtime retry count for auto-reconnect. Counts consecutive drops
+   *  since the last successful connect; resets when the runtime reconnects. */
+  private remoteRetryCount = new Map<RuntimeId, number>()
+  private static readonly REMOTE_MAX_RETRIES = 4
+  private remoteReconnectTimers = new Map<RuntimeId, ReturnType<typeof setTimeout>>()
   /** Last status emitted for the LOCAL runtime, so a window that subscribes to
    *  RUNTIME_STATUS after the startup connect already finished can still seed
    *  its loading blocker. Defaults to `connecting` — ensureLocalRuntime runs at
@@ -180,6 +185,41 @@ export class RuntimeManager {
       void this.ensureLocalRuntime(this.localOpts!, { force })
     }, delay)
     if (this.localReconnectTimer.unref) this.localReconnectTimer.unref()
+  }
+
+  /**
+   * Reconnect a REMOTE/WSL runtime after a connection drop, using the same opts
+   * it was started with. Exponential backoff (1s→8s), max REMOTE_MAX_RETRIES,
+   * one timer at a time per runtime (deduped via remoteReconnectTimers).
+   * The retry count resets when doConnect succeeds (see connect()).
+   */
+  private scheduleRemoteReconnect(id: RuntimeId, transport: RuntimeTransport): void {
+    if (this.remoteReconnectTimers.has(id)) return // already pending
+    const count = this.remoteRetryCount.get(id) ?? 0
+    if (count >= RuntimeManager.REMOTE_MAX_RETRIES) {
+      log.warn('[runtime] remote %s failed %d times; stopping auto-retry (use Retry)', id, count)
+      this.emitStatus(id, 'disconnected')
+      return
+    }
+    this.remoteRetryCount.set(id, count + 1)
+    const delay = Math.min(8000, 500 * 2 ** (count + 1))
+    this.emitStatus(id, 'connecting', `Reconnecting (attempt ${count + 1}/${RuntimeManager.REMOTE_MAX_RETRIES})…`)
+    const timer = setTimeout(async () => {
+      this.remoteReconnectTimers.delete(id)
+      // connect() re-registers the runtime; the old transport is already dead.
+      try {
+        await this.connect(id, transport, { install: true })
+      } catch {
+        // scheduleRemoteReconnect was already called from the onClose handler,
+        // so the drop triggered another schedule. Only emit 'disconnected' if
+        // we've exhausted retries (handled above).
+        if ((this.remoteRetryCount.get(id) ?? 0) >= RuntimeManager.REMOTE_MAX_RETRIES) {
+          this.emitStatus(id, 'disconnected')
+        }
+      }
+    }, delay)
+    if (timer.unref) timer.unref()
+    this.remoteReconnectTimers.set(id, timer)
   }
 
   /** Wire a status sink (the IPC layer broadcasts these to the renderer). */
@@ -449,8 +489,14 @@ export class RuntimeManager {
         this.scheduleLocalReconnect()
         return
       }
+      // Emit disconnected immediately so the UI reflects the drop, then
+      // auto-reconnect with exponential backoff (1s→8s, max 4).
       this.emitStatus(id, 'disconnected')
+      this.scheduleRemoteReconnect(id, transport)
+      return
     })
+    // A clean connect resets the retry budget for both LOCAL and remote
+    this.remoteRetryCount.set(id, 0)
     this.runtimes.set(id, runtime)
     this.connections.set(id, conn)
     log.info('[runtime] connected %s (%s) node=%s', id, transport.kind, hello.node.version)
