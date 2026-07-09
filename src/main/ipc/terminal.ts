@@ -492,6 +492,15 @@ export function handleWindowClosedTerminalTransfers(windowId: number): void {
       }
     }
   }
+
+  // Kill any terminals owned by this window that are NOT in transfer.
+  // Without this, orphan PTYs leak on the daemon when the renderer crashes.
+  for (const [id, owner] of [...terminalOwners]) {
+    if (owner === windowId) {
+      log.info('[terminal] cleaning up orphan pty %s (window %d closed)', id, windowId)
+      killTerminal(id)
+    }
+  }
 }
 
 export function getTerminalOwner(terminalId: string): number | undefined {
@@ -698,30 +707,35 @@ export function registerHandlers(): void {
     )
   }
 
-  ipcMain.handle(TERMINAL_LOG_READ, async (_event, terminalId: string): Promise<string | null> => {
-    if (!isSafeLogFileId(terminalId)) {
-      log.warn('[terminal] rejected unsafe terminal id for log read: %s', String(terminalId))
+  ipcMain.handle(TERMINAL_LOG_READ, async (_event, readKey: string): Promise<string | null> => {
+    // readKey is the stable panelId from the caller (replayTerminalLog passes
+    // data.replayFromId = panel.id). The scrollback file was saved with the
+    // same panel.id key, so it survives restarts unlike ptyId.
+    if (!isSafeLogFileId(readKey)) {
+      log.warn('[terminal] rejected unsafe terminal id for log read: %s', String(readKey))
       return null
     }
     const { TerminalLogger } = await import('./terminalLogger')
     const logDir = TerminalLogger.getLogDir()
-    const scrollbackPath = path.join(logDir, `${terminalId}.scrollback`)
+    const scrollbackPath = path.join(logDir, `${readKey}.scrollback`)
     try {
       const data = await fsp.readFile(scrollbackPath, 'utf-8')
       if (data) return data
     } catch { /* fall through to raw log */ }
 
-    const existing = getOrCreateLogger(terminalId)
+    const existing = getOrCreateLogger(readKey)
     const data = existing.readAll()
-    if (!terminalRuntime.has(terminalId)) {
-      removeLogger(terminalId)
+    if (!terminalRuntime.has(readKey)) {
+      removeLogger(readKey)
     }
     return data || null
   })
 
-  ipcMain.handle(TERMINAL_SCROLLBACK_SAVE, async (_event, ptyId: string, content: string): Promise<void> => {
-    if (!isSafeLogFileId(ptyId)) {
-      log.warn('[terminal] rejected unsafe terminal id for scrollback save: %s', String(ptyId))
+  ipcMain.handle(TERMINAL_SCROLLBACK_SAVE, async (_event, saveKey: string, content: string): Promise<void> => {
+    // saveKey is panel.id (stable) — NOT ptyId (transient). This ensures
+    // scrollback survives app restarts where ptyIds are regenerated.
+    if (!isSafeLogFileId(saveKey)) {
+      log.warn('[terminal] rejected unsafe terminal id for scrollback save: %s', String(saveKey))
       return
     }
     // Limit scrollback size to 10MB to prevent disk-fill DoS
@@ -733,7 +747,7 @@ export function registerHandlers(): void {
     const { TerminalLogger } = await import('./terminalLogger')
     const logDir = TerminalLogger.getLogDir()
     await fsp.mkdir(logDir, { recursive: true })
-    await fsp.writeFile(path.join(logDir, `${ptyId}.scrollback`), content, 'utf-8')
+    await fsp.writeFile(path.join(logDir, `${saveKey}.scrollback`), content, 'utf-8')
   })
 
   // Maestro mode toggle
