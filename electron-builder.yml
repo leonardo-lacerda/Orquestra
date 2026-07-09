@@ -76,7 +76,7 @@ extraResources:
       - runtime-host*.tgz
 publish:
   provider: github
-  owner: 0-AI-UG
+  owner: leonardo-lacerda
   repo: orquestra
   releaseType: release
 mac:

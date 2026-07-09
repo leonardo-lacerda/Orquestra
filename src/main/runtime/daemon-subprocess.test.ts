@@ -59,7 +59,7 @@ describe('orquestra-runtime daemon (real subprocess)', () => {
   beforeAll(async () => {
     // The daemon sandboxes to --root; on the client side we also allow it so the
     // client-side lexical checks (if any) agree. The daemon process has its own.
-    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-daemon-ws-')))
+    workspace = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-daemon-ws-')))
     addAllowedRoot(workspace)
     await fs.writeFile(path.join(workspace, 'hello.ts'), 'export const x = 1\n')
     await fs.mkdir(path.join(workspace, 'pkg'))

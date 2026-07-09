@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import { RuntimeManager } from './runtimeManager'
@@ -27,8 +28,8 @@ describe.skipIf(!hasTarball)('local daemon from the real tarball', () => {
   let workspace: string
 
   beforeAll(async () => {
-    installDir = await fs.mkdtemp(path.join(process.cwd(), 'orquestra-local-install-'))
-    workspace = await fs.realpath(await fs.mkdtemp(path.join(process.cwd(), 'orquestra-local-ws-')))
+    installDir = await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-local-install-'))
+    workspace = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-local-ws-')))
     addAllowedRoot(workspace)
     await fs.writeFile(path.join(workspace, 'hello.ts'), 'export const x = 1\n')
   }, 60_000)

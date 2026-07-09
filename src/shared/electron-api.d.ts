@@ -97,8 +97,10 @@ export interface ElectronAPI {
   /** Read the persisted scrollback log for a terminal. */
   terminalLogRead(terminalId: string): Promise<string | null>
 
-  /** Save terminal scrollback content (plain text) for session restore. */
-  terminalScrollbackSave(ptyId: string, content: string): Promise<void>
+  /** Save terminal scrollback content (plain text) for session restore.
+   *  Keyed by the stable panel.id, NOT the transient ptyId, so scrollback
+   *  survives app restarts where ptyIds are regenerated. */
+  terminalScrollbackSave(saveKey: string, content: string): Promise<void>
 
   /** Notify main of a terminal panel's on-screen visibility. Used by the
    *  idle-suspend logic to SIGSTOP terminals that are offscreen and silent. */

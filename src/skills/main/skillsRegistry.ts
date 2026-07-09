@@ -15,7 +15,7 @@ import type { SkillEntry } from '../../shared/skills'
 
 const CURATED_INDEX_URL =
   process.env.ORQUESTRA_SKILLS_INDEX_URL ||
-  'https://raw.githubusercontent.com/0-AI-UG/orquestra/main/registry/skills-index.json'
+  'https://raw.githubusercontent.com/leonardo-lacerda/Orquestra/main/registry/skills-index.json'
 
 const CURATED_TTL_MS = 30 * 60 * 1000
 const USER_TTL_MS = 10 * 60 * 1000

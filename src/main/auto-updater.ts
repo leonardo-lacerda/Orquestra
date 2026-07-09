@@ -46,8 +46,8 @@ import {
   type UpdateRecord,
 } from './updateState'
 
-const GITHUB_OWNER = '0-AI-UG'
-const GITHUB_REPO = 'orquestra'
+const GITHUB_OWNER = 'leonardo-lacerda'
+const GITHUB_REPO = 'Orquestra'
 const RELEASES_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 

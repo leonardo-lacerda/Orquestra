@@ -258,13 +258,13 @@ export function buildApplicationMenu(): void {
         {
           label: 'Orquestra Documentation',
           click: (): void => {
-            shell.openExternal('https://github.com/0-AI-UG/orquestra')
+            shell.openExternal('https://github.com/leonardo-lacerda/Orquestra')
           },
         },
         {
           label: 'Report Issue...',
           click: (): void => {
-            shell.openExternal('https://github.com/0-AI-UG/orquestra/issues')
+            shell.openExternal('https://github.com/leonardo-lacerda/Orquestra/issues')
           },
         },
         { type: 'separator' },

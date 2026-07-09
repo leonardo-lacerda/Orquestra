@@ -1,1 +1,0 @@
-const needle = 42
