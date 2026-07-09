@@ -39,10 +39,21 @@ function ensureLogDir(): void {
 // TerminalLogger class
 // =============================================================================
 
+// Module-level shared interval that flushes ALL loggers every FLUSH_INTERVAL_MS.
+// Replaces per-instance timers to avoid setInterval proliferation with many
+// terminals (100 terminals × 250ms = 400 wakeups/s without this).
+let sharedFlushTimer: ReturnType<typeof setInterval> | null = null
+
+function ensureSharedFlushTimer(): void {
+  if (sharedFlushTimer) return
+  sharedFlushTimer = setInterval(() => {
+    for (const logger of loggers.values()) logger.flush()
+  }, FLUSH_INTERVAL_MS)
+}
+
 export class TerminalLogger {
   private readonly terminalId: string
   private buffer: string = ''
-  private flushTimer: ReturnType<typeof setInterval> | null = null
   // Bytes written to the current (un-rotated) log file, tracked in memory so the
   // hot path never has to statSync. -1 means "not yet known" (we lazily seed it
   // from the real file size on the first flush after construction).
@@ -59,7 +70,8 @@ export class TerminalLogger {
   constructor(terminalId: string) {
     this.terminalId = terminalId
     ensureLogDir()
-    this.flushTimer = setInterval(() => this.flush(), FLUSH_INTERVAL_MS)
+    loggers.set(terminalId, this)
+    ensureSharedFlushTimer()
   }
 
   // ---------------------------------------------------------------------------
@@ -296,23 +308,15 @@ export class TerminalLogger {
     }
   }
 
-  // Drain any buffered data to disk synchronously, close the open stream, and
-  // stop the periodic timer. Called from removeLogger / disposeAll on teardown +
-  // app quit. We flush the in-memory buffer synchronously (appendFileSync) so no
+  // Drain any buffered data to disk synchronously and close the open stream.
+  // Called from removeLogger / disposeAll on teardown + app quit.
+  // We flush the in-memory buffer synchronously (appendFileSync) so no
   // data is lost, then end() the stream — we do NOT rely on async stream
   // flushing during quit.
+  // The shared flush timer is NOT per-logger; it stops when the map is empty.
   dispose(): void {
     this.flushSync()
     this.closeStream()
-    this.stopTimer()
-  }
-
-  // Stop the periodic flush timer (called when removing the logger from the map)
-  private stopTimer(): void {
-    if (this.flushTimer !== null) {
-      clearInterval(this.flushTimer)
-      this.flushTimer = null
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -377,11 +381,19 @@ export function getOrCreateLogger(terminalId: string): TerminalLogger {
  * Call this when a terminal process exits but you still want to retain the logs.
  * Drains synchronously so no buffered output is lost.
  */
+function stopSharedFlushTimerIfEmpty(): void {
+  if (loggers.size === 0 && sharedFlushTimer !== null) {
+    clearInterval(sharedFlushTimer)
+    sharedFlushTimer = null
+  }
+}
+
 export function removeLogger(terminalId: string): void {
   const logger = loggers.get(terminalId)
   if (logger) {
-    logger.dispose()  // sync flush + close stream + stop timer
+    logger.dispose()  // sync flush + close stream
     loggers.delete(terminalId)
+    stopSharedFlushTimerIfEmpty()
   }
 }
 
@@ -406,7 +418,8 @@ export function flushAll(): void {
  */
 export function disposeAll(): void {
   for (const [id, logger] of loggers) {
-    logger.dispose()  // sync flush + close stream + stop timer
+    logger.dispose()  // sync flush + close stream
     loggers.delete(id)
   }
+  stopSharedFlushTimerIfEmpty()
 }

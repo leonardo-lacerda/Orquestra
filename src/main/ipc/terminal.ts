@@ -591,7 +591,9 @@ async function spawnTerminal(
       for (const targetId of targets) {
         const rt = runtimeForTerminal(targetId)
         if (rt) {
-          try { rt.process.write(targetId, data) } catch { /* target may have exited */ }
+          try { rt.process.write(targetId, data) } catch {
+            log.warn('[terminal] pipe write failed: target %s may have exited', targetId)
+          }
         }
       }
     }

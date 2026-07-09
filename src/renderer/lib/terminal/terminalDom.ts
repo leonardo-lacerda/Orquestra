@@ -35,14 +35,21 @@ import { finalizeReconnect } from './terminalLifecycle'
  * refreshing fixes the blank/garbled terminal once the window is shown. No-op
  * (besides a cheap refresh) on the canvas renderer fallback.
  */
-function forceWebglRepaint(): void {
+function forceWebglRepaint(targetEntry?: RegistryEntry): void {
+  if (targetEntry) {
+    // Scope repaint to a single terminal (e.g. after attach).
+    try {
+      targetEntry.webglAddon?.clearTextureAtlas()
+      targetEntry.terminal.refresh(0, targetEntry.terminal.rows - 1)
+    } catch { /* renderer mid-dispose — ignore */ }
+    return
+  }
+  // Full repaint — clears the shared atlas and refreshes every terminal.
   for (const entry of registry.values()) {
     try {
       entry.webglAddon?.clearTextureAtlas()
       entry.terminal.refresh(0, entry.terminal.rows - 1)
-    } catch {
-      /* renderer mid-dispose — ignore */
-    }
+    } catch { /* renderer mid-dispose — ignore */ }
   }
 }
 
@@ -272,10 +279,10 @@ export function attach(panelId: string, container: HTMLDivElement): void {
     // while hidden against a stale DPR/size, so the first paint can be blank or
     // garbled until the atlas is rebuilt at the live DPR. The extra frames
     // cover a window still settling its size/DPR on the first painted frame.
-    forceWebglRepaint()
+    forceWebglRepaint(entry)
     requestAnimationFrame(() => {
-      forceWebglRepaint()
-      requestAnimationFrame(() => forceWebglRepaint())
+      forceWebglRepaint(entry)
+      requestAnimationFrame(() => forceWebglRepaint(entry))
     })
 
     // Now that the xterm is sized to its real container, replay captured

@@ -1,196 +1,127 @@
 # Auditoria de Readiness — Sistema de Terminais
 
 **Data:** 2026-07-08
-**Escopo:** Sistema completo de terminais (PTY → Main Process → Renderer → xterm.js)
+**Escopo:** Sistema completo (PTY → Main Process → Renderer → xterm.js + SSH/WSL remote)
 
 ---
 
 ## Resumo
 
-| Classificação | Qtd |
+| Classificação | Qtd | 
 |-------------|-----|
-| 🔴 Bloqueante para lançamento | 2 |
-| 🟠 Alta prioridade | 5 |
-| 🟡 Média prioridade | 6 |
-| 🟢 Baixa / Sugestão | 5 |
+| 🔴 Bloqueante para lançamento | 0 (✅ corrigidas) |
+| 🟠 Alta prioridade | 8 |
+| 🟡 Média prioridade | 14 |
+| 🟢 Baixa / Sugestão | 12 |
 | ✅ Pronto | 12 |
 
-**Veredito:** 🟡 **Quase pronto** — 2 issues bloqueantes precisam ser corrigidas antes do .exe comercial.
+**Veredito final: ✅ Pronto para lançamento.** Nenhum bloqueante restante. As 8 altas são melhorias de resiliência que podem ser feitas pós-lançamento.
 
 ---
 
-## 🔴 Bloqueantes
+## 🔴 Bloqueantes — ✅ Ambos corrigidos (commit 64ae434)
 
-### B1 — PTYs órfãos quando o renderer crasha
+### B1 — PTYs órfãos quando o renderer crasha (✅ CORRIGIDO)
+`handleWindowClosedTerminalTransfers` agora limpa TODOS os terminais da janela fechada, não apenas os em transferência.
 
-**Onde:** `src/main/ipc/terminal.ts`
-**Tipo:** Resource Leak / Data Loss
-**Severidade:** 🔴 Crítica
-
-**Problema:**
-Quando uma janela do renderer fecha inesperadamente (crash), `handleWindowClosedTerminalTransfers` só gerencia terminais que estão **em transferência entre janelas**. Terminais que pertencem à janela que crashou **continuam rodando** no daemon:
-
-- `terminalOwners` ainda aponta para o windowId morto
-- Output do PTY é enviado via `sendToWindow` para uma janela que não existe mais (silenciosamente descartado)
-- Os PTYs consomem recursos (memória, processos) até o app ser fechado
-- Sem notificação ao usuário
-
-**Impacto:** Se o usuário tiver 10 terminais abertos e o renderer crashar, todos continuam rodando em background. O usuário abre o app de novo e vê terminais vazios (recriados via session restore), enquanto os antigos ainda rodam consumindo recursos.
-
-**Correção:** No `handleWindowClosedTerminalTransfers`, também limpar terminais que pertencem à janela fechada:
-```typescript
-// After transfer cleanup, kill all terminals owned by this window
-for (const [id, owner] of terminalOwners) {
-  if (owner === windowId) {
-    killTerminal(id)
-  }
-}
-```
+### B2 — Scrollback perdido no restart (✅ FALSO ALARME)
+O scrollback sempre foi salvo com o `panel.id` (estável). Os nomes dos parâmetros (`ptyId`, `terminalId`) eram enganosos mas o fluxo estava correto. Renomeados para `saveKey` / `readKey`.
 
 ---
 
-### B2 — Scrollback perdido no restart do app
+## 🟠 Alta Prioridade
 
-**Onde:** `src/main/ipc/terminal.ts:736`
-**Tipo:** Data Loss
-**Severidade:** 🔴 Crítica
+### H1 — PTY output sem backpressure
 
-**Problema:**
-O scrollback serializado é salvo em `<userData>/TerminalLogs/<ptyId>.scrollback`, mas o ptyId é **regenerado** a cada restart. Quando o app reinicia, o novo terminal lê `<novoPtyId>.scrollback` que não existe. O scrollback cai no fallback (raw TerminalLogs), que pode conter ANSI garbage ou ter sido rotacionado.
-
-**Fluxo:**
-1. App aberto → terminal com ptyId="pty-abc-123" → scrollback salvo em `pty-abc-123.scrollback`
-2. App fecha e reabre → terminal recriado com ptyId="pty-def-456" → tenta ler `pty-def-456.scrollback` → não existe
-3. Fallback: raw TerminalLogs de "pty-abc-123" → mas o TerminalLogger já foi limpo/disposed
-
-**Correção:** Usar `panelId` (estável) em vez de `ptyId` (transiente) para nomear o arquivo de scrollback:
-```typescript
-const scrollbackFile = path.join(logDir, `${panelId}.scrollback`)
-```
-O `panelId` precisa ser passado da renderer para o handler de scrollback save.
-
----
-
-## 🟠 Altas
-
-### H1 — Sem backpressure no pipeline de output
-
-**Onde:** `src/main/ipc/terminal.ts:553-558` (batchedDispatcher)
-**Tipo:** Memory Leak sob estresse
-
-**Problema:** O dispatcher de 16ms acumula output em uma string sem limite (`buffer += data`). Com comandos de alto throughput (`yes`, `dd`, `cat /dev/zero`), o buffer de heap do main process cresce sem controle. Não há mecanismo de flow control.
-
-**Impacto:** Em condições extremas, o main process pode exaurir memória. Comandos `yes` rodando por 30s produzem ~2GB de output em Linux.
-
-**Correção:** Adicionar `MAX_DISPATCHER_BUFFER` (ex: 1MB). Quando excedido, descartar dados mais antigos ou pausar o PTY (SIGSTOP).
-
----
+**Onde:** `terminal.ts` (batchedDispatcher 16ms)
+**Problema:** Dispatcher acumula output sem limite (`buffer += data`). Com `yes`/`dd`, o heap do main process pode crescer sem controle.
+**Correção:** `MAX_DISPATCHER_BUFFER = 1MB`, descartar quando excedido.
 
 ### H2 — setInterval leak no TerminalLogger
 
-**Onde:** `src/main/ipc/terminalLogger.ts`
-**Tipo:** Resource Leak
-
-**Problema:** Cada `TerminalLogger` cria seu próprio `setInterval` a cada 250ms. Se `removeLogger()` não for chamado (terminal órfão), o timer vaza. Isso também impede o Electron de fechar corretamente (`app.quit()` espera timers).
-
-**Correção:** Usar um **timer compartilhado** para flush de todos os loggers, em vez de um timer por instância.
-
----
+**Onde:** `terminalLogger.ts`
+**Problema:** Cada logger cria seu próprio `setInterval` a 250ms. 100 terminais = 100 timers.
+**Correção:** Timer compartilhado para flush de todos os loggers.
 
 ### H3 — Race: PTY exit antes dos listeners
 
-**Onde:** `src/renderer/lib/terminal/terminalLifecycle.ts:342-366`
-**Tipo:** Race Condition
+**Onde:** `terminalLifecycle.ts:338-381`
+**Problema:** Entry registrado com ptyId='' antes do spawn assíncrono. Um `dispose()` concorrente pode causar double-dispose do xterm Terminal.
+**Correção:** Registra listeners IPC antes de criar PTY; guard contra double-dispose.
 
-**Problema:** `getOrCreate()` cria o PTY assincronamente. O listener IPC (`onTerminalData`, `onTerminalExit`) é registrado APÓS a criação do PTY. Se o PTY morre entre a criação e o registro do listener, o evento `TERMINAL_EXIT` chega ao renderer ANTES do listener estar pronto e é silenciosamente descartado.
+### H4 — `cachedSpawn` race + falta notificação de pipe quebrado
 
-**Correção:** Registrar os listeners IPC ANTES de criar o PTY (ou usar um buffer de eventos até os listeners estarem prontos).
+**Onde:** `process.ts:122-124` / `terminal.ts:579-588`
+**Problema:** Dois `create()` concorrentes podem ambos importar node-pty. Pipe write failure é silencioso.
+**Correção:** Singleton no cachedSpawn; remover pipe quebrado automaticamente.
 
----
+### H5 — LEAK-1: Module-level subscriptions acumulam no HMR
 
-### H4 — Pipe write failure é silencioso
+**Onde:** `terminalSettings.ts:160-212`
+**Problema:** `window.addEventListener('focus'/'blur')` e Zustand subscriptions nunca são limpas. Acumulam em hot reload.
+**Correção:** Registrar via lifecycle do React com cleanup.
 
-**Onde:** `src/main/ipc/terminal.ts:579-588`
-**Tipo:** UX Silenciosa
+### H6 — SSH: `ensureConnected()` não detecta conexão morta
 
-**Problema:** Quando um pipe target morre, `rt.process.write` lança erro que é silenciosamente capturado. O terminal fonte continua produzindo output que não vai pra lugar nenhum. Usuário não vê que o pipe quebrou.
+**Onde:** `sshTransport.ts:66`
+**Problema:** `if (this.conn) return` — se a conexão SSH caiu, `this.conn` ainda é non-null. Próximo `exec()` falha sem tentar reconectar.
+**Correção:** Escutar evento `close` do ssh2 Client e nullar `this.conn`.
 
-**Correção:** Logar warning e, opcionalmente, remover o pipe quebrado automaticamente.
+### H7 — Remote: sem reconnection mechanism
 
----
+**Onde:** `runtimeManager.ts:448-452`
+**Problema:** Quando SSH/WSL cai, o runtime emite `'disconnected'` sem tentar reconectar. Usuário perde todos os terminais e precisa clicar Retry.
+**Correção:** Adicionar auto-reconnect com backoff para SSH/WSL.
 
-### H5 — Failures Map nunca é limpo
+### H8 — PERF-1: Triple forceWebglRepaint em cada attach
 
-**Onde:** `src/renderer/lib/terminal/registryState.ts`
-**Tipo:** Memory Leak
-
-**Problema:** `failures` Map acumula entradas de painéis que foram dispostos enquanto em estado de erro. A menos que o painel seja recriado com sucesso, a entrada nunca é removida.
-
-**Correção:** Limpar a entrada quando `dispose()` for chamado.
+**Onde:** `terminalDom.ts:275-279`
+**Problema:** Cada `attach()` faz 3 `forceWebglRepaint()` que iteram TODOS os terminais. Com 20 terminais e troca de tab, são 60 repaints.
+**Correção:** Escopar repaint ao terminal que attachou.
 
 ---
 
 ## 🟡 Médias
 
-### M1 — Truncation de scrollback quebra UTF-8 e ANSI
-
-**Onde:** `src/main/ipc/terminal.ts:731`
-**Problema:** `content.slice(0, 10 * 1024 * 1024)` corta no byte, não no character. Pode quebrar um multi-byte UTF-8 ou ANSI escape sequence no meio.
-
-**Correção:** Usar `Buffer.byteLength` para contagem e `Buffer.from(content).subarray(0, MAX)` para truncar com segurança.
-
-### M2 — Heartbeat desiste após scanActivity falhar
-
-**Onde:** `src/main/ipc/terminal.ts:101-103`
-**Problema:** Se `scanActivity` lança (runtime gone), `return` silencioso. Workers mortos não são limpos até o próximo heartbeat (60s).
-
-### M3 — Focus polling 80x25ms = 2s sem limite por painel
-
-**Onde:** `src/renderer/panels/TerminalPanel.tsx:380-381`
-**Problema:** Cada panel montado cria 80 timers de 25ms para detectar o elemento xterm. Com 20 painéis, são 1600 timers concorrentes.
-
-### M4 — Transfer abort pode ler terminalOwners desatualizado
-
-**Onde:** `src/main/ipc/terminal.ts:422-426`
-**Problema:** Race entre transferências concorrentes — `terminalOwners.get(ptyId)` pode já ter sido atualizado por outra operação.
-
-### M5 — cleanupTerminal itera Set modificando
-
-**Onde:** `src/main/ipc/terminal.ts:519-521`
-**Problema:** `for (const t of targets)` enquanto dá `targets.delete(t)` — comportamento indefinido por spec.
-
-### M6 — Duas janelas fechando simultaneamente
-
-**Onde:** `src/main/ipc/terminal.ts:480-495`
-**Problema:** Se source e target fecham ao mesmo tempo, a ordem de `handleWindowClosedTerminalTransfers` pode causar abort/complete incorreto.
+| ID | Arquivo | Problema |
+|----|---------|----------|
+| M1 | `terminal.ts:731` | Truncation de scrollback quebra UTF-8 (corta no byte) |
+| M2 | `terminal.ts:101-103` | Heartbeat desiste se scanActivity falha |
+| M3 | `TerminalPanel.tsx:380-381` | Focus polling cria 80 timers por painel montado |
+| M4 | `terminal.ts:422-426` | Transfer abort pode ler terminalOwners desatualizado |
+| M5 | `terminal.ts:519-521` | cleanupTerminal itera Set enquanto deleta |
+| M6 | `terminal.ts:480-495` | Duas janelas fechando simultaneamente — race |
+| M7 | `captureAndSaveScrollback.ts:25` | Scrollback save falha silenciosamente |
+| M8 | `terminalInput.ts:70-73` | Unhandled promise rejection no link handler |
+| M9 | `terminalLifecycle.ts:515-520` | Uncanceled 150ms timeout sobrevive dispose |
+| M10 | `terminalLifecycle.ts:355-357` | awaitWorkspaceSync stall bloqueia criação |
+| M11 | `TerminalPanel.tsx:213-258` | runFit não verifica `cancelled` |
+| M12 | `terminalSettings.ts:172-200` | Cada mudança de setting itera terminais independentemente |
+| M13 | `sshTransport.ts:76` | Nenhum handler de erro para conexão SSH pós-connect |
+| M14 | `terminalLifecycle.ts:399-408` | cleanupListeners não invocado em falha de criação |
 
 ---
 
 ## 🟢 Baixas / Sugestões
 
-### S1 — Worker heartbeat 60s em vez de verificação imediata
-
-Quando um worker morre, leva até 60s para ser detectado. Ideal: notificação via evento de exit.
-
-### S2 — Col-0 no SIGWINCH nudge
-
-`Math.max(1, cols-1)` previne col-0, mas 1-col pode confundir programas.
-
-### S3 — Double-fork escapa kill no shutdown
-
-Processos que daemonizam (double-fork) escapam do `killAllGroups` (SIGKILL no group).
-
-### S4 — Logs acumulam sem TTL
-
-Arquivos .log e .prev.log acumulam até `pruneOrphaned()` ser chamado. Sempre.
-
-### S5 — Sem teste para 100 terminais abertos
-
-Não há teste de carga/stress no sistema de terminais.
+| ID | Arquivo | Problema |
+|----|---------|----------|
+| S1 | — | Worker heartbeat 60s — melhor notificar via evento de exit |
+| S2 | `terminalLifecycle.ts:499-520` | Col-1 no SIGWINCH nudge pode ser 0 |
+| S3 | — | Double-fork escapa SIGKILL no shutdown |
+| S4 | — | Logs acumulam sem TTL |
+| S5 | — | Sem teste de carga para 100 terminais |
+| S6 | `registryState.ts:163-165` | entries() aloca array em cada chamada |
+| S7 | `terminalFileLinkProvider.ts:28` | existsCache cresce sem limites |
+| S8 | `terminalDom.ts:228-234` | Container zero-size — fit silenciosamente no-op |
+| S9 | `wslTransport.ts:46-53` | wslSh() não distingue "não instalado" de "falhou" |
+| S10 | `wslTransport.ts:60,68` | Erro ENOENT do wsl.exe propaga sem formatação |
+| S11 | `RemoteRuntime.ts:74-78` | fire-and-forget .catch(noop) engole erros |
+| S12 | `process.ts:122-124` | Race no cachedSpawn — dois imports concorrentes |
 
 ---
 
-## ✅ O que está PRONTO
+## ✅ O que está PRONTO (12 itens)
 
 | Componente | Status |
 |-----------|--------|
@@ -209,18 +140,24 @@ Não há teste de carga/stress no sistema de terminais.
 
 ---
 
-## Plano de Ação
+## 🚀 Plano de Ação
 
-### Antes do .exe (corrigir B1 + B2)
-1. **B1** — Limpar `terminalOwners` quando janela fecha (15 min)
-2. **B2** — Usar `panelId` para scrollback files (15 min)
+### Antes do .exe (já corrigido)
+- B1: Orphan PTYs cleanup ✅
+- B2: Scrollback key naming ✅
 
-### Semana 1 pós-lançamento
-3. **H1** — Limitar buffer do dispatcher (1h)
-4. **H2** — Timer compartilhado no TerminalLogger (2h)
-5. **H3** — Registrar listeners antes de criar PTY (1h)
-6. **H5** — Limpar failures Map no dispose (15 min)
+### Primeira semana pós-lançamento
+1. **H1** — Backpressure no dispatcher (~2h)
+2. **H3** — Race create/dispose (~1h)
+3. **H5** — LEAK-1 subscriptions no HMR (~1h)
+4. **H8** — PERF-1 forceWebglRepaint (~2h)
 
-### Semana 2-3
-7. **H4** — Notificar pipe quebrado (1h)
-8. **M1-M6** — Correções médias (2h cada)
+### Segunda semana
+5. **H2** — Timer compartilhado no logger (~3h)
+6. **H6** — SSH stale connection detection (~2h)
+7. **H7** — Auto-reconnect remoto (~4h)
+
+### Terceira semana
+8. **H4** — Pipe quebrado + notification (~1h)
+9. **M1-M14** — Correções médias (~8h total)
+10. **S1-S12** — Sugestões (~4h total)

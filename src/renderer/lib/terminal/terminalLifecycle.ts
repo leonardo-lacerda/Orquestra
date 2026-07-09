@@ -374,9 +374,13 @@ export async function getOrCreate(panelId: string, opts: CreateOpts): Promise<Re
     // here so it doesn't leak, then bail out.
     if (!registry.has(panelId)) {
       electronAPI.terminalKill(ptyId).catch((err) => log.warn('[terminal] Kill failed:', err))
-      terminal.dispose()
-      // Clean up the pty-panel mapping setPtyForPanel created above
-      ptyToPanel.delete(ptyId)
+      // Guard: dispose() already ran teardownEntry which disposed the terminal.
+      // Only run cleanup here if teardownEntry didn't — detected by ptyToPanel
+      // still having the old '' mapping (teardownEntry deletes it).
+      if (ptyToPanel.get(ptyId) === panelId) {
+        terminal.dispose()
+        ptyToPanel.delete(ptyId)
+      }
       return entry
     }
 

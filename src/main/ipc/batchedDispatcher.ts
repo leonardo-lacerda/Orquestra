@@ -63,20 +63,30 @@ export function createKeyedDispatcher<TValue>(
  * the accumulated string (only invoked when non-empty, matching the original
  * terminal skeleton) and owns the emit and its error handling.
  */
+const MAX_STRING_BUFFER = 1024 * 1024 // 1MB cap to prevent heap exhaustion
+
 export function createStringDispatcher(
   delayMs: number,
   onBatch: (data: string) => void,
 ): BatchedDispatcher<string> {
   let buffer = ''
+  let bufferBytes = 0
   let flushTimer: ReturnType<typeof setTimeout> | null = null
 
   const push = (data: string): void => {
     buffer += data
+    bufferBytes += Buffer.byteLength(data, 'utf-8')
+    // Hard cap to prevent unbounded heap growth under high-output commands
+    if (bufferBytes > MAX_STRING_BUFFER) {
+      buffer = ''
+      bufferBytes = 0
+    }
     if (!flushTimer) {
       flushTimer = setTimeout(() => {
         flushTimer = null
         if (buffer) onBatch(buffer)
         buffer = ''
+        bufferBytes = 0
       }, delayMs)
     }
   }
@@ -86,7 +96,7 @@ export function createStringDispatcher(
       clearTimeout(flushTimer)
       flushTimer = null
     }
-    if (options?.resetPending) buffer = ''
+    if (options?.resetPending) { buffer = ''; bufferBytes = 0 }
   }
 
   return { push, cancel }
