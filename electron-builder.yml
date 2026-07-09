@@ -74,6 +74,9 @@ extraResources:
     to: .
     filter:
       - runtime-host*.tgz
+toolsets:
+  winCodeSign: "1.1.0"
+npmRebuild: false
 publish:
   provider: github
   owner: leonardo-lacerda
