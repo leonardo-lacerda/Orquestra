@@ -9,7 +9,14 @@ import type { SavedSkill, InstalledSkill, SkillEntry, SkillSource, SkillTargetId
 
 /** Lifecycle state of the auto-updater, surfaced to the renderer for the
  *  in-app "update ready" modal. `downloaded` is the one the modal acts on. */
-export type UpdateState = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error'
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
 
 /** Subscription info returned by the app auth system. */
 export interface AuthSubscriptionInfo {
@@ -939,6 +946,12 @@ export interface ElectronAPI {
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void
   /** Pull the latest auto-updater status (the modal mounts after the event). */
   getUpdateStatus(): Promise<UpdateStatus>
+  /**
+   * Explicit "Check for updates" (sidebar button). Hits the Supabase Storage
+   * release feed (generic provider URL). In packaged builds downloads when
+   * eligible; in dev compares latest.yml only.
+   */
+  checkForUpdates(): Promise<void>
   /** Restart now and apply the staged update (electron-updater quitAndInstall).
    *  Resolves false if no update is staged or self-update isn't possible. */
   quitAndInstallUpdate(): Promise<boolean>

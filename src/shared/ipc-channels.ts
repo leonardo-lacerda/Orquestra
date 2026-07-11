@@ -149,6 +149,8 @@ export const UPDATE_QUIT_AND_INSTALL = 'update:quitAndInstall'
 // Renderer -> main: pull the latest status (the modal can mount after the
 // download-finished event already fired). Returns the cached UpdateStatus.
 export const UPDATE_GET_STATUS = 'update:getStatus'
+// Renderer -> main: user clicked "Check for updates" (sidebar / settings).
+export const UPDATE_CHECK_NOW = 'update:checkNow'
 
 // Open an external URL in the user's default browser (renderer -> main).
 export const OPEN_EXTERNAL_URL = 'open:externalUrl'

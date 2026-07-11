@@ -307,6 +307,14 @@ describe('manual-reinstall fallback', () => {
     expect(mod.isUpdatePendingInstall()).toBe(false)
   })
 
+  it('isRemoteVersionNewer compares dotted versions', async () => {
+    const { isRemoteVersionNewer } = await loadModule()
+    expect(isRemoteVersionNewer('1.4.0', '1.3.2')).toBe(true)
+    expect(isRemoteVersionNewer('1.3.2', '1.3.2')).toBe(false)
+    expect(isRemoteVersionNewer('1.3.1', '1.3.2')).toBe(false)
+    expect(isRemoteVersionNewer('v2.0.0', '1.9.9')).toBe(true)
+  })
+
   it('checkForUpdatesManually re-arms the prompt', async () => {
     h.canSelfUpdate.mockReturnValue(false)
     h.dialog.showMessageBox.mockResolvedValue({ response: 1 })

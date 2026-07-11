@@ -15,12 +15,135 @@ import {
   MagnifyingGlass,
   FloppyDisk,
   PuzzlePiece,
+  ArrowClockwise,
+  DownloadSimple,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react'
 import pkg from '../../../package.json'
 import { Tooltip } from '../ui/Tooltip'
 import { useTranslation } from '../i18n/useTranslation'
 import orquestraLogo from '../assets/orquestra.logo.png'
+import type { UpdateStatus } from '../../shared/electron-api'
+
+// ---------------------------------------------------------------------------
+// Version footer — check for updates (Supabase Storage release feed)
+// ---------------------------------------------------------------------------
+
+/**
+ * Footer under workspaces: logo + version, or a check/update action button.
+ * Uses electron-updater against the Supabase public bucket
+ * (`orquestra-releases`). When an update is available/downloaded the control
+ * becomes an install/update action.
+ */
+function SidebarUpdateFooter() {
+  const { t } = useTranslation()
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle', version: null })
+  // After "up to date", briefly show the message then return to the version chip.
+  const [flashUpToDate, setFlashUpToDate] = useState(false)
+
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.getUpdateStatus || !api.onUpdateStatus) return
+    const apply = (s: UpdateStatus) => {
+      setStatus(s)
+      if (s.state === 'up-to-date') {
+        setFlashUpToDate(true)
+      }
+    }
+    void api.getUpdateStatus().then(apply).catch(() => {})
+    return api.onUpdateStatus(apply)
+  }, [])
+
+  useEffect(() => {
+    if (!flashUpToDate) return
+    const id = window.setTimeout(() => setFlashUpToDate(false), 2800)
+    return () => window.clearTimeout(id)
+  }, [flashUpToDate, status.state])
+
+  const onCheck = useCallback(() => {
+    setFlashUpToDate(false)
+    void window.electronAPI?.checkForUpdates?.()
+  }, [])
+
+  const onInstall = useCallback(async () => {
+    const feed =
+      'https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases/'
+    // Downloaded → install & relaunch. Available → re-check (starts download when
+    // packaged/eligible) and open the Supabase feed for manual install fallback.
+    if (status.state === 'downloaded') {
+      try {
+        const ok = await window.electronAPI.quitAndInstallUpdate()
+        if (!ok) window.electronAPI.openExternalUrl?.(feed)
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+    if (status.state === 'available' || status.state === 'downloading') {
+      void window.electronAPI?.checkForUpdates?.()
+      // Manual path always available (soft-check in dev can't auto-install)
+      window.electronAPI.openExternalUrl?.(feed)
+    }
+  }, [status.state])
+
+  const remoteLabel = status.version ? `v${status.version}` : ''
+  const checking = status.state === 'checking'
+  const hasUpdate =
+    status.state === 'available'
+    || status.state === 'downloading'
+    || status.state === 'downloaded'
+  const downloading = status.state === 'downloading'
+  const downloaded = status.state === 'downloaded'
+
+  let actionLabel = t('updates.checkForUpdates')
+  if (checking) actionLabel = t('updates.checkingForUpdates')
+  else if (flashUpToDate || status.state === 'up-to-date') actionLabel = t('updates.upToDate')
+  else if (downloaded) actionLabel = t('updates.restartToUpdate')
+  else if (downloading) {
+    actionLabel = status.percent != null
+      ? `${t('updates.updateAvailable')} ${status.percent}%`
+      : t('updates.updateAvailable')
+  } else if (status.state === 'available') {
+    actionLabel = remoteLabel
+      ? `${t('updates.updateAvailable')} ${remoteLabel}`
+      : t('updates.updateAvailable')
+  } else if (status.state === 'error') {
+    actionLabel = t('updates.checkForUpdates')
+  }
+
+  return (
+    <div className="flex-shrink-0 px-2 pt-1.5 pb-4 flex flex-col items-center gap-1.5 select-none">
+      <div className="flex items-center justify-center gap-1.5">
+        <img src={orquestraLogo} alt="Orquestra" className="h-4 w-auto object-contain opacity-80" />
+        <span className="text-[10px] text-muted">v{pkg.version}</span>
+      </div>
+      <button
+        type="button"
+        disabled={checking || downloading}
+        onClick={hasUpdate && !checking ? onInstall : onCheck}
+        className={`max-w-full px-2 py-1 rounded text-[10px] leading-tight transition-colors flex items-center gap-1 ${
+          hasUpdate
+            ? 'bg-accent/20 text-accent hover:bg-accent/30 border border-accent/40'
+            : flashUpToDate || status.state === 'up-to-date'
+              ? 'text-muted'
+              : 'text-muted hover:text-secondary hover:bg-hover border border-transparent'
+        } disabled:opacity-60 disabled:cursor-default`}
+        title={
+          hasUpdate
+            ? (downloaded ? t('updates.restartToUpdate') : t('updates.downloadAndInstall'))
+            : t('updates.checkForUpdates')
+        }
+      >
+        {checking || downloading ? (
+          <ArrowClockwise size={11} className="animate-spin shrink-0" />
+        ) : hasUpdate ? (
+          <DownloadSimple size={11} className="shrink-0" />
+        ) : null}
+        <span className="truncate">{actionLabel}</span>
+      </button>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // View metadata — icon + title for each possible sidebar view
@@ -365,12 +488,9 @@ const ActivityBarSidebar: React.FC<ActivityBarSidebarProps> = ({ side, defaultWi
           </div>
         )}
       </div>
-      {/* Version marker — shown on whichever side hosts the workspaces view */}
+      {/* Version + check-for-updates — workspaces pane footer */}
       {isExpanded && activeView === 'workspaces' && (
-        <div className="flex-shrink-0 px-2 pt-1.5 pb-4 flex items-center justify-center gap-1.5 select-none">
-          <img src={orquestraLogo} alt="Orquestra" className="h-4 w-auto object-contain opacity-80" />
-          <span className="text-[10px] text-muted">v{pkg.version}</span>
-        </div>
+        <SidebarUpdateFooter />
       )}
     </div>
   )

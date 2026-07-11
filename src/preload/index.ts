@@ -192,6 +192,7 @@ import {
   UPDATE_STATUS,
   UPDATE_QUIT_AND_INSTALL,
   UPDATE_GET_STATUS,
+  UPDATE_CHECK_NOW,
   OPEN_EXTERNAL_URL,
   AGENT_CREATE,
   AGENT_PROMPT,
@@ -538,6 +539,7 @@ const invokeForwarders = {
 
   // Auto-updater
   getUpdateStatus: makeInvoker<'getUpdateStatus'>(UPDATE_GET_STATUS),
+  checkForUpdates: makeInvoker<'checkForUpdates'>(UPDATE_CHECK_NOW),
   quitAndInstallUpdate: makeInvoker<'quitAndInstallUpdate'>(UPDATE_QUIT_AND_INSTALL),
 
   // Pi agent

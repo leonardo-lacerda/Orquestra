@@ -33,7 +33,12 @@ import { getSettingSync } from './store'
 import { canSelfUpdate } from './updateInstaller'
 import { createJsonStateFile } from './jsonStateFile'
 import { broadcastToAll } from './windowRegistry'
-import { UPDATE_STATUS, UPDATE_QUIT_AND_INSTALL, UPDATE_GET_STATUS } from '../shared/ipc-channels'
+import {
+  UPDATE_STATUS,
+  UPDATE_QUIT_AND_INSTALL,
+  UPDATE_GET_STATUS,
+  UPDATE_CHECK_NOW,
+} from '../shared/ipc-channels'
 import type { UpdateStatus } from '../shared/electron-api'
 import {
   decideInstallState,
@@ -98,6 +103,9 @@ function pushStatus(status: UpdateStatus): void {
  *  status, so the modal stays hidden. */
 function registerUpdateIpc(): void {
   ipcMain.handle(UPDATE_GET_STATUS, (): UpdateStatus => lastStatus)
+  ipcMain.handle(UPDATE_CHECK_NOW, async (): Promise<void> => {
+    checkForUpdatesManually()
+  })
   ipcMain.handle(UPDATE_QUIT_AND_INSTALL, (): boolean => {
     if (!updatePendingInstall || !canSelfUpdate()) return false
     // quitAndInstall quits the app, lets Squirrel.Mac swap the bundle while
@@ -109,6 +117,69 @@ function registerUpdateIpc(): void {
     setImmediate(() => autoUpdater.quitAndInstall(false, true))
     return true
   })
+}
+
+/** Compare dotted versions (1.3.2 vs 1.4.0). Returns true if remote is newer. */
+export function isRemoteVersionNewer(remote: string, local: string): boolean {
+  const parse = (v: string): number[] =>
+    String(v || '0')
+      .replace(/^v/i, '')
+      .split(/[.+-]/)
+      .map((p) => parseInt(p, 10) || 0)
+  const a = parse(remote)
+  const b = parse(local)
+  const n = Math.max(a.length, b.length)
+  for (let i = 0; i < n; i++) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x > y) return true
+    if (x < y) return false
+  }
+  return false
+}
+
+/**
+ * Soft check against Supabase Storage latest.yml (generic provider feed).
+ * Used in unpackaged/dev builds where electron-updater won't run.
+ */
+async function checkLatestFromSupabaseFeed(): Promise<void> {
+  pushStatus({ state: 'checking', version: null })
+  try {
+    // electron-builder generic provider: latest.yml (or latest-mac.yml) at feed root
+    const candidates = [
+      `${SUPABASE_BUCKET}/latest.yml`,
+      `${SUPABASE_BUCKET}/latest-mac.yml`,
+      `${SUPABASE_BUCKET}/latest-linux.yml`,
+    ]
+    let remoteVersion: string | null = null
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' })
+        if (!res.ok) continue
+        const text = await res.text()
+        const m = text.match(/^\s*version:\s*['"]?([^\s'"]+)/m)
+        if (m?.[1]) {
+          remoteVersion = m[1]
+          break
+        }
+      } catch {
+        /* try next */
+      }
+    }
+    const local = app.getVersion()
+    if (remoteVersion && isRemoteVersionNewer(remoteVersion, local)) {
+      availableVersion = remoteVersion
+      pushStatus({ state: 'available', version: remoteVersion })
+      log.info('[auto-updater] soft check: v%s available (local v%s)', remoteVersion, local)
+    } else {
+      availableVersion = null
+      pushStatus({ state: 'up-to-date', version: local })
+      log.debug('[auto-updater] soft check: up to date (v%s)', local)
+    }
+  } catch (err) {
+    log.warn('[auto-updater] soft check failed: %O', err)
+    pushStatus({ state: 'error', version: null })
+  }
 }
 
 /** The manual-reinstall escape hatch. Shown when self-update genuinely cannot
@@ -209,7 +280,9 @@ function wireUpdaterEvents(eligible: boolean): void {
     // marker so the error handler stays silent (a still-staged install is
     // tracked separately via updatePendingInstall, which it also honors).
     availableVersion = null
-    log.debug('[auto-updater] no update available (current v%s)', String(info?.version ?? app.getVersion()))
+    const current = String(info?.version ?? app.getVersion())
+    log.debug('[auto-updater] no update available (current v%s)', current)
+    pushStatus({ state: 'up-to-date', version: current })
   })
 
   autoUpdater.on('download-progress', (p) => {
@@ -347,12 +420,20 @@ export function initAutoUpdater(): void {
  *  to "Restart now", so re-broadcast the staged status with forceShow to re-open
  *  it. Sent off lastStatus directly (not cached) so the flag stays a one-off. */
 export function checkForUpdatesManually(): void {
-  if (!app.isPackaged) return
   manualPrompted = false
   if (updatePendingInstall && lastStatus.state === 'downloaded') {
     broadcastToAll(UPDATE_STATUS, { ...lastStatus, forceShow: true })
+    return
   }
-  void runCheck(canSelfUpdate())
+  // Packaged (or ORQUESTRA_DEV_UPDATE harness): full electron-updater path.
+  // Unpacked/dev: soft-check latest.yml on Supabase Storage so the sidebar
+  // button still works without a full installer feed.
+  const devUpdate = !app.isPackaged && process.env.ORQUESTRA_DEV_UPDATE === '1'
+  if (!app.isPackaged && !devUpdate) {
+    void checkLatestFromSupabaseFeed()
+    return
+  }
+  void runCheck(canSelfUpdate() || devUpdate)
 }
 
 /** React to the beta-updates opt-in flipping (UI toggle or hand-edited
