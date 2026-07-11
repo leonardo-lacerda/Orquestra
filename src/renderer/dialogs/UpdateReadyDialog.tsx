@@ -3,6 +3,7 @@ import { ArrowClockwise } from '@phosphor-icons/react'
 import type { UpdateStatus } from '../../shared/electron-api'
 import { OrquestraLogo } from '../ui/OrquestraLogo'
 import headerImg from '../assets/welcome-header.jpg'
+import { useTranslation } from '../i18n/useTranslation'
 
 // In-app "update ready" modal. Shown once electron-updater has downloaded an
 // update (status === 'downloaded'). Offers both install modes:
@@ -13,6 +14,7 @@ import headerImg from '../assets/welcome-header.jpg'
 //                        quit (electron-updater's autoInstallOnAppQuit).
 // Styled to match WelcomeDialog: header image, surface tokens, beveled icon.
 export function UpdateReadyDialog() {
+  const { t } = useTranslation()
   const [version, setVersion] = useState<string | null>(null)
   // The version the user dismissed ("Install on next quit"), so the modal does
   // NOT re-nag every time the 15-minute background check re-announces the same
@@ -118,8 +120,8 @@ export function UpdateReadyDialog() {
               v{version}
             </span>
           )}
-          <h2 className="mt-1 text-primary text-[20px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">Update ready</h2>
-          <p className="mt-1.5 text-muted text-[12.5px]">Restart to apply, or it installs on next quit.</p>
+          <h2 className="mt-1 text-primary text-[20px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">{t('updates.ready')}</h2>
+          <p className="mt-1.5 text-muted text-[12.5px]">{t('updates.readyDesc')}</p>
         </div>
 
         {/* Actions */}
@@ -129,7 +131,7 @@ export function UpdateReadyDialog() {
             disabled={restarting}
             className="flex-1 inline-flex items-center justify-center h-10 rounded-lg border border-strong bg-surface-0/60 hover:bg-hover text-primary text-[12.5px] font-medium transition-colors disabled:opacity-40"
           >
-            Install on next quit
+            {t('updates.installOnQuit')}
           </button>
           <button
             onClick={restart}
@@ -137,7 +139,7 @@ export function UpdateReadyDialog() {
             className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-lg bg-blue-500 text-white text-[12.5px] font-semibold hover:bg-blue-400 transition-colors disabled:opacity-50"
           >
             <ArrowClockwise size={14} weight="bold" />
-            {restarting ? 'Restarting…' : 'Restart now'}
+            {restarting ? t('updates.restarting') : 'Restart now'}
           </button>
         </div>
       </div>

@@ -31,9 +31,13 @@ interface ActivePanelStore {
   setActivePanel: (panelId: string | null) => void
 }
 
-export const useActivePanelStore = create<ActivePanelStore>((set) => ({
+export const useActivePanelStore = create<ActivePanelStore>((set, get) => ({
   activePanelId: null,
-  setActivePanel: (panelId) => set({ activePanelId: panelId }),
+  setActivePanel: (panelId) => {
+    // No-op when unchanged — avoids store churn that re-fires focus effects.
+    if (get().activePanelId === panelId) return
+    set({ activePanelId: panelId })
+  },
 }))
 
 export function setActivePanel(panelId: string | null): void {

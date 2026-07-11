@@ -5,6 +5,7 @@ import { workspaceRuntime } from '../lib/workspace/workspaceRuntime'
 import { RemoteConnectDialog } from '../dialogs/RemoteConnectDialog'
 import { BACKDROP, CARD_SURFACE, btn } from './Modal'
 import type { RuntimeConnection, RemoteConnectSpec } from '../../shared/types'
+import { useTranslation } from '../i18n/useTranslation'
 
 // Full-cover lock for the main canvas while the selected remote workspace's
 // runtime isn't usable. It blocks interaction with the dead panels beneath and
@@ -39,6 +40,7 @@ function connectionInitial(connection: RuntimeConnection | undefined) {
 
 export function RuntimeLockOverlay(): JSX.Element | null {
   const workspace = useSelectedWorkspace()
+  const { t } = useTranslation()
   const retryRuntime = useAppStore((s) => s.retryRuntime)
   const installRuntime = useAppStore((s) => s.installRuntime)
   const deleteRuntime = useAppStore((s) => s.deleteRuntime)
@@ -99,28 +101,28 @@ export function RuntimeLockOverlay(): JSX.Element | null {
   const view = (() => {
     switch (runtime.status) {
       case 'installing':
-        return { icon: 'install' as const, title: 'Installing runtime…' }
+        return { icon: 'install' as const, title: t('runtime.installing') }
       case 'connecting':
-        return { icon: 'spin' as const, title: 'Connecting…' }
+        return { icon: 'spin' as const, title: t('runtime.connecting') }
       case 'disconnected':
         return {
           icon: 'warn' as const,
-          title: 'Runtime disconnected',
-          primary: { label: 'Reconnect', onClick: onRetry, icon: 'plug' as const },
+          title: t('runtime.disconnected'),
+          primary: { label: t('runtime.reconnect'), onClick: onRetry, icon: 'plug' as const },
           del: true,
         }
       case 'missing':
         return {
           icon: 'install' as const,
-          title: 'Runtime not installed',
-          primary: { label: 'Install', onClick: onInstall, icon: 'install' as const },
+          title: t('runtime.notInstalled'),
+          primary: { label: t('runtime.install'), onClick: onInstall, icon: 'install' as const },
         }
       case 'unreachable':
       default:
         return {
           icon: 'warn' as const,
-          title: 'Runtime unreachable',
-          primary: runtime.hasConnection ? { label: 'Retry', onClick: onRetry, icon: 'plug' as const } : undefined,
+          title: t('runtime.unreachable'),
+          primary: runtime.hasConnection ? { label: t('runtime.retry'), onClick: onRetry, icon: 'plug' as const } : undefined,
           edit: true,
           del: runtime.hasConnection,
         }

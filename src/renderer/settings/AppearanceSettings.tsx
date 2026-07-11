@@ -9,7 +9,7 @@ import { validateTheme } from '../../shared/theme'
 import { BASE_DARK, BASE_LIGHT, BUILT_IN_THEMES } from '../../shared/themes'
 import { errorMessage } from '../lib/errorMessage'
 
-const SKILL_GUIDE_URL = 'https://github.com/0-AI-UG/orquestra/blob/main/skills/orquestra-theme/SKILL.md'
+const SKILL_GUIDE_URL = 'https://github.com/leonardo-lacerda/Orquestra/blob/main/skills/orquestra-theme/SKILL.md'
 
 const UI_SCALE_OPTIONS = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5].map((s) => ({
   value: String(s),

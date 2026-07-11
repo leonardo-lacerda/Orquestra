@@ -16,7 +16,6 @@ import { ArrowLeft, ArrowRight, X } from '@phosphor-icons/react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIStore } from '../stores/uiStore'
 import { ONBOARDING_STEPS, type OnboardingStep } from './steps'
-import { TELEMETRY_NOTICE_VERSION } from '../../shared/types'
 import doneHeader from '../assets/done-header.jpg'
 
 interface Rect { x: number; y: number; width: number; height: number }
@@ -134,7 +133,6 @@ function clampBox(rect: Rect, pad: number): { left: number; top: number; width: 
 
 export function OnboardingTour() {
   const loaded = useSettingsStore((s) => s._loaded)
-  const noticeAcknowledgedVersion = useSettingsStore((s) => s.telemetryNoticeAcknowledgedVersion)
   const completed = useSettingsStore((s) => s.onboardingCompleted)
   const setSetting = useSettingsStore((s) => s.setSetting)
   const setShowCommandPalette = useUIStore((s) => s.setShowCommandPalette)
@@ -142,9 +140,8 @@ export function OnboardingTour() {
   const [step, setStep] = useState(0)
   const [rect, setRect] = useState<Rect | null>(null)
 
-  // Show only after settings load AND the telemetry notice was acknowledged
-  // (so the notice goes first), and only until the tour is completed/skipped.
-  const active = loaded && noticeAcknowledgedVersion >= TELEMETRY_NOTICE_VERSION && !completed
+  // Show only after settings load and the tour is not yet completed/skipped.
+  const active = loaded && !completed
 
   const current = ONBOARDING_STEPS[step]
 
@@ -178,25 +175,12 @@ export function OnboardingTour() {
     return () => setShowCommandPalette(false)
   }, [active, current, setShowCommandPalette])
 
-  // Fire a one-time "started" signal when the tour first becomes active.
-  useEffect(() => {
-    if (active) {
-      try { window.electronAPI?.trackFeatureUsed?.('onboarding_started') } catch { /* noop */ }
-    }
-  }, [active])
-
-  const finish = useCallback((reason: 'completed' | 'skipped') => {
+  const finish = useCallback(() => {
     setSetting('onboardingCompleted', true)
-    try {
-      window.electronAPI?.trackFeatureUsed?.(
-        reason === 'completed' ? 'onboarding_completed' : 'onboarding_skipped',
-        { steps_seen: step + 1 },
-      )
-    } catch { /* noop */ }
-  }, [setSetting, step])
+  }, [setSetting])
 
   const next = useCallback(() => {
-    if (step >= ONBOARDING_STEPS.length - 1) finish('completed')
+    if (step >= ONBOARDING_STEPS.length - 1) finish()
     else setStep((s) => s + 1)
   }, [step, finish])
 
@@ -206,7 +190,7 @@ export function OnboardingTour() {
   useEffect(() => {
     if (!active) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); finish('skipped') }
+      if (e.key === 'Escape') { e.preventDefault(); finish() }
       else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); next() }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); back() }
     }
@@ -258,7 +242,7 @@ export function OnboardingTour() {
         style={{ left, top, bottom, width: cardWidth, animation: 'onboarding-card-in 0.18s ease-out' }}
       >
         <button
-          onClick={() => finish('skipped')}
+          onClick={() => finish()}
           className={`absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center rounded-full transition-colors ${
             hero ? 'text-white/80 bg-black/30 hover:bg-black/50 hover:text-white' : 'text-[#777] hover:text-white hover:bg-white/[0.06]'
           }`}

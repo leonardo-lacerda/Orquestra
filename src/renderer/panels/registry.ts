@@ -136,9 +136,6 @@ export const PANEL_REGISTRY: Record<PanelType, RendererPanelDefinition> = {
  *  surface — so session restore (which calls appStore.createX directly) does not
  *  inflate the counts. No-ops when the panel wasn't created. */
 function trackCreated(type: PanelType, id: string | null): string | null {
-  if (id) {
-    try { window.electronAPI?.trackFeatureUsed?.('panel_created', { type }) } catch { /* noop */ }
-  }
   return id
 }
 

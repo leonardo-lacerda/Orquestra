@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/orquestra-logo.svg" alt="Orquestra" width="240" />
+  <img src="assets/orquestra.logo.png" alt="Orquestra" width="240" />
 </p>
 
 <h1 align="center">Orquestra</h1>
@@ -19,10 +19,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/0-AI-UG/orquestra/releases"><img src="https://img.shields.io/github/v/release/0-AI-UG/orquestra?style=flat-square" alt="Release" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/0-AI-UG/orquestra?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/0-AI-UG/orquestra/actions"><img src="https://img.shields.io/github/actions/workflow/status/0-AI-UG/orquestra/ci.yml?style=flat-square" alt="CI" /></a>
-  <a href="https://github.com/0-AI-UG/orquestra/releases"><img src="https://img.shields.io/github/downloads/0-AI-UG/orquestra/total?style=flat-square" alt="Downloads" /></a>
+  <a href="https://github.com/leonardo-lacerda/Orquestra/releases"><img src="https://img.shields.io/github/v/release/leonardo-lacerda/Orquestra?style=flat-square" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/leonardo-lacerda/Orquestra?style=flat-square" alt="MIT License" /></a>
+  <a href="https://github.com/leonardo-lacerda/Orquestra/actions"><img src="https://img.shields.io/github/actions/workflow/status/leonardo-lacerda/Orquestra/ci.yml?style=flat-square" alt="CI" /></a>
+  <a href="https://github.com/leonardo-lacerda/Orquestra/releases"><img src="https://img.shields.io/github/downloads/leonardo-lacerda/Orquestra/total?style=flat-square" alt="Downloads" /></a>
 </p>
 
 ---
@@ -61,9 +61,9 @@ Laden Sie eine vorgefertigte Version herunter. Bauen Sie für den täglichen Geb
 
 | Plattform | Formate | Link |
 |----------|---------|------|
-| macOS | DMG, ZIP (`arm64`, `x64`) | [Neueste Version](https://github.com/0-AI-UG/orquestra/releases/latest) |
-| Windows | NSIS-Installer, ZIP (`x64`) | [Neueste Version](https://github.com/0-AI-UG/orquestra/releases/latest) |
-| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Neueste Version](https://github.com/0-AI-UG/orquestra/releases/latest) |
+| macOS | DMG, ZIP (`arm64`, `x64`) | [Neueste Version](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
+| Windows | NSIS-Installer, ZIP (`x64`) | [Neueste Version](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
+| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Neueste Version](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
 
 > **macOS:** Veröffentlichte Builds sind notariell beglaubigt. Unsignierte lokale Builds benötigen ggf. `xattr -cr /Applications/Orquestra.app`.
 
@@ -84,7 +84,7 @@ Für Mitwirkende. Andernfalls die Version oben nutzen.
   - Windows: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) mit dem Workload „Desktopentwicklung mit C++"
 
 ```bash
-git clone https://github.com/0-AI-UG/orquestra.git
+git clone https://github.com/leonardo-lacerda/Orquestra.git
 cd orquestra
 npm install
 
@@ -119,11 +119,11 @@ Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Die Historie Version für Version steh
 
 ## Star-Verlauf
 
-<a href="https://www.star-history.com/#0-AI-UG/orquestra&Date">
+<a href="https://www.star-history.com/#leonardo-lacerda/Orquestra&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date" />
   </picture>
 </a>
 

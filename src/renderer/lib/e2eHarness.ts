@@ -11,11 +11,13 @@ import { getOrCreateCanvasStoreForPanel } from '../stores/canvasStore'
 import { gitStatusStore, type GitWorktreeEntry } from '../stores/gitStatusStore'
 import { useDragStore } from '../drag/store'
 import { useSearchStore } from '../stores/searchStore'
+import { useOrchestrationRunStore } from '../stores/orchestrationRunStore'
 import { getLastReveal } from './editor/editorReveal'
 import { applyTheme } from './themeManager'
 import { BUILT_IN_THEMES } from '../../shared/themes'
 import { terminalRegistry } from './terminal/terminalRegistry'
-import type { Point, WorktreeMeta } from '../../shared/types'
+import { getEditorBuffer, writeEditorBuffer } from './editor/editorSaveRegistry'
+import type { CanvasConnectionType, Point, WorktreeMeta } from '../../shared/types'
 
 /** Serializable snapshot of the search store for e2e assertions. */
 export interface SearchSnapshot {
@@ -86,6 +88,10 @@ declare global {
       terminalPtyId(nodeId: string): string | null
       /** Write raw data to a terminal node's PTY (e.g. a flooding command). */
       writeTerminal(nodeId: string, data: string): boolean
+      addConnection(sourceNodeId: string, targetNodeId: string, type: CanvasConnectionType): string | null
+      connections(): Array<{ id: string; sourceNodeId: string; targetNodeId: string; type: string }>
+      setEditorContent(nodeId: string, content: string): boolean
+      editorContent(nodeId: string): string | null
       /** Point the selected workspace at a real directory (registers it as an
        *  allowed root) so content search has files to scan. */
       setWorkspaceRoot(rootPath: string): Promise<boolean>
@@ -111,6 +117,30 @@ declare global {
         sourceNodeId: string | null
         targetKind: string | null
       }
+      /**
+       * Enable Maestro on a terminal node (crown path): marks panel.maestro and
+       * calls terminalSetMaestro so CLI/skills are copied into the workspace.
+       */
+      enableMaestro(nodeId: string): Promise<boolean>
+      /**
+       * Seed a worker terminal + run-tracker entry as if recruited by Maestro.
+       * Returns the new worker node id (or null on failure).
+       */
+      recruitWorker(args: {
+        maestroNodeId: string
+        name: string
+        role: string
+        point?: Point
+      }): string | null
+      /** Snapshot of orchestration run-tracker workers for a maestro node. */
+      orchestrationWorkers(maestroNodeId: string): Array<{
+        panelId: string
+        name: string
+        role: string
+        status: string
+      }>
+      /** Mark a tracked worker done/failed (simulates result transition). */
+      markWorkerDone(panelId: string, status?: 'done' | 'failed'): void
     }
   }
 }
@@ -297,6 +327,32 @@ export function installE2EHarness(): void {
     return true
   }
 
+  const addConnection = (
+    sourceNodeId: string,
+    targetNodeId: string,
+    type: CanvasConnectionType,
+  ): string | null => activeCanvasStore()?.getState().addConnection(sourceNodeId, targetNodeId, type) ?? null
+
+  const connections = () => Object.values(activeCanvasStore()?.getState().connections ?? {}).map((connection) => ({
+    id: connection.id,
+    sourceNodeId: connection.sourceNodeId,
+    targetNodeId: connection.targetNodeId,
+    type: connection.type ?? 'pipe',
+  }))
+
+  const panelIdForNode = (nodeId: string): string | null =>
+    activeCanvasStore()?.getState().nodes[nodeId]?.panelId ?? null
+
+  const setEditorContent = (nodeId: string, content: string): boolean => {
+    const panelId = panelIdForNode(nodeId)
+    return panelId ? writeEditorBuffer(panelId, content, 'replace') : false
+  }
+
+  const editorContent = (nodeId: string): string | null => {
+    const panelId = panelIdForNode(nodeId)
+    return panelId ? getEditorBuffer(panelId) : null
+  }
+
   const setWorkspaceRoot = (rootPath: string): Promise<boolean> => {
     const wsId = useAppStore.getState().selectedWorkspaceId
     return useAppStore.getState().setWorkspaceRootPath(wsId, rootPath)
@@ -359,6 +415,71 @@ export function installE2EHarness(): void {
     }
   }
 
+  const enableMaestro = async (nodeId: string): Promise<boolean> => {
+    const cs = activeCanvasStore()
+    const node = cs?.getState().nodes[nodeId]
+    if (!node) return false
+    const panelId = node.panelId
+    const app = useAppStore.getState()
+    const wsId = app.selectedWorkspaceId
+    const ws = app.workspaces.find((w) => w.id === wsId)
+    if (!ws?.panels[panelId]) return false
+    const ptyId = terminalRegistry.getEntry(panelId)?.ptyId
+    if (!ptyId || !window.electronAPI?.terminalSetMaestro) return false
+    const result = await window.electronAPI.terminalSetMaestro(ptyId, true, ws.rootPath || '')
+    if (!result || (typeof result === 'object' && 'ok' in result && !result.ok)) return false
+    app.setPanelMaestro(wsId, panelId, true)
+    return true
+  }
+
+  const recruitWorker = (args: {
+    maestroNodeId: string
+    name: string
+    role: string
+    point?: Point
+  }): string | null => {
+    const cs = activeCanvasStore()
+    const maestroNode = cs?.getState().nodes[args.maestroNodeId]
+    if (!maestroNode) return null
+    const maestroPty = terminalRegistry.getEntry(maestroNode.panelId)?.ptyId
+    if (!maestroPty) return null
+    const point = args.point ?? {
+      x: maestroNode.origin.x + 600,
+      y: maestroNode.origin.y,
+    }
+    const workerNodeId = createTerminal(point)
+    const workerNode = cs?.getState().nodes[workerNodeId]
+    const workerPanelId = workerNode?.panelId
+    if (!workerPanelId) return null
+    const app = useAppStore.getState()
+    app.updatePanelTitle(app.selectedWorkspaceId, workerPanelId, args.name)
+    useOrchestrationRunStore.getState().noteRecruit({
+      maestroPtyId: maestroPty,
+      panelId: workerPanelId,
+      name: args.name,
+      role: args.role,
+    })
+    return workerNodeId
+  }
+
+  const orchestrationWorkers = (maestroNodeId: string) => {
+    const cs = activeCanvasStore()
+    const maestroNode = cs?.getState().nodes[maestroNodeId]
+    if (!maestroNode) return []
+    const maestroPty = terminalRegistry.getEntry(maestroNode.panelId)?.ptyId
+    if (!maestroPty) return []
+    return useOrchestrationRunStore.getState().listForMaestro(maestroPty).map((w) => ({
+      panelId: w.panelId,
+      name: w.name,
+      role: w.role,
+      status: w.status,
+    }))
+  }
+
+  const markWorkerDone = (panelId: string, status: 'done' | 'failed' = 'done') => {
+    useOrchestrationRunStore.getState().noteWorkerDone(panelId, status)
+  }
+
   window.__orquestraE2E = {
     ready: true,
     activeCanvasPanelId,
@@ -379,6 +500,10 @@ export function installE2EHarness(): void {
     worktreeDebug,
     terminalPtyId,
     writeTerminal,
+    addConnection,
+    connections,
+    setEditorContent,
+    editorContent,
     setWorkspaceRoot,
     openSidebarView,
     setActiveLeftSidebarView,
@@ -388,5 +513,9 @@ export function installE2EHarness(): void {
     setTheme,
     themeIds,
     dragSnapshot,
+    enableMaestro,
+    recruitWorker,
+    orchestrationWorkers,
+    markWorkerDone,
   }
 }

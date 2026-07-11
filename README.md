@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/orquestra-logo.svg" />
-    <img src="assets/orquestra-logo-light.svg" alt="Orquestra" width="140" />
-  </picture>
+  <img src="assets/orquestra.logo.png" alt="Orquestra" width="140" />
 </p>
 
 <p align="center">
@@ -14,9 +11,9 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/0-AI-UG/orquestra?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/0-AI-UG/orquestra/actions"><img src="https://img.shields.io/github/actions/workflow/status/0-AI-UG/orquestra/ci.yml?style=flat-square" alt="CI" /></a>
-  <a href="https://github.com/0-AI-UG/orquestra/releases"><img src="https://img.shields.io/github/downloads/0-AI-UG/orquestra/total?style=flat-square" alt="Downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/leonardo-lacerda/Orquestra?style=flat-square" alt="MIT License" /></a>
+  <a href="https://github.com/leonardo-lacerda/Orquestra/actions"><img src="https://img.shields.io/github/actions/workflow/status/leonardo-lacerda/Orquestra/ci.yml?style=flat-square" alt="CI" /></a>
+  <a href="https://github.com/leonardo-lacerda/Orquestra/releases"><img src="https://img.shields.io/github/downloads/leonardo-lacerda/Orquestra/total?style=flat-square" alt="Downloads" /></a>
 </p>
 
 ---
@@ -35,9 +32,9 @@ Download a prebuilt release. Don't build from source for daily use.
 
 | Platform | Formats | Link |
 |----------|---------|------|
-| macOS | DMG, ZIP (`arm64`, `x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
-| Windows | NSIS installer, ZIP (`x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
-| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Latest release](https://github.com/0-AI-UG/orquestra/releases/latest) |
+| macOS | DMG, ZIP (`arm64`, `x64`) | [Latest release](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
+| Windows | NSIS installer, ZIP (`x64`) | [Latest release](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
+| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Latest release](https://github.com/leonardo-lacerda/Orquestra/releases/latest) |
 
 ## What's inside
 
@@ -89,7 +86,7 @@ For contributors. Use the release above otherwise.
 Fresh clone, one command sets everything up (installs dependencies and builds the local runtime daemon):
 
 ```bash
-git clone https://github.com/0-AI-UG/orquestra.git
+git clone https://github.com/leonardo-lacerda/Orquestra.git
 cd orquestra
 bun run setup
 ```
@@ -128,11 +125,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Release-by-release history lives in the 
 
 ## Star history
 
-<a href="https://www.star-history.com/#0-AI-UG/orquestra&Date">
+<a href="https://www.star-history.com/#leonardo-lacerda/Orquestra&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=0-AI-UG/orquestra&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=leonardo-lacerda/Orquestra&type=Date" />
   </picture>
 </a>
 

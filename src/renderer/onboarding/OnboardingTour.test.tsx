@@ -1,7 +1,6 @@
 // =============================================================================
-// OnboardingTour flow — shows only after consent is decided and not yet
-// completed, advances through the steps, and persists completion when finished
-// or skipped (which dismisses it).
+// OnboardingTour flow — shows once on first run (not yet completed), advances
+// through the steps, and persists completion when finished or skipped.
 // =============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,7 +14,6 @@ vi.mock('../lib/logger', () => ({
 import { OnboardingTour } from './OnboardingTour'
 import { ONBOARDING_STEPS } from './steps'
 import { useSettingsStore } from '../stores/settingsStore'
-import { TELEMETRY_NOTICE_VERSION } from '../../shared/types'
 
 let host: HTMLDivElement
 let root: Root
@@ -34,15 +32,12 @@ beforeEach(() => {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
-  // The settings store's setSetting fires settingsSet over IPC, and the tour
-  // reports usage — stub both so the real store action doesn't throw in jsdom.
   ;(window as unknown as { electronAPI: Record<string, unknown> }).electronAPI = {
     ...(window as unknown as { electronAPI?: Record<string, unknown> }).electronAPI,
     settingsSet: vi.fn(() => Promise.resolve()),
-    trackFeatureUsed: vi.fn(),
   }
-  // Fresh, consented, not-yet-onboarded state.
-  useSettingsStore.setState({ _loaded: true, telemetryNoticeAcknowledgedVersion: TELEMETRY_NOTICE_VERSION, onboardingCompleted: false } as never)
+  // Fresh, loaded, not-yet-onboarded state.
+  useSettingsStore.setState({ _loaded: true, onboardingCompleted: false } as never)
 })
 
 afterEach(() => {
@@ -52,13 +47,13 @@ afterEach(() => {
 })
 
 describe('OnboardingTour', () => {
-  it('stays hidden until the telemetry notice is acknowledged', () => {
-    setState({ telemetryNoticeAcknowledgedVersion: 0 })
+  it('stays hidden when onboarding is already completed', () => {
+    setState({ onboardingCompleted: true })
     act(() => root.render(<OnboardingTour />))
     expect(host.textContent).toBe('')
   })
 
-  it('shows the first step once consent is decided and not completed', () => {
+  it('shows the first step on first run', () => {
     act(() => root.render(<OnboardingTour />))
     expect(host.textContent).toContain(ONBOARDING_STEPS[0].title)
   })

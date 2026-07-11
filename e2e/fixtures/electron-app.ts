@@ -29,8 +29,27 @@ export async function launchApp(opts: { perf?: boolean } = {}): Promise<LaunchRe
     },
   })
   const mainWindow = await electronApp.firstWindow()
+  const startupErrors: string[] = []
+  mainWindow.on('pageerror', (error) => startupErrors.push(error.stack || error.message))
+  mainWindow.on('console', (message) => {
+    if (message.type() === 'error') startupErrors.push(message.text())
+  })
   await mainWindow.waitForLoadState('domcontentloaded')
-  await mainWindow.waitForFunction(() => window.__orquestraE2E?.ready === true, { timeout: 15_000 })
+  try {
+    await mainWindow.waitForFunction(() => window.__orquestraE2E?.ready === true, { timeout: 15_000 })
+  } catch (error) {
+    const diagnostics = await mainWindow.evaluate(() => ({
+      href: location.href,
+      title: document.title,
+      isE2E: window.electronAPI?.isE2E,
+      body: document.body.innerText.slice(0, 500),
+    })).catch(() => null)
+    throw new Error([
+      'Renderer E2E harness did not start.',
+      diagnostics ? `Diagnostics: ${JSON.stringify(diagnostics)}` : '',
+      startupErrors.length ? `Console errors:\n${startupErrors.join('\n')}` : '',
+    ].filter(Boolean).join('\n'), { cause: error })
+  }
   // The harness `ready` flag is set by its own effect the moment e2eHarness
   // installs — independent of App's async init(), which restores/creates the
   // workspace and mounts the Canvas. Wait for the Canvas to actually be in the

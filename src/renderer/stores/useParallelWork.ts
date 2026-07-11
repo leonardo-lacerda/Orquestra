@@ -18,6 +18,7 @@ import { useWorktreeActions } from './useWorktreeActions'
 import type { JoinedWorktree } from './useWorktrees'
 import type { PrListItem } from '../sidebar/CreateWorktreeForm'
 import type { NativeContextMenuItem } from '../../shared/electron-api'
+import { t } from '../i18n/useTranslation'
 
 export interface WorktreeStatus {
   branch: string
@@ -56,7 +57,7 @@ export async function runWorktreeContextMenu(opts: {
   beginRecolor: () => void
 }): Promise<void> {
   const items: NativeContextMenuItem[] = [
-    { id: 'publish', label: 'Publish branch' },
+    { id: 'publish', label: t('parallelWork.publishBranch') },
     { id: 'pr', label: opts.hasPr ? 'Open pull request' : 'Create pull request' },
   ]
   if (!opts.isPrimary) {
@@ -65,11 +66,11 @@ export async function runWorktreeContextMenu(opts: {
   }
   items.push({ type: 'separator' })
   items.push({ id: 'rename', label: 'Rename…' })
-  items.push({ id: 'color', label: 'Change color…' })
+  items.push({ id: 'color', label: t('parallelWork.changeColor') })
   items.push({ id: 'reveal', label: 'Reveal in Finder' })
   if (!opts.isPrimary) {
     items.push({ type: 'separator' })
-    items.push({ id: 'delete', label: 'Discard this work…' })
+    items.push({ id: 'delete', label: t('parallelWork.discard') })
   }
   const choice = await window.electronAPI.showContextMenu(items)
   switch (choice) {

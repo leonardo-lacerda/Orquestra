@@ -64,7 +64,7 @@ cat > "$CROWN_JSON" << JCROWN
 JCROWN
 
 # Get extension source
-EXT_SRC="C:/Users/Leo/Documents/cate/src/agent/extensions/orquestra-maestro"
+EXT_SRC="C:/Users/Leo/Documents/orquestra/src/agent/extensions/orquestra-maestro"
 
 # Write CLAUDE.local.md — Verboo auto-loads this from the workspace root
 cat > "$CLAUDE_LOCAL" << 'EOCLM'
@@ -111,7 +111,7 @@ else
 fi
 
 # Copy orquestra.js CLI
-ORQ_JS_SRC="C:/Users/Leo/Documents/cate/scripts/maestro/orquestra.js"
+ORQ_JS_SRC="C:/Users/Leo/Documents/orquestra/scripts/maestro/orquestra.js"
 if [ -f "$ORQ_JS_SRC" ]; then
   cp "$ORQ_JS_SRC" "$WORKSPACE/orquestra.js"
   pass "orquestra.js copied to workspace"

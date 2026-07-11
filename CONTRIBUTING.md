@@ -103,7 +103,7 @@ See the [Architecture section](README.md#architecture) in the README and [`CLAUD
 
 ## Reporting Bugs
 
-Open an [issue](https://github.com/0-AI-UG/orquestra/issues) with:
+Open an [issue](https://github.com/leonardo-lacerda/Orquestra/issues) with:
 
 - Steps to reproduce
 - Expected vs actual behavior

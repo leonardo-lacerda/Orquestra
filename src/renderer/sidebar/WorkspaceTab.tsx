@@ -22,6 +22,7 @@ import { workspaceRuntime } from '../lib/workspace/workspaceRuntime'
 import { InlineEditInput } from './InlineEditInput'
 import { WorkspaceSkillsTree } from './WorkspaceSkillsTree'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 
 // -----------------------------------------------------------------------------
 // Runtime status dot — surfaces a remote workspace's connection state in the
@@ -30,6 +31,7 @@ import { Tooltip } from '../ui/Tooltip'
 // -----------------------------------------------------------------------------
 
 function RuntimeDot({ workspace }: { workspace: WorkspaceState }): JSX.Element | null {
+  const { t } = useTranslation()
   const { status, error } = workspaceRuntime(workspace)
   // Only remote, non-connected states get a dot.
   if (status === 'local' || status === 'connected') return null
@@ -37,11 +39,11 @@ function RuntimeDot({ workspace }: { workspace: WorkspaceState }): JSX.Element |
   const busy = status === 'installing' || status === 'connecting'
   const color = busy ? 'bg-amber-400 animate-pulse' : 'bg-red-500 hover:ring-2 hover:ring-red-500/40'
   const title =
-    status === 'installing' ? 'Installing runtime…'
-    : status === 'connecting' ? 'Connecting to runtime…'
-    : status === 'disconnected' ? `Runtime disconnected${error ? `: ${error}` : ''}. Click to reconnect.`
-    : status === 'missing' ? `Runtime not installed${error ? `: ${error}` : ''}. Click to install.`
-    : `Runtime not reachable${error ? `: ${error}` : ''}. Click to retry.`
+    status === 'installing' ? t('runtime.installing')
+    : status === 'connecting' ? t('runtime.connecting')
+    : status === 'disconnected' ? `${t('runtime.disconnected')}${error ? `: ${error}` : ''}. Click to reconnect.`
+    : status === 'missing' ? `${t('runtime.notInstalled')}${error ? `: ${error}` : ''}. Click to install.`
+    : `${t('runtime.unreachable')}${error ? `: ${error}` : ''}. Click to retry.`
 
   const onClick = (e: React.MouseEvent): void => {
     e.stopPropagation()
@@ -229,6 +231,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
   onBulkContextMenu,
 }) => {
   // Single store read for all workspace status data
+  const { t } = useTranslation()
   const wsStatus = useStatusStore(useShallow((s) => {
     const ws = s.workspaces[workspace.id]
     if (!ws) return null
@@ -326,7 +329,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     const colorSubmenu: NativeContextMenuItem[] = [
       {
         id: 'color:',
-        label: 'Default' + (!workspace.color ? ' ✓' : ''),
+        label: t('workspace.default') + (!workspace.color ? ' ✓' : ''),
         enabled: !!workspace.color,
       },
       ...WORKSPACE_COLORS.map((color) => ({
@@ -336,17 +339,17 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
       })),
     ]
     const items: NativeContextMenuItem[] = [
-      { id: 'select', label: 'Select Workspace', enabled: !isSelected },
-      { id: 'rename', label: 'Rename Workspace' },
-      { label: 'Change Color', submenu: colorSubmenu },
+      { id: 'select', label: t('workspace.selectWorkspace'), enabled: !isSelected },
+      { id: 'rename', label: t('workspace.renameWorkspace') },
+      { label: t('workspace.changeColor'), submenu: colorSubmenu },
       { type: 'separator' },
-      { id: 'select-folder', label: 'Select Project Folder' },
-      { id: 'copy-cwd', label: 'Copy Working Directory' },
+      { id: 'select-folder', label: t('workspace.selectFolder') },
+      { id: 'copy-cwd', label: t('workspace.copyDir') },
       { type: 'separator' },
-      { id: 'duplicate', label: 'Duplicate Workspace' },
-      { id: 'close-panels', label: 'Close All Panels', enabled: Object.keys(workspace.panels).length > 0 },
+      { id: 'duplicate', label: t('workspace.duplicate') },
+      { id: 'close-panels', label: t('workspace.closeAllPanels'), enabled: Object.keys(workspace.panels).length > 0 },
       { type: 'separator' },
-      { id: 'remove', label: 'Close Workspace' },
+      { id: 'remove', label: t('workspace.closeWorkspace') },
     ]
     const id = await window.electronAPI.showContextMenu(items)
     setIsContextActive(false)
@@ -428,9 +431,9 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
     // list (Split / Close-Others / Close-to-the-Right / Move-to-Window are
     // dock-stack-relative and have no meaning here).
     const id = await window.electronAPI.showContextMenu([
-      { id: 'rename', label: 'Rename' },
+      { id: 'rename', label: t('workspace.rename') },
       { type: 'separator' },
-      { id: 'close', label: 'Close' },
+      { id: 'close', label: t('workspace.close') },
     ])
     switch (id) {
       case 'rename':
@@ -479,11 +482,11 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
         } ${isSelected ? 'bg-surface-6' : ''}`}
         onClick={handlePickFolder}
         onContextMenu={handleContextMenu}
-        title={workspace.rootPathError || 'Click to choose a project folder'}
+        title={workspace.rootPathError || t('workspace.chooseFolder')}
       >
         <FolderPlus size={14} className="flex-shrink-0 opacity-60" />
         <span className="flex-1 min-w-0 text-[14px] truncate italic">
-          {workspace.isRootPathPending ? 'Connecting…' : 'Add Workspace'}
+          {workspace.isRootPathPending ? t('workspace.connecting') : t('workspace.addWorkspace')}
         </span>
       </div>
     )
@@ -522,7 +525,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
       e.stopPropagation()
       void window.electronAPI.focusWindowPanel(p.panelId)
     }
-    const titleHint = `${p.title} — in another window`
+    const titleHint = `${p.title} ${t('workspace.inAnotherWindow')}`
     if (p.type === 'terminal' || p.type === 'agent') {
       return (
         <TerminalPanelRow
@@ -569,14 +572,14 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
         tabIndex={0}
         className="group/panel flex items-center gap-1.5 h-7 pl-3 pr-2 text-[13px] text-muted hover:text-primary hover:bg-hover text-left min-w-0 cursor-pointer focus:outline-none"
         onClick={(e) => { e.stopPropagation(); void window.electronAPI.focusWindowPanel(p.panelId) }}
-        title={`${p.title} — in another window`}
+        title={`${p.title} ${t('workspace.inAnotherWindow')}`}
       >
         {hasChildren ? (
           <button
             type="button"
             className="flex-shrink-0 flex items-center justify-center w-[10px] text-muted hover:text-primary focus:outline-none"
             onClick={(e) => { e.stopPropagation(); toggleCanvas(p.panelId) }}
-            title={collapsed ? 'Expand' : 'Collapse'}
+            title={collapsed ? t('workspace.expand') : t('workspace.collapse')}
             aria-label={collapsed ? 'Expand canvas' : 'Collapse canvas'}
           >
             <CaretRight size={10} className={`transition-transform ${collapsed ? '' : 'rotate-90'}`} />
@@ -694,7 +697,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
             type="button"
             className="flex-shrink-0 flex items-center justify-center w-[10px] text-muted hover:text-primary focus:outline-none"
             onClick={(e) => { e.stopPropagation(); toggleCanvas(cp.id) }}
-            title={collapsed ? 'Expand' : 'Collapse'}
+            title={collapsed ? t('workspace.expand') : t('workspace.collapse')}
             aria-label={collapsed ? 'Expand canvas' : 'Collapse canvas'}
           >
             <CaretRight size={10} className={`transition-transform ${collapsed ? '' : 'rotate-90'}`} />
@@ -742,7 +745,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
             e.stopPropagation()
             if (treeCount > 0) onToggleExpand()
           }}
-          title={treeCount > 0 ? (isExpanded ? 'Collapse' : 'Expand') : undefined}
+          title={treeCount > 0 ? (isExpanded ? t('workspace.collapse') : t('workspace.expand')) : undefined}
           disabled={treeCount === 0}
         >
           {treeCount > 0 && (
@@ -823,7 +826,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
             <>
               <div className="flex items-center gap-1.5 h-7 pl-6 pr-2 text-[13px] text-muted">
                 <SquaresFour size={12} className="flex-shrink-0 opacity-60" />
-                <span className="truncate">Canvas</span>
+                <span className="truncate">{t('workspace.canvas')}</span>
               </div>
               {orphanCanvasChildren.map((p) => renderPanelRow(p, true))}
             </>
@@ -832,7 +835,7 @@ export const WorkspaceTab: React.FC<WorkspaceTabProps> = ({
           {detachedCount > 0 && (
             <>
               <div className="flex items-center gap-1.5 h-6 pl-7 pr-2 text-[11px] uppercase tracking-wide text-muted opacity-70">
-                <span className="truncate">Other windows</span>
+                <span className="truncate">{t('workspace.otherWindows')}</span>
               </div>
               {detachedCanvases.map((cp) => {
                 const children = detachedChildrenByCanvas[cp.panelId] || []

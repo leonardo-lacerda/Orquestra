@@ -24,6 +24,7 @@ import { getClipboard, hasClipboard, setClipboard } from './fileClipboard'
 import { parseLocator } from '../../main/runtime/locator'
 import { InlineEditInput } from './InlineEditInput'
 import { CreateFileForm } from './CreateFileForm'
+import { useTranslation } from '../i18n/useTranslation'
 
 // -----------------------------------------------------------------------------
 // Icon mapping — extension to inline SVG icons with colors
@@ -154,6 +155,7 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
   createRequest,
   onCreateRequestHandled,
 }) => {
+  const { t } = useTranslation()
   // Expansion/children state is owned by the explorer; derive this node's slice.
   const isExpanded = expandedPaths.has(node.path)
   const children = childrenCache.get(node.path) ?? []
@@ -239,20 +241,20 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
       items.push({ type: 'separator' })
     }
     items.push(
-      { id: 'new-file', label: 'New File…' },
-      { id: 'new-folder', label: 'New Folder…' },
+      { id: 'new-file', label: t('explorer.newFile') },
+      { id: 'new-folder', label: t('explorer.newFolder') },
       { type: 'separator' },
-      { id: 'reveal', label: 'Reveal in Finder', accelerator: 'Alt+Cmd+R' },
+      { id: 'reveal', label: t('explorer.revealInExplorer'), accelerator: 'Alt+Cmd+R' },
       { type: 'separator' },
       { id: 'copy', label: pathsToOpen.length > 1 ? `Copy ${pathsToOpen.length} Items` : 'Copy', accelerator: 'Cmd+C' },
-      { id: 'paste', label: 'Paste', accelerator: 'Cmd+V', enabled: hasClipboard() },
+      { id: 'paste', label: t('explorer.paste'), accelerator: 'Cmd+V', enabled: hasClipboard() },
       { type: 'separator' },
-      { id: 'rename', label: 'Rename…', accelerator: 'Return' },
-      { id: 'copy-path', label: 'Copy Path', accelerator: 'Alt+Cmd+C' },
-      { id: 'copy-rel-path', label: 'Copy Relative Path', accelerator: 'Alt+Shift+Cmd+C' },
-      { id: 'copy-name', label: 'Copy Name' },
+      { id: 'rename', label: t('filetree.rename'), accelerator: 'Return' },
+      { id: 'copy-path', label: t('explorer.copyPath'), accelerator: 'Alt+Cmd+C' },
+      { id: 'copy-rel-path', label: t('explorer.copyRelativePath'), accelerator: 'Alt+Shift+Cmd+C' },
+      { id: 'copy-name', label: t('filetree.copyName') },
       { type: 'separator' },
-      { id: 'delete', label: pathsToOpen.length > 1 ? `Delete ${pathsToOpen.length} Items` : 'Delete', accelerator: 'Cmd+Backspace' },
+      { id: 'delete', label: pathsToOpen.length > 1 ? `Delete ${pathsToOpen.length} Items` : t('explorer.delete'), accelerator: 'Cmd+Backspace' },
     )
 
     const id = await window.electronAPI.showContextMenu(items)
@@ -371,7 +373,7 @@ export const FileTreeNode: React.FC<FileTreeNodeProps> = ({
   // --- Delete ---
   const handleDelete = useCallback(async () => {
     if (!window.electronAPI) return
-    const confirmed = window.confirm(`Delete "${node.name}"?${node.isDirectory ? ' This will delete all contents.' : ''}`)
+    const confirmed = window.confirm(t('explorer.deleteConfirm').replace('{label}', `"${node.name}"`))
     if (!confirmed) return
     try {
       await window.electronAPI.fsDelete(node.path, workspaceId)

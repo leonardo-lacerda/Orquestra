@@ -139,17 +139,17 @@ section('2. CLI — Recruit Command')
 ;(function testRecruitBasic() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const r = runRaw(['recruit', '--role', 'Test task'], { cwd: tmpDir })
-    assert(r.exitCode === 0, 'recruit --role should exit 0')
+    const r = runRaw(['recruit', '--name', 'html', '--role', 'Create only index.html'], { cwd: tmpDir })
+    assert(r.exitCode === 0, 'recruit with --name and --role should exit 0')
     assert(r.stdout.includes('OK:recruit'), 'stdout should contain OK:recruit')
-    assert(r.stderr.includes('Recruiting:'), 'stderr should show recruiting message')
+    assert(r.stderr.includes('Recruiting function'), 'stderr should show recruiting message')
 
     const cmd = readLatestCommand(tmpDir)
     assert(cmd !== null, 'JSON file should be created')
     assert(cmd.cmd === 'recruit', 'cmd should be "recruit"')
-    assert(cmd.args.role === 'Test task', 'args.role should match')
+    assert(cmd.args.role === 'Create only index.html', 'args.role should match')
     assert(cmd.args.agent === null, 'args.agent should be null when not specified')
-    assert(cmd.args.name === null, 'args.name should be null when not specified')
+    assert(cmd.args.name === 'html', 'args.name should be function id')
     assert(typeof cmd.timestamp === 'number', 'timestamp should be a number')
     assert(cmd.timestamp > 0, 'timestamp should be positive')
   } finally {
@@ -175,26 +175,18 @@ section('2. CLI — Recruit Command')
   }
 })()
 
+;(function testRecruitNoName() {
+  const r = run('recruit --role "only role"')
+  assert(r.exitCode === 1, 'recruit without --name should exit 1')
+  assert(r.stderr.includes('Error:'), 'should print error message')
+  assert(r.stderr.includes('--name'), 'error should mention --name')
+})()
+
 ;(function testRecruitNoRole() {
-  const r = run('recruit')
+  const r = run('recruit --name html')
   assert(r.exitCode === 1, 'recruit without --role should exit 1')
   assert(r.stderr.includes('Error:'), 'should print error message')
   assert(r.stderr.includes('--role'), 'error should mention --role')
-})()
-
-;(function testRecruitRoleAsBooleanFlag() {
-  // Edge case: --role without a value (next arg starts with --)
-  // parseFlags sets role=true (boolean) because next token starts with --
-  // This is a CLI edge case/bug: role becomes boolean true instead of string
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
-  try {
-    const r = runRaw(['recruit', '--role', '--agent', 'verboo'], { cwd: tmpDir })
-    assert(r.exitCode === 0, '--role without value followed by --agent exits 0 (role becomes boolean true)')
-    warn('--role without value: role becomes boolean true — CLI should validate role is a string')
-  } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
-  }
 })()
 
 // =============================================================================
@@ -318,7 +310,7 @@ section('8. JSON Structure Validation')
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
     const before = Date.now()
-    run('recruit --role "Timestamp test"', { cwd: tmpDir })
+    run('recruit --name ts --role "Timestamp test"', { cwd: tmpDir })
     const after = Date.now()
 
     const cmd = readLatestCommand(tmpDir)
@@ -333,7 +325,7 @@ section('8. JSON Structure Validation')
 ;(function testJsonFileNaming() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    run('recruit --role "File naming test"', { cwd: tmpDir })
+    run('recruit --name file --role "File naming test"', { cwd: tmpDir })
     const cmdDir = path.join(tmpDir, '.orquestra-commands')
     const files = fs.readdirSync(cmdDir)
     assert(files.length === 1, 'exactly one file should be created')
@@ -353,8 +345,8 @@ section('8. JSON Structure Validation')
 ;(function testMultipleCommands() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    run('recruit --role "Task 1"', { cwd: tmpDir })
-    run('recruit --role "Task 2" --agent verboo', { cwd: tmpDir })
+    run('recruit --name t1 --role "Task 1"', { cwd: tmpDir })
+    run('recruit --name t2 --role "Task 2" --agent verboo', { cwd: tmpDir })
     run('dismiss worker-1', { cwd: tmpDir })
 
     const cmdDir = path.join(tmpDir, '.orquestra-commands')
@@ -381,7 +373,7 @@ section('8. JSON Structure Validation')
     const cmdDir = path.join(tmpDir, '.orquestra-commands')
     assert(!fs.existsSync(cmdDir), 'commands dir should not exist before')
 
-    run('recruit --role "Auto-create test"', { cwd: tmpDir })
+    run('recruit --name auto --role "Auto-create test"', { cwd: tmpDir })
     assert(fs.existsSync(cmdDir), 'commands dir should be auto-created')
     assert(fs.statSync(cmdDir).isDirectory(), 'should be a directory')
   } finally {
@@ -399,7 +391,7 @@ section('8. JSON Structure Validation')
     // Write a pre-existing file
     fs.writeFileSync(path.join(cmdDir, 'existing.json'), '{}')
 
-    run('recruit --role "Pre-existing dir"', { cwd: tmpDir })
+    run('recruit --name pre --role "Pre-existing dir"', { cwd: tmpDir })
 
     const files = fs.readdirSync(cmdDir)
     assert(files.includes('existing.json'), 'pre-existing file should be preserved')
@@ -850,7 +842,7 @@ section('21. Edge Cases')
 ;(function testSpecialCharacters() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const r = runRaw(['recruit', '--role', 'Fix bug #123 & deploy to prod!'], { cwd: tmpDir })
+    const r = runRaw(['recruit', '--name', 'fix', '--role', 'Fix bug #123 & deploy to prod!'], { cwd: tmpDir })
     assert(r.exitCode === 0, 'special characters in role should work')
     const cmd = readLatestCommand(tmpDir)
     assert(cmd.args.role === 'Fix bug #123 & deploy to prod!', 'special chars should be preserved in JSON')
@@ -873,17 +865,15 @@ section('21. Edge Cases')
   }
 })()
 
-;(function testEmptyRoleBug() {
-  // Edge case: --role "" — empty string is falsy in parseFlags ternary
-  // args[i+1] is "" which is falsy, so val = true (boolean)
-  // Then !flags.role is !true = false, so no error — role becomes boolean true
+;(function testEmptyRoleRejected() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const r = runRaw(['recruit', '--role', ''], { cwd: tmpDir })
-    assert(r.exitCode === 0, 'empty role exits 0 (parseFlags treats "" as missing)')
-    const cmd = readLatestCommand(tmpDir)
-    assert(cmd.args.role === true, 'empty role becomes boolean true — CLI arg parser bug')
-    warn('BUG: --role "" results in role=true (boolean) — parseFlags should reject empty strings')
+    // Missing --name fails first
+    const rNoName = runRaw(['recruit', '--role', 'something'], { cwd: tmpDir })
+    assert(rNoName.exitCode === 1, 'recruit without --name exits 1')
+    // With name but missing/empty role
+    const rNoRole = runRaw(['recruit', '--name', 'html'], { cwd: tmpDir })
+    assert(rNoRole.exitCode === 1, 'recruit without --role exits 1')
   } finally {
     cleanupDir(tmpDir)
     fs.rmdirSync(tmpDir)
@@ -893,11 +883,13 @@ section('21. Edge Cases')
 ;(function testVeryLongRole() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const longRole = 'A'.repeat(10000)
-    const r = runRaw(['recruit', '--role', longRole], { cwd: tmpDir })
-    assert(r.exitCode === 0, 'very long role should work')
+    // CLI still accepts long roles (app-side guard rejects at max ~220)
+    const longRole = 'A'.repeat(500)
+    const r = runRaw(['recruit', '--name', 'long', '--role', longRole], { cwd: tmpDir })
+    assert(r.exitCode === 0, 'CLI accepts long role (renderer enforces max length)')
     const cmd = readLatestCommand(tmpDir)
-    assert(cmd.args.role.length === 10000, 'long role should be preserved')
+    assert(cmd.args.role.length === 500, 'long role should be preserved in JSON')
+    assert(cmd.args.name === 'long', 'name should be set')
   } finally {
     cleanupDir(tmpDir)
     fs.rmdirSync(tmpDir)

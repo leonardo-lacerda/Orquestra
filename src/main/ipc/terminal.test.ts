@@ -124,6 +124,449 @@ vi.mock('../../renderer/stores/appStore', () => ({
 }))
 vi.mock('../../renderer/lib/workspace/session', () => ({ replayTerminalLog: () => Promise.resolve() }))
 
+describe('orquestra worker tracking summaries', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('lists tracked workers globally and by orchestrator', async () => {
+    const { trackWorker, listTrackedWorkers } = await import('./terminal')
+
+    trackWorker('pty-worker-1', 'pty-maestro-1', 'worker-1', 'Review files', 'C:\\repo')
+    trackWorker('pty-worker-2', 'pty-maestro-2', 'worker-2', 'Run tests', 'C:\\repo')
+
+    expect(listTrackedWorkers()).toHaveLength(2)
+    expect(listTrackedWorkers('pty-maestro-1')).toEqual([
+      {
+        workerId: 'pty-worker-1',
+        orchestratorId: 'pty-maestro-1',
+        name: 'worker-1',
+        role: 'Review files',
+        workspacePath: 'C:\\repo',
+        status: 'starting',
+        outputLineCount: 0,
+        lastActivity: expect.any(Number),
+      },
+    ])
+  })
+})
+
+describe('worker idle eligibility (KD6 + inject-echo guard)', () => {
+  it('is not eligible with zero output', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    expect(isWorkerIdleEligible({ outputBuffer: [], firstOutputAt: null }).eligible).toBe(false)
+  })
+
+  it('is eligible with marker for short timeout (no inject fingerprint)', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const r = isWorkerIdleEligible({
+      outputBuffer: ['✅ Task complete'],
+      firstOutputAt: Date.now() - 1000,
+    })
+    expect(r.eligible).toBe(true)
+    expect(r.timeoutMs).toBe(10_000)
+  })
+
+  it('is NOT eligible with min lines alone when completion marker is required (default)', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const r = isWorkerIdleEligible({
+      outputBuffer: ['line1', 'line2', 'line3'],
+      firstOutputAt: Date.now() - 15_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is eligible with min lines when requireCompletionMarker is false (legacy)', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const r = isWorkerIdleEligible({
+      outputBuffer: ['line1', 'line2', 'line3'],
+      firstOutputAt: Date.now() - 15_000,
+      requireCompletionMarker: false,
+    })
+    expect(r.eligible).toBe(true)
+    expect(r.timeoutMs).toBe(60_000)
+  })
+
+  it('is not eligible before min runtime even with 3 lines (legacy path)', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const r = isWorkerIdleEligible({
+      outputBuffer: ['a', 'b', 'c'],
+      firstOutputAt: Date.now() - 100,
+      requireCompletionMarker: false,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is NOT eligible while waiting for permission even with real work lines', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const inject = 'You are the "js" worker. Do this job now: fix class names in app.js.'
+    const r = isWorkerIdleEligible({
+      outputBuffer: [
+        inject,
+        'Update(app.js)',
+        'Waiting for permission...',
+        'Change nav-links--open to open',
+      ],
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleInjectedAt: Date.now() - 15_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('formatMaestroWorkerInject is a short one-liner (no inject dump)', async () => {
+    const { formatMaestroWorkerInject } = await import('./terminal')
+    const msg = formatMaestroWorkerInject({
+      workerName: 'js',
+      status: 'failed',
+      shortSummary: 'accept=1/2: exists: app.js; marker missing: ORQUESTRA_WORKER_DONE',
+    })
+    expect(msg).toBe(
+      '[worker] js → failed: accept=1/2: exists: app.js; marker missing: ORQUESTRA_WORKER_DONE',
+    )
+    expect(msg).not.toContain('You are the')
+    expect(msg).not.toContain('\n')
+  })
+
+  it('is NOT eligible when buffer is only inject echo (false 19s wait fix)', async () => {
+    const { isWorkerIdleEligible, isInjectEchoLine } = await import('./terminal')
+    const inject =
+      'You are the "html" worker. Do this job now: Create only index.html. Start immediately. Use your tools.'
+    expect(isInjectEchoLine(inject, inject)).toBe(true)
+    expect(isInjectEchoLine('Writing new file index.html with hero section', inject)).toBe(false)
+
+    const r = isWorkerIdleEligible({
+      outputBuffer: [inject, inject.slice(0, 40)],
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleInjectedAt: Date.now() - 19_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is NOT eligible for DONE-like phrase that only appears inside inject text', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    // Historical bug: inject contained ORQUESTRA_WORKER_DONE → idle in ~10s
+    const inject =
+      'You are the "css" worker. Do this job now: Create styles.css. When finished, end with ORQUESTRA_WORKER_DONE.'
+    const r = isWorkerIdleEligible({
+      outputBuffer: [inject],
+      firstOutputAt: Date.now() - 15_000,
+      injectText: inject,
+      roleInjectedAt: Date.now() - 15_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is NOT eligible when only ROLE.md (with completion token instruction) is echoed', async () => {
+    const { isWorkerIdleEligible, isCompletionInstructionEcho, realWorkLines } =
+      await import('./terminal')
+    const inject =
+      'You are the "html" worker. Do this job now: Create only index.html. Full brief: .orquestra/workers/html/ROLE.md.'
+    const roleFile = [
+      '# Worker function: html',
+      '',
+      '## Your only job',
+      'Create only index.html structure',
+      '',
+      '## When finished',
+      'Print a short summary, then on its own line exactly: ORQUESTRA_WORKER_DONE',
+      '',
+    ].join('\n')
+
+    const instructionLine =
+      'Print a short summary, then on its own line exactly: ORQUESTRA_WORKER_DONE'
+    expect(isCompletionInstructionEcho(instructionLine)).toBe(true)
+
+    // Simulate agent reading/echoing ROLE.md after inject (no real deliverable)
+    const buffer = [
+      inject,
+      '# Worker function: html',
+      '## Your only job',
+      'Create only index.html structure',
+      instructionLine,
+      'ORQUESTRA_WORKER_DONE',
+    ]
+    expect(
+      realWorkLines(buffer, inject, roleFile).length,
+    ).toBe(0)
+
+    const r = isWorkerIdleEligible({
+      outputBuffer: buffer,
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleFileText: roleFile,
+      roleInjectedAt: Date.now() - 15_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is NOT eligible for bare ORQUESTRA_WORKER_DONE without real work lines', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const inject = 'You are the "css" worker. Do this job now: Create styles.css.'
+    const r = isWorkerIdleEligible({
+      outputBuffer: [inject, 'ORQUESTRA_WORKER_DONE'],
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleInjectedAt: Date.now() - 15_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+
+  it('is eligible when real post-inject work + true completion marker', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const inject = 'You are the "js" worker. Do this job now: Create app.js. Start immediately.'
+    const roleFile =
+      'Print a short summary, then on its own line exactly: ORQUESTRA_WORKER_DONE'
+    const r = isWorkerIdleEligible({
+      outputBuffer: [
+        inject,
+        'Writing app.js with add/subtract handlers',
+        'Wired buttons to the DOM',
+        'ORQUESTRA_WORKER_DONE',
+      ],
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleFileText: roleFile,
+      roleInjectedAt: Date.now() - 12_000,
+    })
+    expect(r.eligible).toBe(true)
+    expect(r.timeoutMs).toBe(10_000)
+  })
+
+  it('extractWorkerCompletionSummary prefers real work over inject echo', async () => {
+    const { extractWorkerCompletionSummary } = await import('./terminal')
+    const inject = 'You are the "html" worker. Do this job now: Create index.html.'
+    const summary = extractWorkerCompletionSummary(
+      [
+        inject,
+        'Creating index.html with hero and footer',
+        'Linked styles.css and app.js',
+        'ORQUESTRA_WORKER_DONE',
+      ],
+      { injectText: inject, role: 'Create only index.html' },
+    )
+    expect(summary).toContain('role=Create only index.html')
+    expect(summary).toContain('Creating index.html')
+    expect(summary).toMatch(/ORQUESTRA_WORKER_DONE|Linked styles/)
+    expect(summary).not.toContain('You are the "html" worker')
+  })
+
+  it('noteWorkerRoleInjected stores inject + ROLE.md fingerprints used by idle', async () => {
+    const { trackWorker, noteWorkerRoleInjected, isWorkerIdleEligible, feedWorkerOutput } =
+      await import('./terminal')
+    trackWorker('pty-inj', 'pty-m', 'html', 'Create index.html', '')
+    const inject = 'You are the "html" worker. Do this job now: Create only index.html structure.'
+    const roleFile =
+      '# Worker\nCreate only index.html structure\nWhen finished print ORQUESTRA_WORKER_DONE'
+    noteWorkerRoleInjected('pty-inj', inject, roleFile)
+    feedWorkerOutput('pty-inj', inject + '\r\n' + roleFile + '\r\n')
+    const r = isWorkerIdleEligible({
+      outputBuffer: [inject, ...roleFile.split('\n'), 'ORQUESTRA_WORKER_DONE'],
+      firstOutputAt: Date.now() - 20_000,
+      injectText: inject,
+      roleFileText: roleFile,
+      roleInjectedAt: Date.now() - 20_000,
+    })
+    expect(r.eligible).toBe(false)
+  })
+})
+
+describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
+  it('onWorkerExit writes failed + real exitCode when process fails', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-exit-'))
+    try {
+      const { trackWorker, onWorkerExit } = await import('./terminal')
+      trackWorker('pty-w', 'pty-m', 'worker-fail', 'Break things carefully now', dir)
+      onWorkerExit('pty-w', 7)
+
+      const file = path.join(dir, '.orquestra-results', 'worker-worker-fail.json')
+      expect(fs.existsSync(file)).toBe(true)
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+        status: string
+        exitCode: number
+        name: string
+      }
+      expect(payload.name).toBe('worker-fail')
+      expect(payload.status).toBe('failed')
+      expect(payload.exitCode).toBe(7)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('onWorkerExit exit 0 still fails accept when deliverable file missing', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-exit-accept-'))
+    try {
+      const { trackWorker, onWorkerExit, feedWorkerOutput } = await import('./terminal')
+      trackWorker('pty-clean', 'pty-m', 'w-clean', 'Create only secret.dat for the job', dir)
+      feedWorkerOutput('pty-clean', 'ORQUESTRA_WORKER_DONE\r\n')
+      onWorkerExit('pty-clean', 0)
+      const file = path.join(dir, '.orquestra-results', 'worker-w-clean.json')
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+        status: string
+        exitCode: number
+        accept?: Array<{ type: string; ok: boolean }>
+      }
+      expect(payload.status).toBe('failed')
+      expect(payload.accept?.some((a) => a.type === 'file_exists' && !a.ok)).toBe(true)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('onWorkerExit writes done + exitCode 0 when accept passes', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-exit-ok-'))
+    try {
+      const { trackWorker, onWorkerExit, feedWorkerOutput } = await import('./terminal')
+      fs.writeFileSync(path.join(dir, 'built.txt'), 'ok\n')
+      trackWorker('pty-w2', 'pty-m', 'worker-ok', 'Create only built.txt for the build', dir)
+      feedWorkerOutput('pty-w2', 'Wrote built.txt\r\nORQUESTRA_WORKER_DONE\r\n')
+      onWorkerExit('pty-w2', 0)
+
+      const file = path.join(dir, '.orquestra-results', 'worker-worker-ok.json')
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+        status: string
+        exitCode: number
+      }
+      expect(payload.status).toBe('done')
+      expect(payload.exitCode).toBe(0)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('onWorkerIdle: echo-only stays running; missing file fails; good accept completes', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-idle-'))
+    // Past post-inject grace so marker eligibility can fire
+    vi.useFakeTimers()
+    const t0 = Date.now()
+    vi.setSystemTime(t0)
+    try {
+      const {
+        trackWorker,
+        onWorkerIdle,
+        normalizeWorkerResultStatus,
+        feedWorkerOutput,
+        noteWorkerRoleInjected,
+      } = await import('./terminal')
+      expect(normalizeWorkerResultStatus('idle')).toBe('done')
+      expect(normalizeWorkerResultStatus('completed')).toBe('done')
+
+      // Echo-only (no real work) → not idle-eligible → stay running (not false-failed)
+      trackWorker('pty-echo', 'pty-m', 'echo-w', 'Create only missing-out.dat for the task', dir)
+      noteWorkerRoleInjected('pty-echo', 'Create only missing-out.dat for the task')
+      vi.setSystemTime(t0 + 15_000)
+      feedWorkerOutput('pty-echo', 'Create only missing-out.dat for the task\r\nORQUESTRA_WORKER_DONE\r\n')
+      onWorkerIdle('pty-echo')
+      const echoFile = path.join(dir, '.orquestra-results', 'worker-echo-w.json')
+      const echoPayload = JSON.parse(fs.readFileSync(echoFile, 'utf-8')) as { status: string }
+      expect(echoPayload.status).toBe('running')
+
+      // Real work + marker + missing deliverable → failed accept
+      const t1 = Date.now()
+      trackWorker('pty-miss', 'pty-m', 'miss-w', 'Create only missing-out.dat for the task', dir)
+      noteWorkerRoleInjected('pty-miss', 'Create only missing-out.dat for the task')
+      vi.setSystemTime(t1 + 15_000)
+      feedWorkerOutput(
+        'pty-miss',
+        'Tried writing missing-out.dat\r\nCould not find path\r\nORQUESTRA_WORKER_DONE\r\n',
+      )
+      onWorkerIdle('pty-miss')
+      const failFile = path.join(dir, '.orquestra-results', 'worker-miss-w.json')
+      const failPayload = JSON.parse(fs.readFileSync(failFile, 'utf-8')) as {
+        status: string
+        accept?: Array<{ ok: boolean }>
+      }
+      expect(failPayload.status).toBe('failed')
+
+      // File present + real work + marker → done
+      fs.writeFileSync(path.join(dir, 'out.txt'), 'ok\n')
+      const t2 = Date.now()
+      trackWorker('pty-idle', 'pty-m', 'worker-idle', 'Create only out.txt for the quiet finish', dir)
+      noteWorkerRoleInjected('pty-idle', 'Create only out.txt for the quiet finish')
+      vi.setSystemTime(t2 + 15_000)
+      feedWorkerOutput('pty-idle', 'Wrote out.txt successfully\r\nORQUESTRA_WORKER_DONE\r\n')
+      onWorkerIdle('pty-idle')
+
+      const file = path.join(dir, '.orquestra-results', 'worker-worker-idle.json')
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+        status: string
+        exitCode: number
+        summary: string
+        accept?: Array<{ ok: boolean; type: string }>
+      }
+      expect(payload.status).toBe('done')
+      expect(payload.exitCode).toBe(0)
+      expect(payload.accept?.some((a) => a.type === 'file_exists' && a.ok)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('onWorkerIdle keeps running when only marker is missing (mid-task)', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-idle-marker-'))
+    vi.useFakeTimers()
+    const t0 = Date.now()
+    vi.setSystemTime(t0)
+    try {
+      const { trackWorker, onWorkerIdle, feedWorkerOutput, noteWorkerRoleInjected, finalizeWorkerCompletion } =
+        await import('./terminal')
+      fs.writeFileSync(path.join(dir, 'app.js'), 'console.log(1)\n')
+      // ✅ makes idle eligible; accept still requires ORQUESTRA_WORKER_DONE → re-arm running
+      const role = 'In app.js change class names for the nav menu'
+      trackWorker('pty-mid', 'pty-m', 'js', role, dir)
+      noteWorkerRoleInjected('pty-mid', role)
+      vi.setSystemTime(t0 + 15_000)
+      feedWorkerOutput(
+        'pty-mid',
+        'Update(app.js)\r\nEdited nav class\r\n✅ Task complete\r\n',
+      )
+      onWorkerIdle('pty-mid')
+      const file = path.join(dir, '.orquestra-results', 'worker-js.json')
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as { status: string }
+      expect(payload.status).toBe('running')
+
+      // Sanity: finalize would report acceptOk false for missing ORQUESTRA token
+      const finalized = finalizeWorkerCompletion({
+        orchestratorId: 'pty-m',
+        name: 'js',
+        role,
+        outputBuffer: ['Update(app.js)', 'Edited nav class', '✅ Task complete'],
+        workspacePath: dir,
+        injectText: role,
+        roleFileText: null,
+      })
+      expect(finalized.acceptOk).toBe(false)
+      expect(finalized.shortSummary).toMatch(/accept=/)
+      expect(finalized.shortSummary.length).toBeLessThan(finalized.summary.length)
+    } finally {
+      vi.useRealTimers()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('cross-window drop terminal ownership transfer', () => {
   beforeEach(() => {
     vi.resetModules()

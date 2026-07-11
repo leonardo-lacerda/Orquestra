@@ -82,6 +82,12 @@ test('recruit without --role exits 1', () => {
   assert.ok(r.stderr.includes('--role'))
 })
 
+test('recruit without --name exits 1', () => {
+  const r = run(['recruit', '--role', 'only role text'])
+  assert.equal(r.code, 1)
+  assert.ok(r.stderr.includes('--name'))
+})
+
 test('dismiss creates a command file', () => {
   cleanCommands()
   const r = run(['dismiss', 'worker-1'])

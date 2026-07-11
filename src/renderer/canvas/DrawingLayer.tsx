@@ -8,7 +8,7 @@ import React, { useCallback, useRef, useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useCanvasStoreContext, useCanvasStoreApi } from '../stores/CanvasStoreContext'
 import { useUIStore } from '../stores/uiStore'
-import { viewToCanvas } from '../lib/canvas/coordinates'
+import { viewToCanvas, canvasToView } from '../lib/canvas/coordinates'
 import type { DrawingElement, DrawingTool, DrawingRect, DrawingArrow, DrawingLine, DrawingText } from '../../shared/types'
 import { generateId } from '../stores/canvas/helpers'
 
@@ -202,10 +202,38 @@ const DrawingLayer: React.FC = () => {
     return () => { cancelled = true }
   }, [drawingContextMenuId, removeDrawing])
 
-  // ---- Task 3: Text input focus ----
+  // ---- Task 3: Text input focus + keep screen position locked to canvas point ----
+  // The input is portaled with position:fixed. Without this, pan/zoom while
+  // typing leaves the box stuck to the screen and the committed text "jumps"
+  // back to its canvas anchor when the gesture ends.
   useEffect(() => {
     if (textInput) textInputRef.current?.focus()
   }, [textInput])
+
+  const textAnchorX = textInput?.canvasX
+  const textAnchorY = textInput?.canvasY
+  useEffect(() => {
+    if (textAnchorX === undefined || textAnchorY === undefined) return
+    const syncScreenPos = (zoom: number, offset: { x: number; y: number }) => {
+      const container = document.querySelector('[data-canvas-container]')
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const view = canvasToView({ x: textAnchorX, y: textAnchorY }, zoom, offset)
+      setTextInput((prev) => {
+        if (!prev) return prev
+        const clientX = rect.left + view.x
+        const clientY = rect.top + view.y
+        if (prev.clientX === clientX && prev.clientY === clientY) return prev
+        return { ...prev, clientX, clientY }
+      })
+    }
+    const { zoomLevel, viewportOffset } = canvasApi.getState()
+    syncScreenPos(zoomLevel, viewportOffset)
+    return canvasApi.subscribe((state, prev) => {
+      if (state.zoomLevel === prev.zoomLevel && state.viewportOffset === prev.viewportOffset) return
+      syncScreenPos(state.zoomLevel, state.viewportOffset)
+    })
+  }, [textAnchorX, textAnchorY, canvasApi])
 
   // ---- Task 7: Delete key ----
   useEffect(() => {
@@ -325,8 +353,15 @@ const DrawingLayer: React.FC = () => {
       <svg
         ref={svgRef}
         style={{
+          // Sized 0×0 with overflow:visible so shapes at canvas coords paint
+          // outside the box. Parent is a 1×1 annotation world (no will-change);
+          // width/height 100% would collapse to 1px and reintroduce compositor
+          // paint-bound drift under pan when nested in a promoted GPU layer.
           position: 'absolute', top: 0, left: 0,
-          width: '100%', height: '100%', overflow: 'visible',
+          width: 0, height: 0, overflow: 'visible',
+          // Parent annotation world is pointer-events:none; re-enable here so
+          // select/move/resize still hit shapes. Draw mode keeps none so the
+          // canvas container receives mousedown for new shapes.
           pointerEvents: activeTool === 'draw' ? 'none' : 'auto',
           zIndex: 45000,
           transition: 'none',

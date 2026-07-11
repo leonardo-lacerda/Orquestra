@@ -19,6 +19,7 @@ import {
   TERMINAL_PIPE_CREATE,
   TERMINAL_PIPE_DESTROY,
   FS_READ_FILE,
+  FS_READ_FILE_IF_EXISTS,
   FS_READ_BINARY,
   FS_WRITE_FILE,
   FS_READ_DIR,
@@ -129,6 +130,9 @@ import {
   FS_COPY,
   FS_IMPORT_ENTRIES,
   FS_SEARCH,
+  LINKED_CONTEXT_WRITE,
+  LINKED_CONTEXT_READ,
+  LINKED_CONTEXT_OCR,
   SEARCH_START,
   SEARCH_CANCEL,
   SEARCH_RESULT,
@@ -188,13 +192,6 @@ import {
   UPDATE_STATUS,
   UPDATE_QUIT_AND_INSTALL,
   UPDATE_GET_STATUS,
-  ANALYTICS_FEEDBACK_PROMPT,
-  ANALYTICS_FEEDBACK_SUBMIT,
-  ANALYTICS_FEEDBACK_DISMISS,
-  ANALYTICS_FEEDBACK_GET_PENDING,
-  ANALYTICS_LINK_CLICK,
-  ANALYTICS_TRACK_USAGE,
-  TELEMETRY_ACKNOWLEDGE_NOTICE,
   OPEN_EXTERNAL_URL,
   AGENT_CREATE,
   AGENT_PROMPT,
@@ -264,6 +261,9 @@ import {
   MAESTRO_LIST,
   MAESTRO_REASSIGN,
   ORQUESTRA_TRACK_WORKER,
+  ORQUESTRA_LIST_WORKERS,
+  ORQUESTRA_NOTE_ROLE_INJECT,
+  ORQUESTRA_WORKER_STATUS,
   WORKER_HAS_OUTPUT,
   APP_AUTH_RESTORE,
   APP_AUTH_SIGN_IN,
@@ -353,12 +353,15 @@ const invokeForwarders = {
   terminalClipboardWrite: makeInvoker<'terminalClipboardWrite'>(TERMINAL_CLIPBOARD_WRITE),
   terminalSetMaestro: makeInvoker<"terminalSetMaestro">(TERMINAL_SET_MAESTRO),
   orquestraTrackWorker: makeInvoker<"orquestraTrackWorker">(ORQUESTRA_TRACK_WORKER),
+  orquestraListWorkers: makeInvoker<"orquestraListWorkers">(ORQUESTRA_LIST_WORKERS),
+  orquestraNoteRoleInject: makeInvoker<"orquestraNoteRoleInject">(ORQUESTRA_NOTE_ROLE_INJECT),
   workerHasOutput: makeInvoker<"workerHasOutput">(WORKER_HAS_OUTPUT),
   terminalPipeCreate: makeInvoker<'terminalPipeCreate'>(TERMINAL_PIPE_CREATE),
   terminalPipeDestroy: makeInvoker<'terminalPipeDestroy'>(TERMINAL_PIPE_DESTROY),
 
   // Filesystem
   fsReadFile: makeInvoker<'fsReadFile'>(FS_READ_FILE),
+  fsReadFileIfExists: makeInvoker<'fsReadFileIfExists'>(FS_READ_FILE_IF_EXISTS),
   fsReadBinary: makeInvoker<'fsReadBinary'>(FS_READ_BINARY),
   fsWriteFile: makeInvoker<'fsWriteFile'>(FS_WRITE_FILE),
   fsReadDir: makeInvoker<'fsReadDir'>(FS_READ_DIR),
@@ -371,6 +374,9 @@ const invokeForwarders = {
   fsMkdir: makeInvoker<'fsMkdir'>(FS_MKDIR),
   fsCopy: makeInvoker<'fsCopy'>(FS_COPY),
   fsImportEntries: makeInvoker<'fsImportEntries'>(FS_IMPORT_ENTRIES),
+  linkedContextWrite: makeInvoker<'linkedContextWrite'>(LINKED_CONTEXT_WRITE),
+  linkedContextRead: makeInvoker<'linkedContextRead'>(LINKED_CONTEXT_READ),
+  linkedContextOcr: makeInvoker<'linkedContextOcr'>(LINKED_CONTEXT_OCR),
 
   // Content search
   searchStart: makeInvoker<'searchStart'>(SEARCH_START),
@@ -533,11 +539,6 @@ const invokeForwarders = {
   // Auto-updater
   getUpdateStatus: makeInvoker<'getUpdateStatus'>(UPDATE_GET_STATUS),
   quitAndInstallUpdate: makeInvoker<'quitAndInstallUpdate'>(UPDATE_QUIT_AND_INSTALL),
-
-  // Analytics feedback
-  submitFeedback: makeInvoker<'submitFeedback'>(ANALYTICS_FEEDBACK_SUBMIT),
-  getPendingFeedback: makeInvoker<'getPendingFeedback'>(ANALYTICS_FEEDBACK_GET_PENDING),
-  acknowledgeTelemetryNotice: makeInvoker<'acknowledgeTelemetryNotice'>(TELEMETRY_ACKNOWLEDGE_NOTICE),
 
   // Pi agent
   agentCreate: makeInvoker<'agentCreate'>(AGENT_CREATE),
@@ -927,27 +928,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ---------------------------------------------------------------------------
-  // Analytics — post-update feedback prompt
+  // Auto-updater
   // ---------------------------------------------------------------------------
 
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void {
     return createIpcListener(UPDATE_STATUS, callback)
-  },
-
-  onFeedbackPrompt(callback: (payload: { fromVersion: string; toVersion: string }) => void): () => void {
-    return createIpcListener(ANALYTICS_FEEDBACK_PROMPT, callback)
-  },
-
-  dismissFeedback(method: string): void {
-    ipcRenderer.send(ANALYTICS_FEEDBACK_DISMISS, method)
-  },
-
-  trackLinkClick(link: string): void {
-    ipcRenderer.send(ANALYTICS_LINK_CLICK, link)
-  },
-
-  trackFeatureUsed(feature: string, props?: Record<string, string | number | boolean>): void {
-    ipcRenderer.send(ANALYTICS_TRACK_USAGE, { feature, props })
   },
 
   openExternalUrl(url: string): void {
@@ -1024,6 +1009,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event: Electron.IpcRendererEvent, maestroId: string, args: { target: string; role: string }) => callback(maestroId, args)
     ipcRenderer.on(MAESTRO_REASSIGN, handler)
     return () => ipcRenderer.removeListener(MAESTRO_REASSIGN, handler)
+  },
+  onOrquestraWorkerStatus(callback: (event: {
+    workerId: string
+    orchestratorId: string
+    name: string
+    status: 'done' | 'failed'
+    exitCode: number | null
+  }) => void): () => void {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: {
+        workerId: string
+        orchestratorId: string
+        name: string
+        status: 'done' | 'failed'
+        exitCode: number | null
+      },
+    ) => callback(payload)
+    ipcRenderer.on(ORQUESTRA_WORKER_STATUS, handler)
+    return () => ipcRenderer.removeListener(ORQUESTRA_WORKER_STATUS, handler)
   },
 
   // ---------------------------------------------------------------------------

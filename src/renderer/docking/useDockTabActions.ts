@@ -15,6 +15,7 @@ import { getPanelDef } from '../panels/registry'
 import { setActivePanel } from '../lib/activePanel'
 import { useMultiNodeSelection } from '../canvas/useMultiNodeSelection'
 import type { NativeContextMenuItem } from '../../shared/electron-api'
+import { t } from '../i18n/useTranslation'
 
 export interface DockTabActionsParams {
   stack: DockTabStackType
@@ -61,7 +62,7 @@ export function useDockTabActions(params: DockTabActionsParams) {
     if (!isMultiNodeSelection()) return false
     if (!window.electronAPI) return true
     const id = await window.electronAPI.showContextMenu([
-      { id: 'close-all', label: 'Close All' },
+      { id: 'close-all', label: t('dock.closeAll') },
     ])
     if (id === 'close-all') closeSelection()
     return true
@@ -190,17 +191,17 @@ export function useDockTabActions(params: DockTabActionsParams) {
       const hasRight = idx >= 0 && idx < stack.panelIds.length - 1
       const panel = getPanelLocal(panelId)
       const menu: NativeContextMenuItem[] = [
-        { id: 'rename', label: 'Rename' },
+        { id: 'rename', label: t('dock.rename') },
         { type: 'separator' },
-        { id: 'close', label: 'Close', accelerator: 'Cmd+W' },
-        { id: 'close-others', label: 'Close Others', enabled: hasOthers },
-        { id: 'close-right', label: 'Close to the Right', enabled: hasRight },
+        { id: 'close', label: t('dock.closeTitle'), accelerator: 'Cmd+W' },
+        { id: 'close-others', label: t('dock.closeOthers'), enabled: hasOthers },
+        { id: 'close-right', label: t('dock.closeToRight'), enabled: hasRight },
         ...(showCloseAll()
-          ? [{ id: 'close-all', label: 'Close All', accelerator: 'Cmd+K Cmd+W' } as NativeContextMenuItem]
+          ? [{ id: 'close-all', label: t('dock.closeAll'), accelerator: 'Cmd+K Cmd+W' } as NativeContextMenuItem]
           : []),
         { type: 'separator' },
-        { id: 'split-right', label: 'Split Right' },
-        { id: 'move-window', label: 'Move into New Window' },
+        { id: 'split-right', label: t('dock.splitRight') },
+        { id: 'move-window', label: t('dock.moveToNewWindow') },
       ]
       const id = await window.electronAPI.showContextMenu(menu)
       switch (id) {
@@ -251,16 +252,16 @@ export function useDockTabActions(params: DockTabActionsParams) {
       // Build as groups so separators only appear between non-empty sections.
       const groups: NativeContextMenuItem[][] = [
         [{
-          label: 'New Tab',
+          label: t('dock.newTab'),
           submenu: visibleSplitItems.map((m) => ({ id: `new:${m.type}`, label: m.label })),
         }],
         [{
-          label: 'Split With',
+          label: t('dock.splitWith'),
           submenu: visibleSplitItems.map((m) => ({ id: `split:${m.type}`, label: m.label })),
         }],
       ]
       if (showCloseAll()) {
-        groups.push([{ id: 'close-all', label: 'Close All', enabled: stack.panelIds.length > 0 }])
+        groups.push([{ id: 'close-all', label: t('dock.closeAll'), enabled: stack.panelIds.length > 0 }])
       }
       const menu = groups.flatMap((g, i) =>
         i === 0 ? g : [{ type: 'separator' } as NativeContextMenuItem, ...g],

@@ -30,6 +30,7 @@ import { useShortcutStore } from '../stores/shortcutStore'
 import { displayString, PANEL_DEFAULT_SIZES } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 
 // The minimap pill can be docked in any of the four canvas corners. The choice
 // persists across sessions in ui-state.json (via the UI-state store).
@@ -81,6 +82,7 @@ const ToolbarButton: React.FC<{
 // the cursor and drops a terminal at that exact spot (explicit position →
 // bypasses the picker). The cursor is treated as the new terminal's centre.
 const TerminalSpawnButton: React.FC<{ onClick: () => void; canvasPanelId: string }> = ({ onClick, canvasPanelId }) => {
+  const { t } = useTranslation()
   const canvasApi = useCanvasStoreApi()
   const [ghost, setGhost] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const justDragged = useRef(false)
@@ -132,7 +134,7 @@ const TerminalSpawnButton: React.FC<{ onClick: () => void; canvasPanelId: string
           onClick()
         }}
         onMouseDown={handleMouseDown}
-        title="Terminal. Click for recommendations, or drag onto the canvas."
+        title={t('canvas.toolbar.terminal')}
         size="panel"
       >
         <Terminal size={18} />
@@ -203,6 +205,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onZoomIn,
   onZoomOut,
 }) => {
+  const { t } = useTranslation()
   const canvasApi = useCanvasStoreApi()
   const minimapOpen = useUIStore((s) => s.minimapOpen)
   const toggleMinimapOpen = useUIStore((s) => s.toggleMinimapOpen)
@@ -272,21 +275,21 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             {/* Interaction tools (Select / Hand) */}
             <ModeButton
               onClick={() => setActiveTool('select')}
-              title={`Select tool (Space, or ${toggleToolKey} inside a panel)`}
+              title={t('canvas.toolbar.selectTool').replace('{key}', toggleToolKey)}
               active={activeTool === 'select'}
             >
               <Cursor size={18} />
             </ModeButton>
             <ModeButton
               onClick={() => setActiveTool('hand')}
-              title={`Hand tool for panning (Space, or ${toggleToolKey} inside a panel)`}
+              title={t('canvas.toolbar.handTool').replace('{key}', toggleToolKey)}
               active={activeTool === 'hand'}
             >
               <Hand size={18} />
             </ModeButton>
             <ModeButton
               onClick={() => setActiveTool(activeTool === 'draw' ? 'select' : 'draw')}
-              title="Draw tool for annotations"
+              title={t('canvas.toolbar.drawTool')}
               active={activeTool === 'draw'}
             >
               <Pen size={18} />
@@ -295,28 +298,28 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               <>
                 <ModeButton
                   onClick={() => setActiveDrawingTool('rect')}
-                  title="Rectangle"
+                  title={t('canvas.toolbar.rectangle')}
                   active={activeDrawingTool === 'rect'}
                 >
                   <Rectangle size={16} />
                 </ModeButton>
                 <ModeButton
                   onClick={() => setActiveDrawingTool('arrow')}
-                  title="Arrow"
+                  title={t('canvas.toolbar.arrow')}
                   active={activeDrawingTool === 'arrow'}
                 >
                   <ArrowRight size={16} />
                 </ModeButton>
                 <ModeButton
                   onClick={() => setActiveDrawingTool('line')}
-                  title="Line"
+                  title={t('canvas.toolbar.line')}
                   active={activeDrawingTool === 'line'}
                 >
                   <Minus size={16} />
                 </ModeButton>
                 <ModeButton
                   onClick={() => setActiveDrawingTool('text')}
-                  title="Text"
+                  title={t('canvas.toolbar.text')}
                   active={activeDrawingTool === 'text'}
                 >
                   <TextT size={16} />
@@ -337,13 +340,13 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
 
             {/* Basic panel buttons */}
             <TerminalSpawnButton onClick={onNewTerminal} canvasPanelId={canvasPanelId} />
-            <ToolbarButton onClick={onNewBrowser} title={`Browser (${newBrowserKey})`} size="panel">
+            <ToolbarButton onClick={onNewBrowser} title={t('canvas.toolbar.browser').replace('{key}', newBrowserKey)} size="panel">
               <Globe size={18} />
             </ToolbarButton>
-            <ToolbarButton onClick={onNewEditor} title={`Editor (${newEditorKey})`} size="panel">
+            <ToolbarButton onClick={onNewEditor} title={t('canvas.toolbar.editor').replace('{key}', newEditorKey)} size="panel">
               <FileText size={18} />
             </ToolbarButton>
-            <ToolbarButton onClick={onNewAgent} title="Orquestra agent" size="panel">
+            <ToolbarButton onClick={onNewAgent} title={t('canvas.toolbar.agent')} size="panel">
               <OrquestraLogo size={18} />
             </ToolbarButton>
 
@@ -351,21 +354,21 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             <div className="w-px h-5 bg-surface-5 mx-1" />
 
             {/* Zoom controls */}
-            <ToolbarButton onClick={onZoomOut} title={`Zoom Out (${zoomOutKey})`} size="zoom">
+            <ToolbarButton onClick={onZoomOut} title={t('canvas.toolbar.zoomOut').replace('{key}', zoomOutKey)} size="zoom">
               <Minus size={16} />
             </ToolbarButton>
-            <Tooltip label={`Reset zoom to 100% (${zoomResetKey})`} placement="top">
+            <Tooltip label={t('canvas.toolbar.zoomReset').replace('{key}', zoomResetKey)} placement="top">
               <button
                 type="button"
                 onClick={() => canvasApi.getState().animateZoomTo(1.0)}
-                aria-label={`Reset zoom to 100% (${zoomResetKey})`}
+                aria-label={t('canvas.toolbar.zoomReset').replace('{key}', zoomResetKey)}
                 style={{ WebkitTapHighlightColor: 'transparent' }}
                 className="text-[11px] font-mono text-secondary hover:text-primary min-w-[40px] text-center select-none rounded-full bg-transparent hover:bg-hover-strong active:bg-hover-strong cursor-pointer px-1.5 py-1 focus:outline-none focus-visible:outline-none transition-all duration-100"
               >
                 {zoomText}
               </button>
             </Tooltip>
-            <ToolbarButton onClick={onZoomIn} title={`Zoom In (${zoomInKey})`} size="zoom">
+            <ToolbarButton onClick={onZoomIn} title={t('canvas.toolbar.zoomIn').replace('{key}', zoomInKey)} size="zoom">
               <Plus size={16} />
             </ToolbarButton>
           </div>
@@ -411,7 +414,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           type="button"
           onMouseDown={handleMinimapHandleMouseDown}
           onClick={handleMinimapToggleClick}
-          title={minimapOpen ? 'Hide minimap (drag to move)' : 'Show minimap (drag to move)'}
+          title={minimapOpen ? t('canvas.toolbar.minimapHide') : t('canvas.toolbar.minimapShow')}
           style={{
             WebkitTapHighlightColor: 'transparent',
             position: 'absolute',

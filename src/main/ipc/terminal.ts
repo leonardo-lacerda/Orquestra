@@ -36,8 +36,17 @@ import {
   MAESTRO_LIST,
   MAESTRO_REASSIGN,
   ORQUESTRA_TRACK_WORKER,
+  ORQUESTRA_LIST_WORKERS,
+  ORQUESTRA_NOTE_ROLE_INJECT,
+  ORQUESTRA_WORKER_STATUS,
   WORKER_HAS_OUTPUT,
 } from '../../shared/ipc-channels'
+import type { OrquestraWorkerSummary } from '../../shared/types'
+import {
+  evaluateAcceptCriteria,
+  formatAcceptResults,
+  inferAcceptFromRole,
+} from '../../shared/orchestration/accept'
 import { getOrCreateLogger, removeLogger, flushAll as flushAllLoggers, disposeAll as disposeAllLoggers } from './terminalLogger'
 import log from '../logger'
 import { sendToWindow, windowFromEvent, onWindowClosed } from '../windowRegistry'
@@ -47,6 +56,10 @@ import { runtimes } from '../runtime/runtimeManager'
 import type { Runtime } from '../runtime/types'
 import { createStringDispatcher } from './batchedDispatcher'
 import { validatePathStrict } from './pathValidation'
+import { getAllSettings } from '../settingsFile'
+import { buildMaestroInstructions, buildMaestroSettingsSnapshot } from '../maestro/maestroInstructions'
+import { checkMaestroAssets, resolveMaestroCliDir } from '../maestro/maestroAssets'
+import type { TerminalSetMaestroResult } from '../../shared/electron-api'
 
 // Set true during app shutdown so PTY data/exit callbacks no-op instead of
 // calling into a torn-down JS environment.
@@ -66,66 +79,152 @@ const terminalPipes: Map<string, Set<string>> = new Map()
 // =============================================================================
 
 const orquestraTerminals = new Set<string>()
-let commandsPollTimer: NodeJS.Timeout | null = null
+
+// Guards against creating duplicate watchers for the same workspace.
+// Maps workspacePath → { timer, terminalId, ownerWindowId } so each workspace
+// has at most one polling watcher. The terminalId stored here is the PTY ID of
+// the first terminal that enabled orquestra in this workspace — it serves as
+// the maestroId for all commands from that workspace's AI agent.
+const watcherByWorkspace = new Map<string, {
+  timer: NodeJS.Timeout
+  cleanupTimer: NodeJS.Timeout
+  terminalId: string
+  ownerWindowId: number
+}>()
 
 export function setOrquestraTerminal(terminalId: string, enabled: boolean): void {
   if (enabled) {
     orquestraTerminals.add(terminalId)
   } else {
     orquestraTerminals.delete(terminalId)
-    // Cascading cleanup: close all workers that belong to this orquestrador
-    closeWorkersForOrchestrator(terminalId)
+    cascadeOrchestratorWorkers(terminalId, 'disabled')
   }
 }
 
-/** Close all workers tracked under the given orquestrador PTY ID. */
+/**
+ * Abort workers for an orchestrator: write failed results (unblocks wait),
+ * notify renderer, then kill PTYs. Used by disable, takeover, and maestro exit.
+ */
+export function cascadeOrchestratorWorkers(
+  orchestratorId: string,
+  reason: 'disabled' | 'takeover' | 'maestro-exit',
+): void {
+  for (const [workerId, tracking] of [...workerTracking.entries()]) {
+    if (tracking.orchestratorId !== orchestratorId) continue
+    const summary =
+      reason === 'takeover'
+        ? 'Orchestrator taken over by another Maestro terminal.'
+        : reason === 'maestro-exit'
+          ? 'Maestro terminal exited.'
+          : 'Orchestrator disabled.'
+    if (tracking.workspacePath) {
+      writeWorkerResultFile(tracking.workspacePath, {
+        workerName: tracking.name,
+        workerRole: tracking.role,
+        status: 'failed',
+        summary,
+        timestamp: Date.now(),
+        exitCode: 1,
+      })
+    }
+    notifyWorkerStatus({
+      workerId,
+      orchestratorId,
+      name: tracking.name,
+      status: 'failed',
+      exitCode: 1,
+    })
+    if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
+    const runtime = getRuntimeForTerminal(workerId)
+    try { runtime?.process.kill?.(workerId) } catch { /* already dead */ }
+    workerTracking.delete(workerId)
+    log.debug('[worker] cascade %s: closed "%s"', reason, tracking.name)
+  }
+}
+
+/** @deprecated Prefer cascadeOrchestratorWorkers — kept for call-site clarity. */
 function closeWorkersForOrchestrator(orchestratorId: string): void {
-  for (const [workerId, tracking] of workerTracking) {
-    if (tracking.orchestratorId === orchestratorId) {
-      const runtime = getRuntimeForTerminal(workerId)
-      if (runtime) {
-        try { runtime.process.kill?.(workerId) } catch { /* already dead */ }
+  cascadeOrchestratorWorkers(orchestratorId, 'disabled')
+}
+
+/**
+ * Maestro PTY gone (kill or exit): cascade workers, drop orquestra membership,
+ * stop watcher if this id was the active maestro for a workspace.
+ */
+export function onMaestroPtyGone(terminalId: string): void {
+  orquestraTerminals.delete(terminalId)
+  cascadeOrchestratorWorkers(terminalId, 'maestro-exit')
+  for (const [wsPath, entry] of [...watcherByWorkspace.entries()]) {
+    if (entry.terminalId === terminalId) {
+      // Delete crown markers for this workspace (best-effort)
+      try {
+        const crownMarker = path.join(wsPath, '.orquestra', 'crown.json')
+        if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
+        const claudeLocalPath = path.join(wsPath, 'CLAUDE.local.md')
+        if (fs.existsSync(claudeLocalPath)) fs.unlinkSync(claudeLocalPath)
+      } catch {
+        // best-effort marker cleanup
       }
-      workerTracking.delete(workerId)
-      log.info('[orquestra] cascaded cleanup: worker %s (%s) closed', workerId, tracking.name)
+      stopOrquestraWatcher(wsPath)
+      log.debug('[worker] maestro terminal closed — cascade done')
     }
   }
 }
 
-// Periodic heartbeat: detect dead workers that weren't properly cleaned up.
-// Uses scanActivity (POSIX ps). On Windows scanActivity returns {} so the
-// heartbeat only fires where the host OS supports process scanning.
+// Periodic heartbeat: POSIX scanActivity when available; always reap tracking
+// orphans whose runtime registration was already cleaned (Windows-friendly).
 setInterval(async () => {
   const tracked = Array.from(workerTracking.entries())
   if (tracked.length === 0) return
 
-  const runtime = getRuntimeForTerminal(tracked[0][0])
+  // Tracking-orphan reap: worker still tracked but PTY no longer in terminalRuntime
+  for (const [workerId] of tracked) {
+    if (!terminalRuntime.has(workerId)) {
+      log.warn('[worker] orphan reap: %s has no runtime registration', workerId)
+      onWorkerExit(workerId, 1)
+    }
+  }
+
+  const stillTracked = Array.from(workerTracking.entries())
+  if (stillTracked.length === 0) return
+
+  const runtime = getRuntimeForTerminal(stillTracked[0][0])
   if (!runtime) return
 
-  const ids = tracked.map(([id]) => id)
+  const ids = stillTracked.map(([id]) => id)
   const activity = await runtime.process.scanActivity(ids).catch(() => null)
   if (!activity || Object.keys(activity).length === 0) return // no data (Windows or unsupported)
 
-  for (const [workerId, tracking] of tracked) {
+  for (const [workerId] of stillTracked) {
     if (!(workerId in activity)) {
-      log.warn('[orquestra] heartbeat: worker %s (%s) is dead, cleaning up', workerId, tracking.name)
-      onWorkerExit(workerId)
+      log.warn('[worker] heartbeat: %s is dead, cleaning up', workerId)
+      onWorkerExit(workerId, 1)
     }
   }
 }, 60_000)
 
+/** @deprecated Use resolveMaestroCliDir from maestroAssets — alias for tests/scripts. */
 export function getOrquestraCliDir(): string {
-  const appPath = app.getAppPath()
-  return path.join(appPath, 'scripts', 'maestro')
+  return resolveMaestroCliDir() ?? path.join(app.getAppPath(), 'scripts', 'maestro')
 }
 
 const COMMANDS_POLL_MS = 500
 const PROCESSED_CLEANUP_MS = 5 * 60 * 1000 // clear dedup set every 5 min
 
-export function startOrquestraWatcher(workspacePath: string, ownerWindowId: number): void {
+/**
+ * Start or rebind the single watcher per workspace.
+ * Rebind updates terminalId/owner without restarting the poller (takeover).
+ */
+export function startOrquestraWatcher(workspacePath: string, ownerWindowId: number, terminalId: string): void {
+  const existing = watcherByWorkspace.get(workspacePath)
+  if (existing) {
+    existing.terminalId = terminalId
+    existing.ownerWindowId = ownerWindowId
+    return
+  }
+
   const commandsDir = path.join(workspacePath, '.orquestra-commands')
   if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
-  log.info('[orquestra] watching %s for commands', commandsDir)
 
   // Clean up stale commands from previous crashes
   try {
@@ -133,7 +232,6 @@ export function startOrquestraWatcher(workspacePath: string, ownerWindowId: numb
     for (const f of stale) {
       fs.unlinkSync(path.join(commandsDir, f))
     }
-    if (stale.length > 0) log.info('[orquestra] cleaned %d stale command(s)', stale.length)
   } catch { /* dir may not exist yet */ }
 
   // Polling is more reliable than fs.watch — avoids duplicate events (Windows)
@@ -142,6 +240,11 @@ export function startOrquestraWatcher(workspacePath: string, ownerWindowId: numb
   const processedFiles = new Set<string>()
 
   const poll = (): void => {
+    const entry = watcherByWorkspace.get(workspacePath)
+    if (!entry) return
+    const maestroId = entry.terminalId
+    const winId = entry.ownerWindowId
+
     let files: string[]
     try { files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.json')) }
     catch { return }
@@ -154,36 +257,55 @@ export function startOrquestraWatcher(workspacePath: string, ownerWindowId: numb
       try {
         const content = fs.readFileSync(filePath, 'utf-8')
         const payload = JSON.parse(content)
-        log.info('[orquestra] command: %s %o', filename, payload)
-        const { cmd, args } = payload
-        switch (cmd) {
-          case 'recruit':  sendToWindow(ownerWindowId, MAESTRO_RECRUIT, 'maestro', args); break
-          case 'dismiss':  sendToWindow(ownerWindowId, MAESTRO_DISMISS, 'maestro', args); break
-          case 'connect':  sendToWindow(ownerWindowId, MAESTRO_CONNECT, 'maestro', args); break
-          case 'list':     sendToWindow(ownerWindowId, MAESTRO_LIST, 'maestro', args); break
-          case 'reassign': sendToWindow(ownerWindowId, MAESTRO_REASSIGN, 'maestro', args); break
+        // Optional maestroId on command — drop mismatch (stale CLI from other crown)
+        if (payload.maestroId && payload.maestroId !== maestroId) {
+          fs.unlinkSync(filePath)
+          continue
         }
-        log.info('[orquestra] dispatched %s', cmd)
+        const { cmd, args } = payload
+        // Log only worker lifecycle commands (not list/connect noise)
+        if (cmd === 'recruit' || cmd === 'dismiss' || cmd === 'reassign') {
+          const label = args?.name || args?.target || args?.role || ''
+          log.info('[orquestra] cmd %s %s', cmd, label)
+        }
+        switch (cmd) {
+          case 'recruit':  sendToWindow(winId, MAESTRO_RECRUIT, maestroId, args); break
+          case 'dismiss':  sendToWindow(winId, MAESTRO_DISMISS, maestroId, args); break
+          case 'connect':  sendToWindow(winId, MAESTRO_CONNECT, maestroId, args); break
+          case 'list':     sendToWindow(winId, MAESTRO_LIST, maestroId, args); break
+          case 'reassign': sendToWindow(winId, MAESTRO_REASSIGN, maestroId, args); break
+        }
         fs.unlinkSync(filePath)
-      } catch (err) { log.error('[orquestra] error processing %s: %s', filename, err) }
+      } catch (err) { log.error('[worker] command error %s: %s', filename, err) }
     }
   }
 
-  commandsPollTimer = setInterval(poll, COMMANDS_POLL_MS)
+  const timer = setInterval(poll, COMMANDS_POLL_MS)
 
   // Periodically evict old entries from the dedup set to avoid memory leak
   const cleanupTimer = setInterval(() => processedFiles.clear(), PROCESSED_CLEANUP_MS)
-  // Store the cleanup timer so it can be cleared on stop
-  ;(commandsPollTimer as unknown as Record<string, unknown>)._cleanupTimer = cleanupTimer
+
+  watcherByWorkspace.set(workspacePath, { timer, cleanupTimer, terminalId, ownerWindowId })
 }
 
-export function stopOrquestraWatcher(): void {
-  if (commandsPollTimer) {
-    clearInterval(commandsPollTimer)
-    const cleanup = (commandsPollTimer as unknown as Record<string, unknown>)._cleanupTimer
-    if (cleanup) clearInterval(cleanup as NodeJS.Timeout)
-    commandsPollTimer = null
+export function stopOrquestraWatcher(workspacePath?: string): void {
+  if (workspacePath) {
+    // Stop watcher for a specific workspace
+    const entry = watcherByWorkspace.get(workspacePath)
+    if (entry) {
+      clearInterval(entry.timer)
+      clearInterval(entry.cleanupTimer)
+      watcherByWorkspace.delete(workspacePath)
+    }
+    return
   }
+
+  // Stop ALL watchers (app shutdown)
+  for (const [, entry] of watcherByWorkspace) {
+    clearInterval(entry.timer)
+    clearInterval(entry.cleanupTimer)
+  }
+  watcherByWorkspace.clear()
 }
 
 // =============================================================================
@@ -193,34 +315,258 @@ export function stopOrquestraWatcher(): void {
 interface WorkerResponse {
   workerName: string
   workerRole: string
-  status: 'completed' | 'idle'
+  /** PTY inject label; result-file statuses are normalized separately. */
+  status: 'completed' | 'failed' | 'idle'
+  /** Full detail for result files / diagnostics. */
   summary: string
+  /** One-line accept summary injected into Maestro (keeps agent context clean). */
+  shortSummary: string
   timestamp: number
+  exitCode?: number | null
+}
+
+export interface OrquestraWorkerStatusEvent {
+  workerId: string
+  orchestratorId: string
+  name: string
+  /** Canonical UI/result status after idle or exit. */
+  status: 'done' | 'failed'
+  exitCode: number | null
 }
 
 // Map: orchestrator ptyId → queue of responses
 const responseQueues: Map<string, WorkerResponse[]> = new Map()
 
-// Map: worker ptyId → { orchestratorId, name, role, outputBuffer, lastActivity, workspacePath }
+// Map: worker ptyId → tracking for idle/exit result files
 const workerTracking: Map<string, {
   orchestratorId: string
   name: string
   role: string
   outputBuffer: string[]
   lastActivity: number
+  firstOutputAt: number | null
   idleTimer: ReturnType<typeof setTimeout> | null
   workspacePath: string
+  /** Exact PTY inject text (fingerprint) — echo of this must not count as work. */
+  injectText: string | null
+  /** ROLE.md body (fingerprint) — reading/echoing the brief is not work. */
+  roleFileText: string | null
+  /** When the task was submitted to the worker PTY. */
+  roleInjectedAt: number | null
 }> = new Map()
 
 const WORKER_OUTPUT_LIMIT = 100  // keep last 100 lines
-const WORKER_IDLE_TIMEOUT = 30000 // 30 seconds
+/** Quiet period after eligibility before idle→done (KD6). */
+const WORKER_IDLE_TIMEOUT = 60_000
+/** Min non-empty *meaningful* (non-echo) lines before idle can complete. */
+const WORKER_MIN_OUTPUT_LINES = 3
+/** Min time since first *meaningful* activity (or inject) before idle complete (ms). */
+const WORKER_MIN_RUNTIME_MS = 10_000
+/** Quiet period when completion marker detected on real work (ms). */
+const WORKER_MARKER_IDLE_MS = 10_000
+/** Min ms after role inject before a marker can count (avoids inject-echo DONE). */
+const WORKER_POST_INJECT_MARKER_GRACE_MS = 5_000
 const RESPONSE_QUEUE_MAX = 100   // max pending responses per orchestrator
 const ORQUESTRA_RESULTS_DIR = '.orquestra-results'
 
+const DONE_MARKERS = [
+  /\bORQUESTRA_WORKER_DONE\b/i,
+  /✅/,
+  /task\s+complete/i,
+  /tarefa\s+conclu/i,
+  // Intentionally NO bare /\bDONE\b/ — too many false positives in English prompts.
+]
+
+function workerHasDoneMarker(lines: string[]): boolean {
+  return lines.some((l) => DONE_MARKERS.some((re) => re.test(l)))
+}
+
+/** Line is only the completion token (no real deliverable work). */
+export function isBareCompletionMarkerLine(line: string): boolean {
+  const t = line.trim()
+  if (!t) return false
+  if (/^ORQUESTRA_WORKER_DONE\.?$/i.test(t)) return true
+  // Pure checkmark only — "✅ Task complete" is agent summary, not bare token.
+  if (/^✅\.?$/.test(t)) return true
+  return false
+}
+
+/**
+ * True when a buffered output line is almost certainly an echo of the role
+ * inject / ROLE.md body (or a wrapped chunk of it). Must not trigger idle-done.
+ * Bare completion tokens are NOT treated as fingerprint echo (ROLE.md contains
+ * the token as instructions; the agent still must emit it after real work).
+ */
+export function isInjectEchoLine(line: string, fingerprint: string | null | undefined): boolean {
+  if (!fingerprint?.trim()) return false
+  // Never classify the bare completion token as "ROLE.md echo" — that would
+  // strip the only signal that work finished after real deliverable lines.
+  if (isBareCompletionMarkerLine(line)) return false
+  const n = line.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!n || n.length < 8) return false
+  const fp = fingerprint.toLowerCase().replace(/\s+/g, ' ')
+  if (fp.includes(n)) return true
+  if (n.includes(fp) && fp.length >= 16) return true
+  // Wrapped long text: first 24+ chars of the line appear inside fingerprint
+  const head = n.slice(0, Math.min(n.length, 48))
+  if (head.length >= 24 && fp.includes(head)) return true
+  // ROLE.md multi-line: match any substantial fingerprint line fragment
+  for (const chunk of fingerprint.split(/\r?\n/)) {
+    const c = chunk.trim().toLowerCase().replace(/\s+/g, ' ')
+    if (c.length < 16) continue
+    // Skip instruction chunks that only teach the completion token
+    if (isCompletionInstructionEcho(chunk)) continue
+    if (n.includes(c) || c.includes(n)) return true
+  }
+  return false
+}
+
+/**
+ * Instruction lines that *mention* the completion token (from ROLE.md / inject
+ * policy) without being the agent finishing work.
+ */
+export function isCompletionInstructionEcho(line: string): boolean {
+  const n = line.toLowerCase()
+  if (!n.includes('orquestra_worker_done') && !n.includes('completion token')) return false
+  return (
+    n.includes('when finished')
+    || n.includes('print')
+    || n.includes('exactly')
+    || n.includes('own line')
+    || n.includes('from your role')
+    || n.includes('role.md')
+    || n.includes('signal completion')
+  )
+}
+
+/**
+ * Lines that look like real agent work (not inject/ROLE.md echo, not bare
+ * marker, not completion-instruction prose).
+ */
+export function meaningfulWorkerLines(
+  outputBuffer: string[],
+  injectText?: string | null,
+  roleFileText?: string | null,
+): string[] {
+  return outputBuffer.filter((l) => {
+    const t = l.trim()
+    if (!t) return false
+    if (isInjectEchoLine(t, injectText)) return false
+    if (isInjectEchoLine(t, roleFileText)) return false
+    if (isCompletionInstructionEcho(t)) return false
+    return true
+  })
+}
+
+/**
+ * Real deliverable activity: meaningful lines that are not solely a completion
+ * marker. Required before marker-based idle can fire (prevents ROLE.md echo
+ * containing ORQUESTRA_WORKER_DONE from completing the worker).
+ */
+export function realWorkLines(
+  outputBuffer: string[],
+  injectText?: string | null,
+  roleFileText?: string | null,
+): string[] {
+  return meaningfulWorkerLines(outputBuffer, injectText, roleFileText).filter(
+    (l) => !isBareCompletionMarkerLine(l),
+  )
+}
+
+/** Agent mid-flight (permission UI, tool pending) — do not treat quiet as finished. */
+export function looksLikeWaitingForUser(lines: string[]): boolean {
+  return lines.some((l) =>
+    /waiting for permission|awaiting permission|needs? permission|permission required|waiting for approval|approve to continue/i
+      .test(l),
+  )
+}
+
+/**
+ * Idle eligibility (KD6 + inject/ROLE echo guard):
+ * - Never complete with only inject/ROLE.md/instruction echo in the buffer.
+ * - Markers only count with at least one real work line, after post-inject grace.
+ * - Min-lines path alone does NOT complete when a completion marker is expected
+ *   (avoids false failed while agent is mid-tool / waiting for permission).
+ */
+export function isWorkerIdleEligible(tracking: {
+  outputBuffer: string[]
+  firstOutputAt: number | null
+  injectText?: string | null
+  roleFileText?: string | null
+  roleInjectedAt?: number | null
+  /** When true (default), min-lines quiet without DONE is not enough to finalize. */
+  requireCompletionMarker?: boolean
+}, now = Date.now()): { eligible: boolean; timeoutMs: number } {
+  const inject = tracking.injectText ?? null
+  const roleFile = tracking.roleFileText ?? null
+  const work = realWorkLines(tracking.outputBuffer, inject, roleFile)
+  const meaningful = meaningfulWorkerLines(tracking.outputBuffer, inject, roleFile)
+  const injectedAt = tracking.roleInjectedAt ?? null
+  const requireMarker = tracking.requireCompletionMarker !== false
+
+  // Inject sent but only echo / banner / ROLE dump → never done.
+  if (injectedAt != null && work.length === 0) {
+    return { eligible: false, timeoutMs: WORKER_IDLE_TIMEOUT }
+  }
+
+  if (work.length === 0 || tracking.firstOutputAt == null) {
+    return { eligible: false, timeoutMs: WORKER_IDLE_TIMEOUT }
+  }
+
+  // Mid permission / approval UI: keep waiting (re-arm long idle).
+  if (looksLikeWaitingForUser(tracking.outputBuffer)) {
+    return { eligible: false, timeoutMs: WORKER_IDLE_TIMEOUT }
+  }
+
+  // Marker path: need real work + marker (not ROLE.md instruction alone).
+  if (workerHasDoneMarker(meaningful)) {
+    if (injectedAt != null && now - injectedAt < WORKER_POST_INJECT_MARKER_GRACE_MS) {
+      return { eligible: false, timeoutMs: WORKER_MARKER_IDLE_MS }
+    }
+    return { eligible: true, timeoutMs: WORKER_MARKER_IDLE_MS }
+  }
+
+  // Without a completion marker: do NOT become idle-eligible on quiet alone.
+  // Otherwise "Waiting for permission" silence → onWorkerIdle → accept fails → false FAILED.
+  if (requireMarker) {
+    return { eligible: false, timeoutMs: WORKER_IDLE_TIMEOUT }
+  }
+
+  const anchor = injectedAt ?? tracking.firstOutputAt
+  const runtimeOk = now - anchor >= WORKER_MIN_RUNTIME_MS
+  if (work.length >= WORKER_MIN_OUTPUT_LINES && runtimeOk) {
+    return { eligible: true, timeoutMs: WORKER_IDLE_TIMEOUT }
+  }
+  return { eligible: false, timeoutMs: WORKER_IDLE_TIMEOUT }
+}
+
+/**
+ * Normalize worker result status for the wait CLI schema.
+ * Canonical terminal statuses: running | done | failed | timeout
+ * (completed ≡ done; idle ≡ done — agent went quiet after finishing work)
+ */
+export function normalizeWorkerResultStatus(status: string): string {
+  const s = String(status || '').toLowerCase()
+  if (s === 'completed' || s === 'idle') return 'done'
+  return s
+}
+
 /** Write a worker result JSON file so the orquestra.js CLI's `wait` command
- *  can poll for it. Files are stored in <workspace>/.orquestra-results/. */
-function writeWorkerResultFile(workspacePath: string, result: {
-  workerName: string; workerRole: string; status: string; summary: string; timestamp: number
+ *  can poll for it. Files are stored in <workspace>/.orquestra-results/.
+ *
+ *  Canonical schema (keep aliases for older CLIs):
+ *    name, workerName, role, workerRole, status, exitCode, summary, timestamp, updatedAt
+ *  status: running | done | failed | timeout
+ *    (completed/idle are normalized to done on write)
+ */
+export function writeWorkerResultFile(workspacePath: string, result: {
+  workerName: string
+  workerRole: string
+  status: string
+  summary: string
+  timestamp: number
+  exitCode?: number | null
+  accept?: Array<{ type: string; ok: boolean; detail: string; path?: string }>
 }): void {
   try {
     const resultsDir = path.join(workspacePath, ORQUESTRA_RESULTS_DIR)
@@ -229,9 +575,36 @@ function writeWorkerResultFile(workspacePath: string, result: {
     // outside .orquestra-results/
     const safeName = path.basename(result.workerName).replace(/[/\\]/g, '_')
     const filePath = path.join(resultsDir, `worker-${safeName}.json`)
-    fs.writeFileSync(filePath, JSON.stringify(result, null, 2))
+    const status = normalizeWorkerResultStatus(result.status)
+    const success = status === 'done'
+    const payload = {
+      name: result.workerName,
+      workerName: result.workerName,
+      role: result.workerRole,
+      workerRole: result.workerRole,
+      status,
+      exitCode: result.exitCode ?? (success ? 0 : status === 'failed' || status === 'timeout' ? 1 : null),
+      summary: result.summary ?? '',
+      timestamp: result.timestamp,
+      updatedAt: result.timestamp,
+      ...(result.accept ? { accept: result.accept } : {}),
+    }
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2))
   } catch (err) {
-    log.error('[orquestra] failed to write result file: %s', err)
+    log.error('[worker] failed to write result file: %s', err)
+  }
+}
+
+/** Notify the owner window so the crown run tracker can leave `running`. */
+function notifyWorkerStatus(event: OrquestraWorkerStatusEvent): void {
+  const windowId =
+    terminalOwners.get(event.workerId)
+    ?? terminalOwners.get(event.orchestratorId)
+  if (windowId == null) return
+  try {
+    sendToWindow(windowId, ORQUESTRA_WORKER_STATUS, event)
+  } catch (err) {
+    // silent — status still written to disk
   }
 }
 
@@ -250,10 +623,66 @@ export function trackWorker(workerId: string, orchestratorId: string, name: stri
     role,
     outputBuffer: [] as string[],
     lastActivity: Date.now(),
+    firstOutputAt: null,
     idleTimer: null as ReturnType<typeof setTimeout> | null,
     workspacePath,
+    injectText: null,
+    roleFileText: null,
+    roleInjectedAt: null,
   })
-  log.info('[orquestra] Tracking worker %s → orchestrator %s', workerId, orchestratorId)
+  if (workspacePath) {
+    writeWorkerResultFile(workspacePath, {
+      workerName: name,
+      workerRole: role,
+      status: 'running',
+      summary: 'Worker recruited — waiting for completion.',
+      timestamp: Date.now(),
+      exitCode: null,
+    })
+  }
+  log.debug('[worker] tracking %s (%s) → maestro %s', name, workerId, orchestratorId)
+}
+
+/**
+ * Record that the renderer submitted a role/task into this worker PTY.
+ * Idle completion must ignore inject + ROLE.md echoes and wait for real work.
+ */
+export function noteWorkerRoleInjected(
+  workerId: string,
+  injectText: string,
+  roleFileText?: string | null,
+): void {
+  const tracking = workerTracking.get(workerId)
+  if (!tracking) {
+    log.warn('[worker] role inject: unknown pty %s', workerId)
+    return
+  }
+  tracking.injectText = injectText
+  if (roleFileText != null && roleFileText.trim()) {
+    tracking.roleFileText = roleFileText
+  }
+  tracking.roleInjectedAt = Date.now()
+  // Cancel any idle timer armed on pre-inject banner noise.
+  if (tracking.idleTimer) {
+    clearTimeout(tracking.idleTimer)
+    tracking.idleTimer = null
+  }
+  log.debug('[worker] role inject recorded for %s', tracking.name)
+}
+
+export function listTrackedWorkers(orchestratorId?: string): OrquestraWorkerSummary[] {
+  return Array.from(workerTracking.entries())
+    .filter(([, tracking]) => !orchestratorId || tracking.orchestratorId === orchestratorId)
+    .map(([workerId, tracking]) => ({
+      workerId,
+      orchestratorId: tracking.orchestratorId,
+      name: tracking.name,
+      role: tracking.role,
+      workspacePath: tracking.workspacePath,
+      status: tracking.outputBuffer.length > 0 ? 'running' : 'starting',
+      outputLineCount: tracking.outputBuffer.length,
+      lastActivity: tracking.lastActivity,
+    }))
 }
 
 /** Feed worker output for tracking. Call this from onData. */
@@ -266,6 +695,9 @@ export function feedWorkerOutput(workerId: string, data: string): void {
   // Buffer cleaned lines
   const cleaned = stripAnsi(data)
   const lines = cleaned.split(new RegExp(String.fromCharCode(13, 10), "g")).filter((l: string) => l.trim())
+  if (lines.length > 0 && tracking.firstOutputAt == null) {
+    tracking.firstOutputAt = Date.now()
+  }
   tracking.outputBuffer.push(...lines)
 
   // Keep only last N lines
@@ -273,53 +705,252 @@ export function feedWorkerOutput(workerId: string, data: string): void {
     tracking.outputBuffer = tracking.outputBuffer.slice(-WORKER_OUTPUT_LIMIT)
   }
 
-  // Reset idle timer
+  // Reset idle timer only when eligible (KD6); otherwise keep waiting for more output
   if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
+  const { eligible, timeoutMs } = isWorkerIdleEligible(tracking)
+  if (!eligible) return
   tracking.idleTimer = setTimeout(() => {
+    const still = workerTracking.get(workerId)
+    if (!still) return
+    const again = isWorkerIdleEligible(still)
+    if (!again.eligible) {
+      // Re-evaluate on next feed
+      return
+    }
     onWorkerIdle(workerId)
-  }, WORKER_IDLE_TIMEOUT)
+  }, timeoutMs)
 }
 
-/** Called when a worker process exits. */
-export function onWorkerExit(workerId: string): void {
+/**
+ * Called when a worker process exits.
+ * Uses the real process exit code so wait/CLI and the crown tracker see failures.
+ */
+/**
+ * Build a Maestro-readable completion summary from worker output.
+ * Prefers real work lines over inject/ROLE.md echo; keeps the last few
+ * useful lines so wait/CLI can surface what the worker finished.
+ */
+export function extractWorkerCompletionSummary(
+  outputBuffer: string[],
+  opts?: {
+    injectText?: string | null
+    roleFileText?: string | null
+    role?: string
+    maxChars?: number
+  },
+): string {
+  const maxChars = opts?.maxChars ?? 600
+  const work = realWorkLines(
+    outputBuffer,
+    opts?.injectText ?? null,
+    opts?.roleFileText ?? null,
+  )
+  const markerLine = meaningfulWorkerLines(
+    outputBuffer,
+    opts?.injectText ?? null,
+    opts?.roleFileText ?? null,
+  ).find((l) => DONE_MARKERS.some((re) => re.test(l)))
+
+  const tail = work.slice(-8)
+  if (markerLine && !tail.some((l) => l.includes(markerLine.trim()))) {
+    tail.push(markerLine.trim())
+  }
+  let body = tail.join(' | ').replace(/\s+/g, ' ').trim()
+  if (!body) {
+    body = outputBuffer
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .slice(-5)
+      .join(' | ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+  const rolePrefix = opts?.role?.trim() ? `role=${opts.role.trim().slice(0, 80)}; ` : ''
+  const text = rolePrefix + (body || '(no summary)')
+  return text.length > maxChars ? text.slice(0, maxChars - 1) + '…' : text
+}
+
+/**
+ * Shared accept + summary path for idle and process exit (criterion 3).
+ * Exit code 0 alone is not enough when file accept fails.
+ */
+export function finalizeWorkerCompletion(
+  tracking: {
+    orchestratorId: string
+    name: string
+    role: string
+    outputBuffer: string[]
+    workspacePath: string
+    injectText: string | null
+    roleFileText: string | null
+  },
+  opts?: { exitCode?: number | null },
+): {
+  status: 'done' | 'failed'
+  summary: string
+  shortSummary: string
+  exitCode: number
+  acceptOk: boolean
+  accept: Array<{ type: string; ok: boolean; detail: string; path?: string }>
+} {
+  const summaryBase = extractWorkerCompletionSummary(tracking.outputBuffer, {
+    injectText: tracking.injectText,
+    roleFileText: tracking.roleFileText,
+    role: tracking.role,
+  })
+  const criteria = inferAcceptFromRole(tracking.role || '')
+  const meaningful = meaningfulWorkerLines(
+    tracking.outputBuffer,
+    tracking.injectText,
+    tracking.roleFileText,
+  )
+  const acceptEval = tracking.workspacePath
+    ? evaluateAcceptCriteria(
+      {
+        workspaceRoot: tracking.workspacePath,
+        criteria,
+        outputLines: meaningful,
+      },
+      fs,
+    )
+    : { ok: true, results: [] as Array<{ type: string; ok: boolean; detail: string; path?: string }> }
+
+  const processFailed = opts?.exitCode != null && opts.exitCode !== 0
+  const acceptOk = acceptEval.ok && !processFailed
+  const acceptLine = formatAcceptResults(acceptEval.results)
+  // Short summary for Maestro inject — accept line only (no inject/permission dump)
+  const shortSummary = acceptLine + (processFailed ? ` | exit ${opts?.exitCode}` : '')
+  const summary = `${summaryBase} | ${acceptLine}`
+    + (processFailed ? ` | process exit ${opts?.exitCode}` : '')
+  return {
+    status: acceptOk ? 'done' : 'failed',
+    summary,
+    shortSummary,
+    exitCode: acceptOk ? 0 : (processFailed ? Number(opts?.exitCode) : 1),
+    acceptOk,
+    accept: acceptEval.results,
+  }
+}
+
+/** One-line Maestro PTY inject — avoids flooding agent context with Interjected dumps. */
+export function formatMaestroWorkerInject(response: {
+  workerName: string
+  status: string
+  shortSummary: string
+}): string {
+  const st = response.status === 'done' || response.status === 'completed'
+    ? 'completed'
+    : response.status === 'failed'
+      ? 'failed'
+      : response.status
+  const detail = (response.shortSummary || '').replace(/\s+/g, ' ').trim().slice(0, 200)
+  return detail
+    ? `[worker] ${response.workerName} → ${st}: ${detail}`
+    : `[worker] ${response.workerName} → ${st}`
+}
+
+export function onWorkerExit(workerId: string, exitCode: number = 0): void {
   const tracking = workerTracking.get(workerId)
   if (!tracking) return
 
   if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
 
-  const summary = tracking.outputBuffer.slice(-30).join('\n')
+  const code = typeof exitCode === 'number' && Number.isFinite(exitCode) ? exitCode : 1
+  const finalized = finalizeWorkerCompletion(tracking, { exitCode: code })
   const result = {
     workerName: tracking.name,
     workerRole: tracking.role,
-    status: 'completed' as const,
-    summary,
+    status: finalized.status,
+    summary: finalized.summary,
     timestamp: Date.now(),
+    exitCode: finalized.exitCode,
+    accept: finalized.accept,
   }
   if (tracking.workspacePath) writeWorkerResultFile(tracking.workspacePath, result)
-  enqueueResponse(tracking.orchestratorId, result)
+  enqueueResponse(tracking.orchestratorId, {
+    workerName: result.workerName,
+    workerRole: result.workerRole,
+    status: finalized.status === 'done' ? 'completed' : 'failed',
+    summary: result.summary,
+    shortSummary: finalized.shortSummary,
+    timestamp: result.timestamp,
+    exitCode: result.exitCode,
+  })
+  notifyWorkerStatus({
+    workerId,
+    orchestratorId: tracking.orchestratorId,
+    name: tracking.name,
+    status: finalized.status,
+    exitCode: result.exitCode,
+  })
 
   workerTracking.delete(workerId)
-  log.info('[orquestra] Worker %s exited, response enqueued + result file written', workerId)
+  log.info('[orquestra] %s exit %s → %s', tracking.name, code, finalized.status)
 }
 
-/** Called when a worker is idle (no output for 30s). */
-function onWorkerIdle(workerId: string): void {
+/**
+ * Called when a worker is idle (no output for WORKER_IDLE_TIMEOUT).
+ * Writes done only when accept criteria pass (file_exists / marker); otherwise
+ * failed — so inject/ROLE echo alone cannot complete a file-gated task.
+ */
+export function onWorkerIdle(workerId: string): void {
   const tracking = workerTracking.get(workerId)
   if (!tracking) return
 
-  const summary = tracking.outputBuffer.slice(-20).join('\n')
+  // Still mid-task (permission UI / no DONE yet): re-arm idle, stay running.
+  const again = isWorkerIdleEligible(tracking)
+  if (!again.eligible) {
+    if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
+    tracking.idleTimer = setTimeout(() => onWorkerIdle(workerId), again.timeoutMs)
+    return
+  }
+
+  const finalized = finalizeWorkerCompletion(tracking)
+
+  // Accept failed only because marker missing while agent may still run → keep running.
+  const markerMissing = finalized.accept.some(
+    (a) => a.type === 'marker' && !a.ok,
+  )
+  const onlyMarkerBlocking =
+    !finalized.acceptOk
+    && markerMissing
+    && finalized.accept.filter((a) => a.type !== 'marker').every((a) => a.ok)
+  if (onlyMarkerBlocking) {
+    if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
+    tracking.idleTimer = setTimeout(() => onWorkerIdle(workerId), WORKER_IDLE_TIMEOUT)
+    log.debug('[worker] %s quiet but no DONE yet — still running', tracking.name)
+    return
+  }
+
   const result = {
     workerName: tracking.name,
     workerRole: tracking.role,
-    status: 'idle' as const,
-    summary,
+    status: finalized.status,
+    summary: finalized.summary,
     timestamp: Date.now(),
+    exitCode: finalized.exitCode,
+    accept: finalized.accept,
   }
   if (tracking.workspacePath) writeWorkerResultFile(tracking.workspacePath, result)
-  enqueueResponse(tracking.orchestratorId, result)
+  enqueueResponse(tracking.orchestratorId, {
+    workerName: result.workerName,
+    workerRole: result.workerRole,
+    status: finalized.status === 'done' ? 'completed' : 'failed',
+    summary: result.summary,
+    shortSummary: finalized.shortSummary,
+    timestamp: result.timestamp,
+    exitCode: result.exitCode,
+  })
+  notifyWorkerStatus({
+    workerId,
+    orchestratorId: tracking.orchestratorId,
+    name: tracking.name,
+    status: finalized.status,
+    exitCode: result.exitCode,
+  })
 
   workerTracking.delete(workerId)
-  log.info('[orquestra] Worker %s idle, response enqueued + result file written', workerId)
+  log.info('[orquestra] %s idle → %s', tracking.name, finalized.status)
 }
 
 /** Enqueue a response for an orchestrator. */
@@ -343,17 +974,21 @@ function processNextResponse(orchestratorId: string): void {
   if (!queue || queue.length === 0) return
 
   const response = queue.shift()!
-  const marker = response.status === 'completed' ? '✓' : '⏳'
   const cr = String.fromCharCode(13)
-  const message = '[WORKER\u2192ORQUESTRADOR] Worker "' + response.workerName + '" ' + response.status + ':\n' + response.summary + '\n'
+  // Short one-liner only — full summary stays in .orquestra-results JSON.
+  const message = formatMaestroWorkerInject({
+    workerName: response.workerName,
+    status: response.status,
+    shortSummary: response.shortSummary || response.summary,
+  }) + '\n'
 
   // Guard: orchestrator terminal may have been closed since the response was queued
   try { writeTerminal(orchestratorId, message + cr) }
   catch (err) {
-    log.warn('[orquestra] orchestrator %s gone, dropping response: %s', orchestratorId, err)
+    log.warn('[worker] maestro gone, drop response: %s', err)
     return
   }
-  log.info('[orquestra] Injected response from %s into %s', response.workerName, orchestratorId)
+  // silent — worker status already logged
 
   // Process next after a delay (don't flood the orchestrator)
   if (queue.length > 0) {
@@ -602,7 +1237,8 @@ async function spawnTerminal(
   }
 
   const onExit = (id: string, exitCode: number): void => {
-    onWorkerExit(id)
+    onWorkerExit(id, exitCode)
+    onMaestroPtyGone(id)
     if (shuttingDown) return
     if (exitCode === 0 && !sawData && Date.now() - spawnedAt < INSTANT_EXIT_THRESHOLD_MS) {
       log.warn(
@@ -644,6 +1280,7 @@ function killTerminal(id: string): void {
   logger.flush()
   removeLogger(id)
   runtimeForTerminal(id)?.process.kill(id)
+  onMaestroPtyGone(id)
   cleanupTerminal(id)
 }
 
@@ -662,7 +1299,6 @@ export function registerHandlers(): void {
   )
 
   ipcMain.handle(TERMINAL_WRITE, async (_event, terminalId: string, data: string) => {
-    log.info('[terminal] WRITE to %s: %d bytes, preview: %s', terminalId, data.length, data.slice(0, 80))
     writeTerminal(terminalId, data)
   })
 
@@ -759,170 +1395,211 @@ export function registerHandlers(): void {
     trackWorker(workerId, orchestratorId, name, role, workspacePath || '')
   })
 
+  ipcMain.handle(
+    ORQUESTRA_NOTE_ROLE_INJECT,
+    async (_event, workerId: string, injectText: string, roleFileText?: string): Promise<void> => {
+      noteWorkerRoleInjected(
+        workerId,
+        typeof injectText === 'string' ? injectText : '',
+        typeof roleFileText === 'string' ? roleFileText : null,
+      )
+    },
+  )
+
   // Worker readiness check — used by useOrquestra to detect when the agent
   // inside a worker terminal has started producing output (replaces the
   // hardcoded 8s delay with an adaptive check).
+  ipcMain.handle(ORQUESTRA_LIST_WORKERS, async (_event, orchestratorId?: string): Promise<OrquestraWorkerSummary[]> => {
+    return listTrackedWorkers(orchestratorId)
+  })
+
   ipcMain.handle(WORKER_HAS_OUTPUT, async (_event, workerPtyId: string): Promise<boolean> => {
     const w = workerTracking.get(workerPtyId)
     return w !== undefined && w.outputBuffer.length > 0
   })
 
-  ipcMain.handle(TERMINAL_SET_MAESTRO, async (_event, terminalId: string, enabled: boolean, workspacePath?: string): Promise<void> => {
-    setOrquestraTerminal(terminalId, enabled)
-    // If the renderer didn't supply a workspace path (e.g. no workspace is
-    // selected), fall back to the terminal's CWD. Without a valid path the
-    // crown markers, APPEND_SYSTEM.md, and orchestrator.js won't be written
-    // and maestro mode is effectively broken.
-    if (enabled && !workspacePath) {
-      try {
-        const runtime = getRuntimeForTerminal(terminalId)
-        if (runtime) {
-          const cwd = await runtime.process.getCwd(terminalId)
-          if (cwd) workspacePath = cwd
-        }
-      } catch { /* best-effort — leave workspacePath as-is */ }
-    }
-    if (enabled) {
-      const cliPath = getOrquestraCliDir()
-      // Copy orquestra.js + skill file to workspace
-      if (workspacePath) {
-        // Validate the workspace path — same boundary as all other IPC
-        // file operations. The renderer should only be able to write
-        // maestro files inside an allowed workspace root.
-        try {
-          await validatePathStrict(workspacePath)
-        } catch {
-          log.warn('[terminal] invalid workspace path for maestro: %s', workspacePath)
-          return
-        }
-        try {
-          // Copy orquestra.js to workspace root
-          const cliJsSrc = path.join(cliPath, 'orquestra.js')
-          const cliJsDst = path.join(workspacePath, 'orquestra.js')
-          if (fs.existsSync(cliJsSrc)) fs.copyFileSync(cliJsSrc, cliJsDst)
-
-          // Copy worker skill to .claude/commands/worker.md
-          const commandsDir = path.join(workspacePath, '.claude', 'commands')
-          if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
-          const workerSkillSrc = path.join(cliPath, 'orquestra-worker-skill.md')
-          const workerSkillDst = path.join(commandsDir, 'worker.md')
-          if (fs.existsSync(workerSkillSrc)) fs.copyFileSync(workerSkillSrc, workerSkillDst)
-
-          // Create .orquestra-commands directory
-          const cliCmdDir = path.join(workspacePath, '.orquestra-commands')
-          if (!fs.existsSync(cliCmdDir)) fs.mkdirSync(cliCmdDir, { recursive: true })
-
-          // Write crown marker so the orquestra-maestro Pi extension can
-          // auto-inject the orchestration prompt into this workspace.
-          const orquestraDir = path.join(workspacePath, '.orquestra')
-          if (!fs.existsSync(orquestraDir)) fs.mkdirSync(orquestraDir, { recursive: true })
-          const crownMarker = path.join(orquestraDir, 'crown.json')
-          fs.writeFileSync(crownMarker, JSON.stringify({
-            terminalPtyId: terminalId,
-            activatedAt: Date.now(),
-            workspacePath,
-          }, null, 2))
-
-          // Ensure pi-agent dir exists for the maestro extension copy below
-          const piAgentDir = path.join(orquestraDir, 'pi-agent')
-          if (!fs.existsSync(piAgentDir)) fs.mkdirSync(piAgentDir, { recursive: true })
-
-          // Copy maestro Pi extension to pi-agent/extensions/orquestra-maestro/
-          // so Pi auto-discovers the custom tools (orquestra_recruit, etc.)
-          // when the user runs verboo in this workspace's terminal.
-          const extSrcDir = path.join(app.getAppPath(), 'src', 'agent', 'extensions', 'orquestra-maestro')
-          const extDstDir = path.join(piAgentDir, 'extensions', 'orquestra-maestro')
-          if (fs.existsSync(extSrcDir)) {
-            if (!fs.existsSync(extDstDir)) fs.mkdirSync(extDstDir, { recursive: true })
-            ;['index.ts', 'package.json'].forEach((file) => {
-              const src = path.join(extSrcDir, file)
-              const dst = path.join(extDstDir, file)
-              if (fs.existsSync(src)) fs.copyFileSync(src, dst)
-            })
+  ipcMain.handle(
+    TERMINAL_SET_MAESTRO,
+    async (
+      _event,
+      terminalId: string,
+      enabled: boolean,
+      workspacePath?: string,
+    ): Promise<TerminalSetMaestroResult> => {
+      // ----- DISABLE -----
+      if (!enabled) {
+        setOrquestraTerminal(terminalId, false)
+        if (workspacePath) {
+          try {
+            const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
+            if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
+            const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
+            if (fs.existsSync(claudeLocalPath)) fs.unlinkSync(claudeLocalPath)
+          } catch (err) {
+            log.error('[terminal] failed to remove crown markers: %s', err)
           }
-
-          // Write CLAUDE.local.md in the workspace root so standalone
-          // `verboo` auto-loads the maestro instructions (Verboo reads
-          // CLAUDE.md / CLAUDE.local.md from the project root). This is the
-          // primary mechanism — it works without env vars or Pi mechanisms.
-          const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-          const maestroInstructions = [
-            '# Maestro Mode -- ACTIVE',
-            '',
-            'You are operating in MAESTRO MODE. This overrides your default "do the work yourself" behavior.',
-            '',
-            '## WORKFLOW (execute in order, do not skip steps)',
-            '',
-            '**STEP 1 — ANALYZE**: Does the request have 2+ independent sub-tasks?',
-            '  - "Create an HTML page and also an API" → YES, 2 sub-tasks',
-            '  - "Build HTML, CSS, and JS" → YES, 3 sub-tasks',
-            '  - "I need 3 files: index.html, style.css, app.js" → YES, 3 sub-tasks',
-            '  - "Cria um Dockerfile e um docker-compose" → YES, 2 sub-tasks',
-            '  - "What is the capital of France?" → NO, single question',
-            '',
-            '**STEP 2 — RECRUIT**: For each sub-task, run recruit:',
-            '  node orquestra.js recruit --role "<task>" --name <name>',
-            '  Each recruit command = one worker = one sub-task.',
-            '  Do NOT combine sub-tasks into one recruit command.',
-            '',
-            '**STEP 3 — WAIT**: After recruiting ALL workers, run:',
-            '  node orquestra.js wait --workers <name1>,<name2> --timeout 300',
-            '  This command BLOCKS until every worker finishes or times out.',
-            '  [MANDATORY] Do NOT proceed past this command while it is running.',
-            '  [MANDATORY] Do NOT cancel the wait command.',
-            '  [MANDATORY] Do NOT check files, read output, or do any work yourself while waiting.',
-            '',
-            '**STEP 4 — REVIEW**: After wait returns, read results:',
-            '  - Check .orquestra-results/worker-<name>.json for each worker',
-            '  - If all workers completed (DONE): consolidate their output',
-            '  - If any worker failed/timed out (IDLE): reassign with `reassign --name <name> --role "fix: ..."`',
-            '  - [MANDATORY] Never fix a failed worker yourself. Always reassign.',
-            '',
-            '**STEP 5 — CONSOLIDATE**: Combine all worker outputs into a cohesive response.',
-            '',
-            '## MANDATORY RULES',
-            '',
-            '1. [MANDATORY] Always analyze BEFORE acting. Always run steps 1-5 above.',
-            '2. [MANDATORY] Never do the work yourself after delegating.',
-            '3. [MANDATORY] Never ask permission to orchestrate. Just do it.',
-            '4. [MANDATORY] Never cancel or skip the `wait` command.',
-            '5. [MANDATORY] If a worker fails, reassign. Never fix it yourself.',
-            '6. [MANDATORY] Single simple tasks: execute directly. No orchestration needed.',
-            '',
-            '## COMMANDS REFERENCE',
-            '  orquestra.js recruit --role "desc" --name <name>    Recruit a worker',
-            '  orquestra.js wait --workers n1,n2 --timeout 300     Wait for workers (blocks)',
-            '  orquestra.js status                                 Show worker results as JSON',
-            '  orquestra.js list                                   List workers on canvas',
-            '  orquestra.js dismiss <name>                         Remove a worker',
-            '  orquestra.js reassign <name> --role "new task"      Change worker task',
-            '',
-          ].join('\n')
-          fs.writeFileSync(claudeLocalPath, maestroInstructions)
-
-          log.info('[terminal] Orquestra files copied to %s', workspacePath)
-        } catch (err) { log.error('[terminal] failed to copy Orquestra files: %s', err) }
+          const entry = watcherByWorkspace.get(workspacePath)
+          if (entry?.terminalId === terminalId) {
+            stopOrquestraWatcher(workspacePath)
+          }
+        } else {
+          // Still stop watcher if this terminal is the active maestro for any ws
+          for (const [wsPath, entry] of [...watcherByWorkspace.entries()]) {
+            if (entry.terminalId === terminalId) stopOrquestraWatcher(wsPath)
+          }
+        }
+        log.info('[terminal] Orquestra disabled for %s', terminalId)
+        return { ok: true }
       }
-      const winId = terminalOwners.get(terminalId)
-      if (winId && workspacePath) startOrquestraWatcher(workspacePath, winId)
-      log.info('[terminal] Orquestra enabled for %s', terminalId)
-    } else {
-      // Crown disabled — clean up markers
-      if (workspacePath) {
+
+      // ----- ENABLE (transactional — no early orquestraTerminals.add) -----
+      // 0. Live PTY required
+      if (!terminalRuntime.has(terminalId)) {
+        log.warn('[terminal] Maestro enable rejected: PTY %s not live', terminalId)
+        return { ok: false, error: 'Terminal is not running', code: 'PTY_GONE' }
+      }
+
+      // 1. Resolve workspace path
+      if (!workspacePath) {
         try {
-          const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
-          if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
-          // Remove CLAUDE.local.md so Verboo stops seeing maestro instructions
-          const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-          if (fs.existsSync(claudeLocalPath)) fs.unlinkSync(claudeLocalPath)
-        } catch (err) { log.error('[terminal] failed to remove crown markers: %s', err) }
+          const runtime = getRuntimeForTerminal(terminalId)
+          if (runtime) {
+            const cwd = await runtime.process.getCwd(terminalId)
+            if (cwd) workspacePath = cwd
+          }
+        } catch { /* best-effort */ }
       }
-      log.info('[terminal] Orquestra disabled for %s', terminalId)
-    }
-  })
+      if (!workspacePath) {
+        return { ok: false, error: 'No workspace path for Maestro', code: 'NO_WORKSPACE' }
+      }
+
+      // 3. Assets
+      const assets = checkMaestroAssets()
+      if (!assets.ok || !assets.cliDir || !assets.extensionDir) {
+        log.error('[terminal] Maestro assets missing: %s', assets.missing.join(', '))
+        return {
+          ok: false,
+          error: `Maestro assets missing: ${assets.missing.join(', ')}`,
+          code: 'ASSETS_MISSING',
+        }
+      }
+
+      // 4. Path validation
+      try {
+        await validatePathStrict(workspacePath)
+      } catch {
+        log.warn('[terminal] invalid workspace path for maestro: %s', workspacePath)
+        return { ok: false, error: 'Invalid workspace path', code: 'INVALID_PATH' }
+      }
+
+      const orchestrationSettings = getAllSettings()
+      const cliPath = assets.cliDir
+      const extSrcDir = assets.extensionDir
+      const partial: string[] = []
+
+      try {
+        // 5. Copy required files (fail if any missing — no silent skip)
+        const cliJsSrc = path.join(cliPath, 'orquestra.js')
+        const cliJsDst = path.join(workspacePath, 'orquestra.js')
+        fs.copyFileSync(cliJsSrc, cliJsDst)
+        partial.push(cliJsDst)
+
+        const commandsDir = path.join(workspacePath, '.claude', 'commands')
+        if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
+        const workerSkillSrc = path.join(cliPath, 'orquestra-worker-skill.md')
+        const workerSkillDst = path.join(commandsDir, 'worker.md')
+        fs.copyFileSync(workerSkillSrc, workerSkillDst)
+        partial.push(workerSkillDst)
+
+        const cliCmdDir = path.join(workspacePath, '.orquestra-commands')
+        if (!fs.existsSync(cliCmdDir)) fs.mkdirSync(cliCmdDir, { recursive: true })
+
+        const orquestraDir = path.join(workspacePath, '.orquestra')
+        if (!fs.existsSync(orquestraDir)) fs.mkdirSync(orquestraDir, { recursive: true })
+
+        const piAgentDir = path.join(orquestraDir, 'pi-agent')
+        if (!fs.existsSync(piAgentDir)) fs.mkdirSync(piAgentDir, { recursive: true })
+        const extDstDir = path.join(piAgentDir, 'extensions', 'orquestra-maestro')
+        if (!fs.existsSync(extDstDir)) fs.mkdirSync(extDstDir, { recursive: true })
+        for (const file of ['index.ts', 'package.json', 'multiTask.ts'] as const) {
+          const src = path.join(extSrcDir, file)
+          if (!fs.existsSync(src)) {
+            throw new Error(`Missing maestro extension file: ${file}`)
+          }
+          const dst = path.join(extDstDir, file)
+          fs.copyFileSync(src, dst)
+          partial.push(dst)
+        }
+
+        // Project skill injection — Claude/Verboo slash & project skills
+        const skillSrc = path.join(cliPath, 'orquestra-skill.md')
+        if (fs.existsSync(skillSrc)) {
+          const skillCmdDst = path.join(commandsDir, 'orquestra.md')
+          fs.copyFileSync(skillSrc, skillCmdDst)
+          partial.push(skillCmdDst)
+          const skillDir = path.join(workspacePath, '.claude', 'skills', 'orquestra')
+          if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true })
+          const skillMd = path.join(skillDir, 'SKILL.md')
+          fs.copyFileSync(skillSrc, skillMd)
+          partial.push(skillMd)
+        }
+
+        // 6. Takeover: cascade previous maestro workers + rebind (full KD4)
+        const existing = watcherByWorkspace.get(workspacePath)
+        const previousPty =
+          existing && existing.terminalId !== terminalId ? existing.terminalId : null
+        if (previousPty) {
+          cascadeOrchestratorWorkers(previousPty, 'takeover')
+          orquestraTerminals.delete(previousPty)
+          log.info('[terminal] Maestro takeover: %s → %s', previousPty, terminalId)
+        }
+
+        // 7. crown.json + CLAUDE.local.md
+        const crownMarker = path.join(orquestraDir, 'crown.json')
+        fs.writeFileSync(crownMarker, JSON.stringify({
+          terminalPtyId: terminalId,
+          activatedAt: Date.now(),
+          workspacePath,
+          settings: buildMaestroSettingsSnapshot(orchestrationSettings),
+        }, null, 2))
+        partial.push(crownMarker)
+
+        const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
+        const maestroInstructions = buildMaestroInstructions(orchestrationSettings)
+        fs.writeFileSync(claudeLocalPath, maestroInstructions)
+        partial.push(claudeLocalPath)
+        void import('./linkedContext')
+          .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
+          .catch(() => { /* non-fatal */ })
+
+        // 8. Start or rebind watcher
+        const winId = terminalOwners.get(terminalId)
+        if (winId != null) {
+          startOrquestraWatcher(workspacePath, winId, terminalId)
+        } else {
+          log.warn('[terminal] Maestro enable: no owner window for %s — watcher deferred', terminalId)
+        }
+
+        // 9. Only now mark maestro-enabled
+        setOrquestraTerminal(terminalId, true)
+        log.info('[terminal] Orquestra enabled for %s', terminalId)
+        return { ok: true, tookOverFrom: previousPty ?? undefined }
+      } catch (err) {
+        log.error('[terminal] Maestro enable copy/setup failed: %s', err)
+        for (const p of partial) {
+          try { if (fs.existsSync(p)) fs.unlinkSync(p) } catch { /* best effort */ }
+        }
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          code: 'COPY_FAILED',
+        }
+      }
+    },
+  )
 
   ipcMain.handle(TERMINAL_PIPE_CREATE, async (_event, sourcePtyId: string, targetPtyId: string) => {
-    log.info('[terminal] pipe create: %s -> %s', sourcePtyId, targetPtyId)
+    log.debug('[terminal] pipe create: %s -> %s', sourcePtyId, targetPtyId)
     if (!terminalRuntime.has(sourcePtyId)) {
       throw new Error(`pipe create failed: source PTY ${sourcePtyId} not found`)
     }
@@ -938,17 +1615,17 @@ export function registerHandlers(): void {
       terminalPipes.set(sourcePtyId, targets)
     }
     targets.add(targetPtyId)
-    log.info('[terminal] pipe created: %s -> %s', sourcePtyId, targetPtyId)
+    log.debug('[terminal] pipe created: %s -> %s', sourcePtyId, targetPtyId)
   })
 
   ipcMain.handle(TERMINAL_PIPE_DESTROY, async (_event, sourcePtyId: string, targetPtyId: string) => {
-    log.info('[terminal] pipe destroy: %s -> %s', sourcePtyId, targetPtyId)
+    log.debug('[terminal] pipe destroy: %s -> %s', sourcePtyId, targetPtyId)
     const targets = terminalPipes.get(sourcePtyId)
     if (targets) {
       targets.delete(targetPtyId)
       if (targets.size === 0) terminalPipes.delete(sourcePtyId)
     }
-    log.info('[terminal] pipe destroyed: %s -> %s', sourcePtyId, targetPtyId)
+    log.debug('[terminal] pipe destroyed: %s -> %s', sourcePtyId, targetPtyId)
   })
 }
 

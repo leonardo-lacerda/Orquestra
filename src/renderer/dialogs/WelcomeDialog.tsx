@@ -1,68 +1,35 @@
 // =============================================================================
-// WelcomeDialog — first-run welcome + telemetry notice, in one screen.
+// WelcomeDialog — first-run welcome screen.
 //
-// Shown once per TELEMETRY_NOTICE_VERSION, in the main window, on a (plain)
-// first-run canvas before the guided tour — so fresh installs see it once, and
-// existing users see it once more whenever the notice version is bumped (e.g.
-// the v2 switch to always-on telemetry). Purely informational: there is no
-// opt-in choice, just a privacy-policy link. Uses the app's surface tokens +
-// radius (matching the ⌘K palette) and the blue accent, with a logo header.
+// Shown once on first run, before the guided tour. A simple welcome card with
+// feature highlights and a Continue button that marks onboarding as started.
 // =============================================================================
 
 import { useState } from 'react'
-import { EnvelopeSimple } from '@phosphor-icons/react'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTranslation } from '../i18n/useTranslation'
+import type { Translations } from '../i18n/translations'
 import { OrquestraLogo } from '../ui/OrquestraLogo'
-import log from '../lib/logger'
 import headerImg from '../assets/welcome-header.jpg'
 import { AnimatedDotGrid } from './AnimatedDotGrid'
-import { TELEMETRY_NOTICE_VERSION } from '../../shared/types'
-
-const GITHUB_REPO = 'https://github.com/0-AI-UG/orquestra'
-const NEWSLETTER_URL = 'https://orquestra.cero-ai.com'
-const PRIVACY_URL = 'https://orquestra.cero-ai.com/privacy'
-
-function openLink(url: string, name: string): void {
-  try {
-    window.electronAPI?.trackLinkClick?.(name)
-    window.electronAPI?.openExternalUrl?.(url)
-  } catch { /* noop */ }
-}
-
-/** Crisp GitHub mark (the Phosphor fill icon reads as a blob at this size). */
-function GithubMark({ size = 17 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23a11.5 11.5 0 0 1 3-.405c1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-    </svg>
-  )
-}
 
 export function WelcomeDialog() {
-  const acknowledgedVersion = useSettingsStore((s) => s.telemetryNoticeAcknowledgedVersion)
+  const { t } = useTranslation()
   const loaded = useSettingsStore((s) => s._loaded)
+  const onboardingCompleted = useSettingsStore((s) => s.onboardingCompleted)
+  const setSetting = useSettingsStore((s) => s.setSetting)
 
   const [saving, setSaving] = useState(false)
   const [exiting, setExiting] = useState(false)
 
-  if (!loaded || acknowledgedVersion >= TELEMETRY_NOTICE_VERSION) return null
+  if (!loaded || onboardingCompleted) return null
 
   const onContinue = (): void => {
     if (saving) return
     setSaving(true)
     setExiting(true)
-    // Persist now (fire-and-forget; doesn't touch the local store gate that
-    // keeps this dialog mounted).
-    try {
-      void window.electronAPI.acknowledgeTelemetryNotice()
-    } catch (err) {
-      log.warn('[telemetry] notice acknowledgement failed:', err)
-    }
-    // Let the fade-out play before flipping the local setting — that unmounts
-    // this dialog and hands off to the tour (which fades in on its own), so the
-    // transition is a soft dissolve rather than a harsh cut.
     window.setTimeout(() => {
-      useSettingsStore.setState({ telemetryNoticeAcknowledgedVersion: TELEMETRY_NOTICE_VERSION })
+      setSetting('onboardingCompleted', true)
     }, 320)
   }
 
@@ -120,52 +87,50 @@ export function WelcomeDialog() {
             />
             <OrquestraLogo size={30} className="relative text-white" />
           </div>
-          <h2 className="mt-5 text-primary text-[22px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">Welcome to Orquestra</h2>
+          <h2 className="mt-5 text-primary text-[22px] font-bold tracking-tight [text-shadow:0_2px_12px_rgba(0,0,0,0.5)]">{t('welcome.welcomeTitle')}</h2>
           <p className="mt-1.5 px-10 text-center text-muted text-[12.5px] leading-relaxed">
-            An infinite canvas for your terminals, editors, browsers, and agents.
+            {t('welcome.welcomeDesc')}
           </p>
         </div>
 
-        {/* Content */}
+        {/* Feature highlights */}
+        <div className="relative px-6 pb-3 flex flex-col gap-2.5">
+          {([
+            ['featureTerminal', 'featureTerminalDesc'],
+            ['featureEditor', 'featureEditorDesc'],
+            ['featureBrowser', 'featureBrowserDesc'],
+            ['featureAgent', 'featureAgentDesc'],
+            ['featureCanvas', 'featureCanvasDesc'],
+          ] as const).map(([titleKey, descKey]) => {
+            const featureKeys: Record<string, keyof Translations> = {
+              featureTerminal: 'welcome.featureTerminal',
+              featureTerminalDesc: 'welcome.featureTerminalDesc',
+              featureEditor: 'welcome.featureEditor',
+              featureEditorDesc: 'welcome.featureEditorDesc',
+              featureBrowser: 'welcome.featureBrowser',
+              featureBrowserDesc: 'welcome.featureBrowserDesc',
+              featureAgent: 'welcome.featureAgent',
+              featureAgentDesc: 'welcome.featureAgentDesc',
+              featureCanvas: 'welcome.featureCanvas',
+              featureCanvasDesc: 'welcome.featureCanvasDesc',
+            }
+            return (
+            <div key={titleKey} className="flex items-start gap-3 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.04]">
+              <span className="text-blue-400 text-[13px] font-semibold leading-snug min-w-[72px]">{t(featureKeys[titleKey])}</span>
+              <span className="text-secondary text-[12px] leading-snug">{t(featureKeys[descKey])}</span>
+            </div>
+            )
+          })}
+        </div>
+
+        {/* Continue */}
         <div className="relative px-6 pb-6 flex flex-col gap-4">
-          {/* Community asks as two clean buttons. */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => openLink(GITHUB_REPO, 'github_star')}
-              className="flex-1 inline-flex items-center justify-center gap-2 h-9 rounded-lg border border-strong bg-surface-0/60 hover:bg-hover text-primary text-[12.5px] font-medium transition-colors"
-            >
-              <GithubMark size={15} />
-              Star on GitHub
-            </button>
-            <button
-              onClick={() => openLink(NEWSLETTER_URL, 'newsletter')}
-              className="flex-1 inline-flex items-center justify-center gap-2 h-9 rounded-lg border border-strong bg-surface-0/60 hover:bg-hover text-primary text-[12.5px] font-medium transition-colors"
-            >
-              <EnvelopeSimple size={16} />
-              Newsletter
-            </button>
-          </div>
-
-          <div className="border-t border-subtle" />
-
-          {/* Telemetry notice — informational only, no choice. */}
-          <p className="text-center text-[12px] text-secondary leading-relaxed">
-            Orquestra collects anonymous usage data and crash reports to improve the app.{' '}
-            <button
-              type="button"
-              onClick={() => openLink(PRIVACY_URL, 'privacy_policy')}
-              className="text-blue-400 hover:text-blue-300 font-medium"
-            >
-              Privacy Policy
-            </button>
-          </p>
-
           <button
             onClick={onContinue}
             disabled={saving}
             className="mt-1 h-10 rounded-lg bg-blue-500 text-white text-[13.5px] font-semibold hover:bg-blue-400 transition-colors disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Continue'}
+            {saving ? t('welcome.saving') : t('welcome.continue')}
           </button>
         </div>
       </div>

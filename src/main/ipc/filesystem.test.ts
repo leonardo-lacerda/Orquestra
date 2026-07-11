@@ -25,7 +25,8 @@ vi.mock('../windowRegistry', () => ({
 const fsModule = await import('./filesystem')
 const { registerHandlers, subscribeFsChanges } = fsModule
 const { addAllowedRoot, removeAllowedRoot } = await import('./pathValidation')
-const { FS_IMPORT_ENTRIES, FS_WATCH_START, FS_WATCH_STOP } = await import('../../shared/ipc-channels')
+const { FS_IMPORT_ENTRIES, FS_WATCH_START, FS_WATCH_STOP, FS_READ_FILE_IF_EXISTS } =
+  await import('../../shared/ipc-channels')
 const { registerTestLocalRuntime } = await import('../runtime/testLocalRuntime')
 
 registerHandlers()
@@ -33,6 +34,7 @@ registerTestLocalRuntime()
 const importEntries = handlers.get(FS_IMPORT_ENTRIES)!
 const watchStartHandler = handlers.get(FS_WATCH_START)!
 const watchStopHandler = handlers.get(FS_WATCH_STOP)!
+const readIfExistsHandler = handlers.get(FS_READ_FILE_IF_EXISTS)!
 const fakeEvent = { sender: {} } as unknown
 
 // A throwaway event arg + helper to call the handler ergonomically.
@@ -117,6 +119,33 @@ describe('FS_IMPORT_ENTRIES', () => {
 
     expect(result.created).toHaveLength(0)
     expect(result.failed).toBe(1)
+  })
+})
+
+describe('FS_READ_FILE_IF_EXISTS soft read', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orquestra-soft-read-')))
+    addAllowedRoot(root)
+  })
+
+  afterEach(async () => {
+    removeAllowedRoot(root)
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  test('returns null for missing file without throwing', async () => {
+    const missing = path.join(root, '.orquestra', 'runs', 'latest.json')
+    const result = await readIfExistsHandler(fakeEvent, missing) as string | null
+    expect(result).toBeNull()
+  })
+
+  test('returns file contents when present', async () => {
+    const file = path.join(root, 'snapshot.json')
+    await fs.writeFile(file, '{"ok":true}', 'utf8')
+    const result = await readIfExistsHandler(fakeEvent, file) as string | null
+    expect(result).toBe('{"ok":true}')
   })
 })
 

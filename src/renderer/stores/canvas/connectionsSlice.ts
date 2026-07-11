@@ -4,7 +4,7 @@
 // the underlying PTY pipe to the main process.
 // =============================================================================
 
-import type { TerminalConnection, CanvasNodeId } from '../../../shared/types'
+import type { CanvasConnectionType, TerminalConnection, CanvasNodeId } from '../../../shared/types'
 import type { CanvasGet, CanvasSet, CanvasStoreActions, CanvasStoreState } from './storeTypes'
 import { generateId } from './helpers'
 import { terminalRegistry } from '../../lib/terminal/terminalRegistry'
@@ -13,6 +13,7 @@ type ConnectionsActions = Pick<
   CanvasStoreActions,
   | 'addConnection'
   | 'removeConnection'
+  | 'setConnectionType'
   | 'removeConnectionsForNode'
   | 'getConnections'
   | 'loadConnections'
@@ -21,7 +22,7 @@ type ConnectionsActions = Pick<
 export function createConnectionsSlice(set: CanvasSet, get: CanvasGet): ConnectionsActions {
   _get = get
   return {
-    addConnection(sourceNodeId: CanvasNodeId, targetNodeId: CanvasNodeId, connectionType?: 'pipe' | 'orchestration') {
+    addConnection(sourceNodeId: CanvasNodeId, targetNodeId: CanvasNodeId, connectionType?: CanvasConnectionType) {
       const state = get()
       // Prevent self-connections
       if (sourceNodeId === targetNodeId) return null
@@ -33,18 +34,23 @@ export function createConnectionsSlice(set: CanvasSet, get: CanvasGet): Connecti
       if (existing) return existing.id
 
       const id = generateId()
+      const type = connectionType ?? 'pipe'
       const connection: TerminalConnection = {
         id,
         sourceNodeId,
         targetNodeId,
         autoExecute: true,
-        type: connectionType ?? 'pipe',
+        type,
+        metadata: {
+          createdAt: Date.now(),
+        },
       }
 
       set({ connections: { ...state.connections, [id]: connection } })
 
-      // Only sync PTY pipe for actual pipe connections, not visual-only orchestration arrows
-      if (connectionType !== 'orchestration') {
+      // Only sync PTY pipes for actual pipe connections. Context and orchestration
+      // arrows are visual/data links and must not write into another terminal.
+      if (isPipeConnection(connection)) {
         syncPipeToMain(connection, true)
       }
 
@@ -59,7 +65,17 @@ export function createConnectionsSlice(set: CanvasSet, get: CanvasGet): Connecti
       const { [id]: _removed, ...rest } = state.connections
       set({ connections: rest })
 
-      syncPipeToMain(conn, false)
+      if (isPipeConnection(conn)) syncPipeToMain(conn, false)
+    },
+
+    setConnectionType(id: string, type: CanvasConnectionType) {
+      const state = get()
+      const connection = state.connections[id]
+      if (!connection || (connection.type ?? 'pipe') === type) return
+      if (isPipeConnection(connection)) syncPipeToMain(connection, false)
+      const updated = { ...connection, type }
+      set({ connections: { ...state.connections, [id]: updated } })
+      if (isPipeConnection(updated)) syncPipeToMain(updated, true)
     },
 
     removeConnectionsForNode(nodeId: CanvasNodeId) {
@@ -67,7 +83,7 @@ export function createConnectionsSlice(set: CanvasSet, get: CanvasGet): Connecti
       const updated: Record<string, TerminalConnection> = {}
       for (const [id, conn] of Object.entries(state.connections)) {
         if (conn.sourceNodeId === nodeId || conn.targetNodeId === nodeId) {
-          syncPipeToMain(conn, false)
+          if (isPipeConnection(conn)) syncPipeToMain(conn, false)
         } else {
           updated[id] = conn
         }
@@ -83,13 +99,30 @@ export function createConnectionsSlice(set: CanvasSet, get: CanvasGet): Connecti
     },
 
     loadConnections(connections: Record<string, TerminalConnection>) {
-      set({ connections })
+      const normalized = normalizeConnections(connections)
+      set({ connections: normalized })
       // Re-sync all pipes to main process on workspace load
-      for (const conn of Object.values(connections)) {
-        syncPipeToMain(conn, true)
+      for (const conn of Object.values(normalized)) {
+        if (isPipeConnection(conn)) syncPipeToMain(conn, true)
       }
     },
   }
+}
+
+function isPipeConnection(conn: TerminalConnection): boolean {
+  return (conn.type ?? 'pipe') === 'pipe'
+}
+
+function normalizeConnections(connections: Record<string, TerminalConnection>): Record<string, TerminalConnection> {
+  const normalized: Record<string, TerminalConnection> = {}
+  for (const [id, conn] of Object.entries(connections)) {
+    normalized[id] = {
+      ...conn,
+      type: conn.type ?? 'pipe',
+      autoExecute: conn.autoExecute ?? true,
+    }
+  }
+  return normalized
 }
 
 // ---------------------------------------------------------------------------
@@ -116,43 +149,27 @@ export function createConnectionsSliceWithGet(set: CanvasSet, get: CanvasGet): C
 }
 
 async function syncPipeToMain(conn: TerminalConnection, create: boolean): Promise<void> {
-  if (!_get) { console.warn('[connections] no _get'); return }
+  if (!_get) return
   const state = _get()
 
   const sourceNode = state.nodes[conn.sourceNodeId]
   const targetNode = state.nodes[conn.targetNodeId]
-  if (!sourceNode || !targetNode) {
-    console.warn('[connections] node not found', { src: conn.sourceNodeId, tgt: conn.targetNodeId })
-    return
-  }
+  if (!sourceNode || !targetNode) return
 
   const sourceEntry = terminalRegistry.getEntry(sourceNode.panelId)
   const targetEntry = terminalRegistry.getEntry(targetNode.panelId)
   const sourcePtyId = sourceEntry?.ptyId
   const targetPtyId = targetEntry?.ptyId
 
-  console.log('[connections] syncPipe:', {
-    create,
-    srcPanel: sourceNode.panelId,
-    tgtPanel: targetNode.panelId,
-    srcPty: sourcePtyId ?? '(null)',
-    tgtPty: targetPtyId ?? '(null)',
-  })
-
-  if (!sourcePtyId || !targetPtyId) {
-    console.warn('[connections] SKIP - ptyId missing')
-    return
-  }
+  if (!sourcePtyId || !targetPtyId) return
 
   try {
     if (create) {
       await window.electronAPI.terminalPipeCreate(sourcePtyId, targetPtyId)
-      console.log('[connections] pipe CREATED:', sourcePtyId, '->', targetPtyId)
     } else {
       await window.electronAPI.terminalPipeDestroy(sourcePtyId, targetPtyId)
-      console.log('[connections] pipe DESTROYED:', sourcePtyId, '->', targetPtyId)
     }
-  } catch (err) {
-    console.warn('[connections] pipe FAILED:', err)
+  } catch {
+    // silent — pipe is best-effort during layout churn
   }
 }

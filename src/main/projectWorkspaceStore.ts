@@ -324,7 +324,7 @@ export async function saveProjectStateLocal(
       writes.push(atomicWrite(workspacePath(rootPath), wsJson).then(() => rememberWorkspaceContent(rootPath, wsJson)))
     }
     await Promise.all(writes)
-    log.debug('Project state saved to %s', orquestraDir(rootPath))
+    // Success is silent — routine autosave must not spam the console.
   })
 }
 
@@ -449,7 +449,7 @@ async function saveProjectStateRemote(
     runtime.file.writeFile(workspaceFile, JSON.stringify(workspace, null, 2)),
     runtime.file.writeFile(sessionFile, JSON.stringify(session, null, 2)),
   ])
-  log.debug('Remote project state saved to %s', rootPath)
+  // Success is silent — routine remote autosave must not spam the console.
 }
 
 async function loadProjectStateRemote(rootPath: string): Promise<{

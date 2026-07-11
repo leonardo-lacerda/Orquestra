@@ -19,6 +19,7 @@ import { GeneralSettings } from './GeneralSettings'
 import { AppearanceSettings } from './AppearanceSettings'
 import { CanvasSettings } from './CanvasSettings'
 import { TerminalSettings } from './TerminalSettings'
+import { OrchestrationSettings } from './OrchestrationSettings'
 import { BrowserSettings } from './BrowserSettings'
 import { SidebarSettings } from './SidebarSettings'
 import { FileExplorerSettings } from './FileExplorerSettings'
@@ -40,6 +41,7 @@ function getSections(t: (key: keyof Translations) => string) {
     { title: t('settings.section.appearance'), component: AppearanceSettings },
     { title: t('settings.section.canvas'), component: CanvasSettings },
     { title: t('settings.section.terminal'), component: TerminalSettings },
+    { title: t('settings.section.orchestration'), component: OrchestrationSettings },
     { title: t('settings.section.browser'), component: BrowserSettings },
     { title: t('settings.section.sidebar'), component: SidebarSettings },
     { title: t('settings.section.fileExplorer'), component: FileExplorerSettings },

@@ -28,7 +28,7 @@ export function GeneralSettings() {
       >
         <button
           type="button"
-          onClick={() => window.electronAPI?.openExternalUrl('https://orquestra.cero-ai.com/privacy')}
+          onClick={() => window.electronAPI?.openExternalUrl('https://orquestra.space/privacy')}
           className="text-blue-400 hover:text-blue-300 text-[12px] font-medium whitespace-nowrap"
         >
           {t('general.privacyPolicy')}

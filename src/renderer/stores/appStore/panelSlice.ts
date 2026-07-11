@@ -28,6 +28,7 @@ import {
 } from '../../lib/workspace/canvasAccess'
 import { clearActivePanelIfMatches } from '../../lib/activePanel'
 import { recordRecentFile } from '../../lib/fs/recentFiles'
+import { disableMaestroForPanel } from '../../lib/maestro/disableMaestroForPanel'
 
 type PanelSliceActions = Pick<
   AppStoreActions,
@@ -47,6 +48,7 @@ type PanelSliceActions = Pick<
   | 'updatePanelTabs'
   | 'updatePanelProxy'
   | 'updatePanelFilePath'
+  | 'setPanelMaestro'
   | 'setPanelDirty'
   | 'setPanelMarkdownPreview'
   | 'setPanelUnsavedContent'
@@ -190,6 +192,11 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
       const ws = get().workspaces.find((w) => w.id === workspaceId)
       const panel = ws?.panels[panelId]
 
+      // Maestro: disable before dispose so ptyId is still available for IPC.
+      if (panel?.type === 'terminal' && panel.maestro) {
+        void disableMaestroForPanel(workspaceId, panelId)
+      }
+
       // Tear down window-local content (PTY killed, xterm + pi disposed). The
       // close-vs-transfer decision lives in teardownPanelContent — transfer
       // paths (detach, cross-window drop) go through removePanelFromWindow.
@@ -206,7 +213,11 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
           if (node.panelId) childIds.add(node.panelId)
         }
         for (const id of childIds) {
-          teardownPanelContent(id, ws?.panels[id]?.type, 'close')
+          const child = ws?.panels[id]
+          if (child?.type === 'terminal' && child.maestro) {
+            void disableMaestroForPanel(workspaceId, id)
+          }
+          teardownPanelContent(id, child?.type, 'close')
           clearActivePanelIfMatches(id)
         }
         releaseCanvasStoreForPanel(panelId)
@@ -290,6 +301,16 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
 
     updatePanelFilePath(workspaceId, panelId, filePath) {
       setPanelField(set, workspaceId, panelId, (panel) => ({ ...panel, filePath }))
+    },
+
+    setPanelMaestro(workspaceId, panelId, maestro) {
+      // No-op when unchanged — a new panel object every call re-renders the
+      // whole workspace and can re-fire Maestro re-arm effects (React #185).
+      setPanelField(set, workspaceId, panelId, (panel) => {
+        const next = maestro ? true : undefined
+        if (panel.maestro === next) return panel
+        return { ...panel, maestro: next }
+      })
     },
 
     setPanelDirty(workspaceId, panelId, dirty) {

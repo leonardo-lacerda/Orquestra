@@ -9,16 +9,13 @@
 //   • checkForUpdatesAndNotify — shows the native OS notification when an update
 //                            has downloaded and is ready to install.
 //
-// On top of the defaults we add three things, because the silent default path
+// On top of the defaults we add two things, because the silent default path
 // gave us no way to see — or recover from — a failed install:
-//   1. Telemetry on EVERY updater event (check / available / progress /
-//      downloaded / error) so we can see where real installs die. `update_error`
-//      is the key signal a Squirrel.Mac swap or signature check failed.
-//   2. An install-loop detector (./updateState): we persist the version we
+//   1. An install-loop detector (./updateState): we persist the version we
 //      staged and, on each launch, check whether we actually advanced. After
 //      MAX_INSTALL_ATTEMPTS silent failures we stop trusting the auto path and
 //      surface a manual-reinstall prompt — the escape hatch for "trapped" users.
-//   3. macOS App Translocation / not-in-/Applications: quitAndInstall silently
+//   2. macOS App Translocation / not-in-/Applications: quitAndInstall silently
 //      cannot replace the bundle from there, so we disable self-update when
 //      ineligible and offer the manual download (or a move to /Applications).
 //
@@ -33,7 +30,6 @@ import { app, dialog, shell, ipcMain } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import log from './logger'
 import { getSettingSync } from './store'
-import { sendEvent } from './analytics'
 import { canSelfUpdate } from './updateInstaller'
 import { createJsonStateFile } from './jsonStateFile'
 import { broadcastToAll } from './windowRegistry'
@@ -46,9 +42,8 @@ import {
   type UpdateRecord,
 } from './updateState'
 
-const GITHUB_OWNER = 'leonardo-lacerda'
-const GITHUB_REPO = 'Orquestra'
-const RELEASES_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+const SUPABASE_BUCKET = 'https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases'
+const RELEASES_URL = SUPABASE_BUCKET
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 
 /** Persisted "what did we last stage, and how often has it failed to apply"
@@ -70,16 +65,9 @@ export function isUpdatePendingInstall(): boolean { return updatePendingInstall 
  *  nag on every 15-minute poll. Reset on an explicit "Check for Updates…". */
 let manualPrompted = false
 
-/** Last download-progress bucket we reported, so we emit telemetry at
+/** Last download-progress bucket we logged, so we print progress at
  *  0/25/50/75/100% milestones instead of on every progress tick. */
 let lastProgressBucket = -1
-
-/** Whether we've already tracked an `update_check_started` this session. The
- *  updater checks on launch AND every 15 minutes, so tracking every check turns
- *  the event into an uptime heartbeat that swamps real user-action events in
- *  analytics. Collapse it to once per process — enough to count "sessions that
- *  checked" without the 15-minute noise. */
-let checkStartedTracked = false
 
 /** Version of the update found this session (set on update-available), so an
  *  `error` event can tell "a known update failed to apply" (→ offer the manual
@@ -91,11 +79,6 @@ let availableVersion: string | null = null
  *  that can't actually install, so recording its "pending v99.0.0" would wrongly
  *  nag on the next normal `npm run dev`. */
 let persistInstallState = false
-
-/** Fire-and-forget analytics; never let a telemetry failure touch the updater. */
-function track(name: string, props?: Record<string, unknown>): void {
-  void sendEvent(name, props ?? {}).catch(() => {})
-}
 
 /** Latest status pushed to the renderer. Cached so a window that mounts AFTER
  *  the download-finished event can pull the current state (UPDATE_GET_STATUS)
@@ -117,7 +100,6 @@ function registerUpdateIpc(): void {
   ipcMain.handle(UPDATE_GET_STATUS, (): UpdateStatus => lastStatus)
   ipcMain.handle(UPDATE_QUIT_AND_INSTALL, (): boolean => {
     if (!updatePendingInstall || !canSelfUpdate()) return false
-    track('update_restart_clicked', { version: availableVersion })
     // quitAndInstall quits the app, lets Squirrel.Mac swap the bundle while
     // NOTHING is running, then relaunches the new version itself. That avoids
     // the failure we hit with autoInstallOnAppQuit: a fast manual reopen racing
@@ -136,7 +118,6 @@ function registerUpdateIpc(): void {
 async function promptManualReinstall(version: string, opts: { offerMove: boolean }): Promise<void> {
   if (manualPrompted) return
   manualPrompted = true
-  track('update_manual_fallback_shown', { version: version || null })
 
   const buttons = opts.offerMove
     ? ['Download latest', 'Move to Applications', 'Later']
@@ -164,7 +145,6 @@ async function promptManualReinstall(version: string, opts: { offerMove: boolean
   }
 
   if (response === 0) {
-    track('update_manual_fallback_clicked', { version: version || null })
     void shell.openExternal(RELEASES_URL)
   } else if (opts.offerMove && response === 1) {
     try {
@@ -201,16 +181,12 @@ function runCheck(eligible: boolean): Promise<unknown> {
   })
 }
 
-/** Attach telemetry + behaviour to every electron-updater event. `eligible`
+/** Attach behaviour to every electron-updater event. `eligible`
  *  decides whether an available update auto-downloads or routes to the manual
  *  fallback (translocated mac). */
 function wireUpdaterEvents(eligible: boolean): void {
   autoUpdater.on('checking-for-update', () => {
-    log.info('[auto-updater] checking for update')
-    if (!checkStartedTracked) {
-      checkStartedTracked = true
-      track('update_check_started')
-    }
+    log.debug('[auto-updater] checking for update')
     pushStatus({ state: 'checking', version: availableVersion })
   })
 
@@ -219,7 +195,6 @@ function wireUpdaterEvents(eligible: boolean): void {
     availableVersion = version || null
     lastProgressBucket = -1
     log.info('[auto-updater] update available: v%s (eligible: %s)', version, eligible)
-    track('update_available', { version: version || null })
     pushStatus({ state: 'available', version: version || null })
     if (!eligible) {
       // Translocated / not in /Applications — can't self-update from here. Offer
@@ -234,7 +209,7 @@ function wireUpdaterEvents(eligible: boolean): void {
     // marker so the error handler stays silent (a still-staged install is
     // tracked separately via updatePendingInstall, which it also honors).
     availableVersion = null
-    log.info('[auto-updater] no update available (current v%s)', String(info?.version ?? app.getVersion()))
+    log.debug('[auto-updater] no update available (current v%s)', String(info?.version ?? app.getVersion()))
   })
 
   autoUpdater.on('download-progress', (p) => {
@@ -243,7 +218,6 @@ function wireUpdaterEvents(eligible: boolean): void {
     if (bucket > lastProgressBucket) {
       lastProgressBucket = bucket
       log.info('[auto-updater] download progress ~%d%%', bucket)
-      track('update_download_progress', { percent: bucket })
       pushStatus({ state: 'downloading', version: availableVersion, percent: bucket })
     }
   })
@@ -264,7 +238,6 @@ function wireUpdaterEvents(eligible: boolean): void {
       updateStateStore.set({ pendingVersion: staged, attempts })
     }
     log.info('[auto-updater] update downloaded: v%s — will install on quit', version)
-    track('update_downloaded', { version: version || null })
     // The signal the in-app modal acts on: offer Restart now / Install on quit.
     pushStatus({ state: 'downloaded', version: version || null })
   })
@@ -272,7 +245,6 @@ function wireUpdaterEvents(eligible: boolean): void {
   autoUpdater.on('error', (err) => {
     const message = err?.message || String(err)
     log.error('[auto-updater] error: %O', err)
-    track('update_error', { message })
     pushStatus({ state: 'error', version: availableVersion })
     // If a known update failed (e.g. Squirrel.Mac "ditto: Couldn't read PKZip
     // signature" — a signing/staging failure, the classic trapped-user cause),
@@ -296,7 +268,6 @@ function evaluateInstallOutcome(): void {
   switch (decision.kind) {
     case 'succeeded':
       log.info('[auto-updater] previous update installed successfully (now v%s)', app.getVersion())
-      track('update_install_succeeded', { version: app.getVersion() })
       break
     case 'retry':
       log.warn('[auto-updater] staged update v%s did not apply (attempt %d) — will retry',
@@ -305,7 +276,6 @@ function evaluateInstallOutcome(): void {
     case 'give-up-manual':
       log.error('[auto-updater] staged update v%s failed to install repeatedly — offering manual reinstall',
         record.pendingVersion)
-      track('update_install_failed_repeatedly', { version: record.pendingVersion })
       void promptManualReinstall(record.pendingVersion ?? '', { offerMove: !canSelfUpdate() })
       break
     case 'none':

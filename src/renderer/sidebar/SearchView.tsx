@@ -11,6 +11,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { useGitTree } from './useGitTree'
 import { useSearchStore, lineKey } from '../stores/searchStore'
 import { ensureSearchSubscriptions } from '../stores/searchIpc'
+import { useTranslation } from '../i18n/useTranslation'
 import log from '../lib/logger'
 
 const DEBOUNCE_MS = 250
@@ -47,6 +48,7 @@ const ToggleBtn: React.FC<ToggleBtnProps> = ({ active, onClick, title, children 
 )
 
 export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = ({ rootPath, workspaceId }) => {
+  const { t } = useTranslation()
   const query = useSearchStore((s) => s.query)
   const isRegex = useSearchStore((s) => s.isRegex)
   const matchCase = useSearchStore((s) => s.matchCase)
@@ -151,7 +153,7 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
   return (
     <div className="flex flex-col h-full">
       <SidebarSectionHeader
-        title="Search"
+        title={t('search.title')}
         actions={
           <Tooltip label="Clear search">
             <SidebarHeaderButton
@@ -173,7 +175,7 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
             <input
               ref={inputRef}
               value={query}
-              aria-label="Search"
+              aria-label={t('search.title')}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setFocusedField('query')}
               onBlur={() => setFocusedField(null)}
@@ -181,27 +183,27 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
                 if (e.key === 'Escape') setQuery('')
                 e.stopPropagation()
               }}
-              placeholder={focusedField === 'query' ? 'Search' : ''}
+              placeholder={focusedField === 'query' ? t('search.placeholder') : ''}
               spellCheck={false}
               className="w-full bg-surface-5 text-primary text-xs pl-7 pr-14 py-1 rounded border border-subtle focus:border-blue-500/50 outline-none"
             />
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-              <ToggleBtn active={matchCase} onClick={() => setOptions({ matchCase: !matchCase })} title="Match Case">
+              <ToggleBtn active={matchCase} onClick={() => setOptions({ matchCase: !matchCase })} title={t('search.matchCase')}>
                 Aa
               </ToggleBtn>
-              <ToggleBtn active={wholeWord} onClick={() => setOptions({ wholeWord: !wholeWord })} title="Match Whole Word">
+              <ToggleBtn active={wholeWord} onClick={() => setOptions({ wholeWord: !wholeWord })} title={t('search.matchWord')}>
                 <span className="underline">ab</span>
               </ToggleBtn>
-              <ToggleBtn active={isRegex} onClick={() => setOptions({ isRegex: !isRegex })} title="Use Regular Expression">
+              <ToggleBtn active={isRegex} onClick={() => setOptions({ isRegex: !isRegex })} title={t('search.useRegex')}>
                 .*
               </ToggleBtn>
             </div>
           </div>
           {/* VS Code-style "..." toggle that reveals the include/exclude details. */}
-          <Tooltip label="Toggle Search Details">
+          <Tooltip label={t('search.toggleDetails')}>
             <button
               type="button"
-              aria-label="Toggle search details"
+              aria-label={t('search.toggleDetails')}
               aria-pressed={optionsExpanded}
               onClick={toggleOptionsExpanded}
               className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded transition-colors ${
@@ -217,10 +219,10 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
         {optionsExpanded && (
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-muted">files to include</span>
+              <span className="text-[10px] text-muted">{t('search.filesToInclude')}</span>
               <input
                 value={includes}
-                aria-label="files to include"
+                aria-label={t('search.filesToInclude')}
                 onChange={(e) => setOptions({ includes: e.target.value })}
                 onFocus={() => setFocusedField('include')}
                 onBlur={() => setFocusedField(null)}
@@ -231,11 +233,11 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
               />
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-muted">files to exclude</span>
+              <span className="text-[10px] text-muted">{t('search.filesToExclude')}</span>
               <div className="relative">
                 <input
                   value={excludes}
-                  aria-label="files to exclude"
+                  aria-label={t('search.filesToExclude')}
                   onChange={(e) => setOptions({ excludes: e.target.value })}
                   onFocus={() => setFocusedField('exclude')}
                   onBlur={() => setFocusedField(null)}
@@ -248,7 +250,7 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
                   <ToggleBtn
                     active={respectIgnore}
                     onClick={() => setOptions({ respectIgnore: !respectIgnore })}
-                    title="Use Exclude Settings and Ignore Files"
+                    title={t('search.useExcludeSettings')}
                   >
                     <Gear size={13} />
                   </ToggleBtn>
@@ -267,12 +269,11 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
           ) : status === 'searching' && matchCount === 0 ? (
             <span>Searching…</span>
           ) : matchCount === 0 ? (
-            <span>No results</span>
+            <span>{t('search.noResults')}</span>
           ) : (
             <span>
-              {matchCount} {matchCount === 1 ? 'result' : 'results'} in {fileCount}{' '}
-              {fileCount === 1 ? 'file' : 'files'}
-              {truncated && ' (truncated)'}
+              {t('search.results').replace('{count}', String(matchCount))} in {t('search.filesCount').replace('{count}', String(fileCount))}
+              {truncated && ` ${t('search.truncated')}`}
             </span>
           )}
         </div>
@@ -283,7 +284,7 @@ export const SearchView: React.FC<{ rootPath: string; workspaceId?: string }> = 
         <SearchResultsTree files={visibleFiles} git={gitTree} />
       ) : !hasQuery ? (
         <div className="flex-1 flex items-center justify-center text-xs text-muted px-4 text-center">
-          Search across files in this folder.
+          {t('search.emptyState')}
         </div>
       ) : (
         <div className="flex-1" />

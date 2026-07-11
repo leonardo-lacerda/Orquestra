@@ -18,6 +18,7 @@ import { openFileAsPanel } from '../lib/fs/fileRouting'
 import { workspaceDisplayName } from '../lib/fs/displayPath'
 import { isExternalFileDrag, importDroppedEntries } from '../lib/fs/importExternalEntries'
 import { SidebarSectionHeader, SidebarHeaderButton } from './SidebarSectionHeader'
+import { useTranslation } from '../i18n/useTranslation'
 
 // Opening a workspace sets its root path optimistically in the renderer, but
 // main only registers that path as an allowed root once the async workspace
@@ -46,6 +47,7 @@ interface FlatRow {
 }
 
 export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
+  const { t } = useTranslation()
   const [nodes, setNodes] = useState<FileTreeNodeType[]>([])
   const [isLoading, setIsLoading] = useState(false)
   // Expansion state is owned by the explorer (not each FileTreeNode) so this
@@ -465,7 +467,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
     const label = paths.length === 1
       ? `"${paths[0].split('/').pop()}"`
       : `${paths.length} items`
-    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return
+    if (!window.confirm(t('explorer.deleteConfirm').replace('{label}', label))) return
     for (const p of paths) {
       try {
         await window.electronAPI.fsDelete(p, selectedWorkspaceId)
@@ -560,27 +562,27 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
     }
   }, [rootCreating, rootCreateValue, rootPath, loadTree, selectedWorkspaceId])
 
-  const folderName = workspaceDisplayName(rootPath) || 'Explorer'
+  const folderName = workspaceDisplayName(rootPath) || t('explorer.title')
 
   const handleRootContextMenu = useCallback(async (e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return
     e.preventDefault()
     if (!window.electronAPI) return
     const id = await window.electronAPI.showContextMenu([
-      { id: 'new-file', label: 'New File…' },
-      { id: 'new-folder', label: 'New Folder…' },
+      { id: 'new-file', label: t('explorer.newFile') },
+      { id: 'new-folder', label: t('explorer.newFolder') },
       { type: 'separator' },
-      { id: 'reveal', label: 'Reveal in Finder', accelerator: 'Alt+Cmd+R' },
-      { id: 'open-terminal', label: 'Open in Integrated Terminal' },
+      { id: 'reveal', label: t('explorer.revealInExplorer'), accelerator: 'Alt+Cmd+R' },
+      { id: 'open-terminal', label: t('explorer.openInTerminal') },
       { type: 'separator' },
-      { id: 'paste', label: 'Paste', accelerator: 'Cmd+V', enabled: hasClipboard() },
+      { id: 'paste', label: t('explorer.paste'), accelerator: 'Cmd+V', enabled: hasClipboard() },
       { type: 'separator' },
-      { id: 'remove-workspace', label: 'Remove Folder from Workspace' },
+      { id: 'remove-workspace', label: t('explorer.removeFolder') },
       { type: 'separator' },
-      { id: 'find-in-folder', label: 'Find in Folder…', accelerator: 'Alt+Shift+F' },
+      { id: 'find-in-folder', label: t('explorer.findInFolder'), accelerator: 'Alt+Shift+F' },
       { type: 'separator' },
-      { id: 'copy-path', label: 'Copy Path', accelerator: 'Alt+Cmd+C' },
-      { id: 'copy-rel-path', label: 'Copy Relative Path', accelerator: 'Alt+Shift+Cmd+C' },
+      { id: 'copy-path', label: t('explorer.copyPath'), accelerator: 'Alt+Cmd+C' },
+      { id: 'copy-rel-path', label: t('explorer.copyRelativePath'), accelerator: 'Alt+Shift+Cmd+C' },
     ])
     switch (id) {
       case 'new-file': startRootCreate('file'); break
@@ -602,7 +604,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
         break
       }
       case 'remove-workspace':
-        if (window.confirm(`Remove "${folderName}" from your workspaces?`)) {
+        if (window.confirm(t('explorer.removeConfirm').replace('{folderName}', folderName))) {
           removeWorkspace(selectedWorkspaceId, true)
         }
         break
@@ -643,14 +645,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
       }}
     >
       <SidebarSectionHeader
-        title="Explorer"
+        title={t('explorer.title')}
         subtitle={folderName}
         actions={
           <>
-            <SidebarHeaderButton onClick={() => startRootCreate('file')} title="New File">
+            <SidebarHeaderButton onClick={() => startRootCreate('file')} title={t('explorer.newFile')}>
               <FilePlus size={13} />
             </SidebarHeaderButton>
-            <SidebarHeaderButton onClick={() => startRootCreate('folder')} title="New Folder">
+            <SidebarHeaderButton onClick={() => startRootCreate('folder')} title={t('explorer.newFolder')}>
               <FolderPlus size={13} />
             </SidebarHeaderButton>
             <SidebarHeaderButton
@@ -662,11 +664,11 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
                   return next
                 })
               }}
-              title="Filter Files"
+              title={t('explorer.filterFiles')}
             >
               <MagnifyingGlass size={13} />
             </SidebarHeaderButton>
-            <SidebarHeaderButton onClick={handleReload} title="Reload">
+            <SidebarHeaderButton onClick={handleReload} title={t('explorer.reload')}>
               <ArrowClockwise size={12} />
             </SidebarHeaderButton>
           </>
@@ -691,14 +693,14 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
                 }
                 e.stopPropagation()
               }}
-              placeholder="Filter by name"
+              placeholder={t('explorer.filterPlaceholder')}
               className="w-full bg-surface-5 text-primary text-xs pl-7 pr-2 py-1 rounded border border-subtle focus:border-blue-500/50 outline-none"
             />
           </div>
           {searchQuery && (
             <SidebarHeaderButton
               onClick={() => setSearchQuery('')}
-              title="Clear"
+              title={t('explorer.clear')}
             >
               <X size={12} />
             </SidebarHeaderButton>
@@ -709,7 +711,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
       {/* Tree content */}
       {isLoading && nodes.length === 0 ? (
         <div className="flex items-center justify-center flex-1 text-xs text-muted">
-          Loading...
+          {t('explorer.loading')}
         </div>
       ) : nodes.length === 0 && !rootCreating ? (
         <div
@@ -717,7 +719,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({ rootPath }) => {
           onContextMenu={handleRootContextMenu}
         >
           <span className="text-2xl pointer-events-none">&#128193;</span>
-          <span className="pointer-events-none">No files found</span>
+          <span className="pointer-events-none">{t('explorer.noFilesFound')}</span>
         </div>
       ) : (
         <div

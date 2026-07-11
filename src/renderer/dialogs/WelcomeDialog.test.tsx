@@ -1,7 +1,6 @@
 // =============================================================================
-// WelcomeDialog — first-run welcome + telemetry notice. Shows until the current
-// TELEMETRY_NOTICE_VERSION is acknowledged; Continue records the acknowledgement
-// (informational only — there is no opt-in/opt-out choice).
+// WelcomeDialog — first-run welcome. Shows on first load before the tour;
+// Continue marks onboarding as completed so it won't show again.
 // =============================================================================
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,11 +13,10 @@ vi.mock('../lib/logger', () => ({
 
 import { WelcomeDialog } from './WelcomeDialog'
 import { useSettingsStore } from '../stores/settingsStore'
-import { TELEMETRY_NOTICE_VERSION } from '../../shared/types'
 
 let host: HTMLDivElement
 let root: Root
-const acknowledge = vi.fn(() => Promise.resolve())
+const settingsSet = vi.fn(() => Promise.resolve())
 
 function clickButton(match: (b: HTMLButtonElement) => boolean): void {
   const btn = [...host.querySelectorAll('button')].find(match as (b: Element) => boolean) as HTMLButtonElement
@@ -30,15 +28,12 @@ beforeEach(() => {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
-  acknowledge.mockClear()
+  settingsSet.mockClear()
   ;(window as unknown as { electronAPI: Record<string, unknown> }).electronAPI = {
     ...(window as unknown as { electronAPI?: Record<string, unknown> }).electronAPI,
-    settingsSet: vi.fn(() => Promise.resolve()),
-    acknowledgeTelemetryNotice: acknowledge,
-    trackLinkClick: vi.fn(),
-    openExternalUrl: vi.fn(),
+    settingsSet,
   }
-  useSettingsStore.setState({ _loaded: true, telemetryNoticeAcknowledgedVersion: 0 } as never)
+  useSettingsStore.setState({ _loaded: true, onboardingCompleted: false } as never)
 })
 
 afterEach(() => {
@@ -48,27 +43,23 @@ afterEach(() => {
 })
 
 describe('WelcomeDialog', () => {
-  it('is hidden once the current notice version is acknowledged', () => {
-    useSettingsStore.setState({ telemetryNoticeAcknowledgedVersion: TELEMETRY_NOTICE_VERSION } as never)
+  it('is hidden once onboarding is completed', () => {
+    useSettingsStore.setState({ onboardingCompleted: true } as never)
     act(() => root.render(<WelcomeDialog />))
     expect(host.textContent).toBe('')
   })
 
-  it('shows for users below the current notice version (fresh install or update)', () => {
+  it('shows on first run (not yet completed)', () => {
     act(() => root.render(<WelcomeDialog />))
     expect(host.textContent).toContain('Welcome to Orquestra')
-    expect(host.textContent).toContain('Privacy Policy')
-    // No opt-in choice anymore.
-    expect(host.querySelector('[role="switch"]')).toBeNull()
   })
 
-  it('Continue acknowledges the notice and dismisses after the fade', () => {
+  it('Continue sets onboardingCompleted and dismisses after the fade', () => {
     vi.useFakeTimers()
     act(() => root.render(<WelcomeDialog />))
     clickButton((b) => b.textContent?.trim() === 'Continue')
-    expect(acknowledge).toHaveBeenCalledTimes(1)
     act(() => { vi.advanceTimersByTime(350) })
-    expect(useSettingsStore.getState().telemetryNoticeAcknowledgedVersion).toBe(TELEMETRY_NOTICE_VERSION)
+    expect(useSettingsStore.getState().onboardingCompleted).toBe(true)
     vi.useRealTimers()
   })
 })

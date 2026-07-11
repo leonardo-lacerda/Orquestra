@@ -11,8 +11,8 @@ import { registry, has, type RegistryEntry } from './registryState'
 import { finalizeReconnect } from './terminalLifecycle'
 
 /**
- * Rebuild the WebGL glyph atlas and force a full redraw — across EVERY live
- * terminal in this window, not just the one named by panelId.
+ * Rebuild the WebGL glyph atlas and force a full redraw across EVERY live
+ * terminal in this window.
  *
  * Why all of them: xterm caches a single TextureAtlas shared by every terminal
  * with the same config (font, theme, DPR — see CharAtlasCache.acquireTextureAtlas).
@@ -29,27 +29,119 @@ import { finalizeReconnect } from './terminalLifecycle'
  * their own model. Redraws are animation-frame-debounced, so all terminals
  * repaint together against the same freshly-reset atlas — no glyph desync.
  *
- * The original need still holds: a detached window opens hidden (show:false),
- * so its WebGL renderer initializes against a stale devicePixelRatio and its
- * drawing buffer never paints. Rebuilding the atlas at the now-correct DPR and
- * refreshing fixes the blank/garbled terminal once the window is shown. No-op
- * (besides a cheap refresh) on the canvas renderer fallback.
+ * Also covers:
+ *   - Detached window opened hidden (show:false): WebGL init against stale DPR
+ *     leaves blank/garbled terminals until atlas rebuild + refresh.
+ *   - Canvas zoom/pan: world div `will-change: transform` promotes a GPU layer;
+ *     on demote, preserveDrawingBuffer:false drawing buffers come up blank or
+ *     scrambled unless we rebuild here.
+ * No-op (besides a cheap refresh) on the canvas renderer fallback.
+ *
+ * IMPORTANT: never scope clearTextureAtlas to a single terminal. A past "perf"
+ * path that did so reintroduced multi-terminal glyph scramble after attach/zoom.
  */
-function forceWebglRepaint(targetEntry?: RegistryEntry): void {
-  if (targetEntry) {
-    // Scope repaint to a single terminal (e.g. after attach).
-    try {
-      targetEntry.webglAddon?.clearTextureAtlas()
-      targetEntry.terminal.refresh(0, targetEntry.terminal.rows - 1)
-    } catch { /* renderer mid-dispose — ignore */ }
-    return
-  }
-  // Full repaint — clears the shared atlas and refreshes every terminal.
+export function forceWebglRepaint(): void {
   for (const entry of registry.values()) {
     try {
       entry.webglAddon?.clearTextureAtlas()
       entry.terminal.refresh(0, entry.terminal.rows - 1)
     } catch { /* renderer mid-dispose — ignore */ }
+  }
+}
+
+/** Dispose + recreate the WebGL addon for one entry (fresh GPU canvas). */
+function reloadWebglAddon(panelId: string, entry: RegistryEntry): void {
+  if (entry.webglAddon) {
+    try { entry.webglAddon.dispose() } catch { /* ignore */ }
+    entry.webglAddon = null
+  }
+  try {
+    const newWebgl = new WebglAddon()
+    newWebgl.onContextLoss(() => {
+      try { newWebgl.dispose() } catch { /* ignore */ }
+      const e = registry.get(panelId)
+      if (e) e.webglAddon = null
+    })
+    entry.terminal.loadAddon(newWebgl)
+    entry.webglAddon = newWebgl
+  } catch {
+    // Canvas renderer fallback
+  }
+}
+
+/**
+ * Hard recovery after canvas zoom/pan: recreate every WebGL renderer.
+ * clearTextureAtlas alone is not enough when Chromium's will-change demote
+ * leaves the WebGL drawing buffer / canvas backing store corrupted — only a
+ * new WebglAddon (or a real panel resize) reliably restores glyphs. No PTY
+ * resize / SIGWINCH — cols×rows stay put.
+ */
+export function rebuildAllWebglRenderers(): void {
+  for (const [panelId, entry] of registry.entries()) {
+    try {
+      // Only touch terminals that are currently in the DOM.
+      const el = (entry.terminal as unknown as { element?: HTMLElement }).element
+      if (!el?.isConnected) continue
+      reloadWebglAddon(panelId, entry)
+      entry.terminal.refresh(0, entry.terminal.rows - 1)
+    } catch { /* mid-dispose */ }
+  }
+  // Shared atlas: after every terminal has a fresh renderer, one more full
+  // clear+refresh pass so models agree on the new atlas layout.
+  forceWebglRepaint()
+}
+
+// Coalesce zoom/pan settle recoveries. Must outlast Canvas will-change reset
+// (150ms) and wheel canvas-interacting release (~150ms), then wait one more
+// frame after demote so the compositor has finished re-rasterizing.
+const ZOOM_REPAINT_MS = 200
+const ZOOM_REPAINT_FOLLOWUP_MS = 80
+let zoomRepaintTimer: ReturnType<typeof setTimeout> | null = null
+let zoomRepaintFollowUpTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Debounced hard WebGL recovery after canvas zoom/pan settles. Safe to call
+ * from every TerminalPanel and from the canvas will-change demote path —
+ * calls coalesce into one rebuild (not N).
+ */
+export function scheduleZoomWebglRepaint(): void {
+  if (zoomRepaintTimer !== null) clearTimeout(zoomRepaintTimer)
+  if (zoomRepaintFollowUpTimer !== null) {
+    clearTimeout(zoomRepaintFollowUpTimer)
+    zoomRepaintFollowUpTimer = null
+  }
+  zoomRepaintTimer = setTimeout(() => {
+    zoomRepaintTimer = null
+    // Gesture still in flight (wheel zoom/pan holds canvas-interacting ~150ms
+    // after last event). Re-arm so we only rebuild once it fully settles.
+    if (typeof document !== 'undefined' && document.body.classList.contains('canvas-interacting')) {
+      scheduleZoomWebglRepaint()
+      return
+    }
+    // Soft clear first (cheap), then hard reload of every WebGL canvas — the
+    // path that matches "resize fixed it" without sending SIGWINCH.
+    forceWebglRepaint()
+    requestAnimationFrame(() => {
+      rebuildAllWebglRenderers()
+      // Compositor sometimes finishes a frame late after will-change:auto;
+      // one more soft pass catches residual blank/scramble.
+      zoomRepaintFollowUpTimer = setTimeout(() => {
+        zoomRepaintFollowUpTimer = null
+        forceWebglRepaint()
+      }, ZOOM_REPAINT_FOLLOWUP_MS)
+    })
+  }, ZOOM_REPAINT_MS)
+}
+
+/** Test helper — cancel a pending zoom repaint so suites don't leak timers. */
+export function cancelScheduledZoomWebglRepaint(): void {
+  if (zoomRepaintTimer !== null) {
+    clearTimeout(zoomRepaintTimer)
+    zoomRepaintTimer = null
+  }
+  if (zoomRepaintFollowUpTimer !== null) {
+    clearTimeout(zoomRepaintFollowUpTimer)
+    zoomRepaintFollowUpTimer = null
   }
 }
 
@@ -211,22 +303,7 @@ export function attach(panelId: string, container: HTMLDivElement): void {
 
   // Reload the WebGL addon — its internal canvas buffers are tied to the old
   // container dimensions and cannot survive a DOM reparent reliably.
-  if (entry.webglAddon) {
-    try { entry.webglAddon.dispose() } catch { /* ignore */ }
-    entry.webglAddon = null
-  }
-  try {
-    const newWebgl = new WebglAddon()
-    newWebgl.onContextLoss(() => {
-      newWebgl.dispose()
-      const e = registry.get(panelId)
-      if (e) e.webglAddon = null
-    })
-    terminal.loadAddon(newWebgl)
-    entry.webglAddon = newWebgl
-  } catch {
-    // Canvas renderer fallback — no action needed
-  }
+  reloadWebglAddon(panelId, entry)
 
   // Fit after the next frame — the container may still be mid-layout during
   // the sync DOM append (e.g. WebGL canvas initialization).  Retry up to 5
@@ -279,10 +356,11 @@ export function attach(panelId: string, container: HTMLDivElement): void {
     // while hidden against a stale DPR/size, so the first paint can be blank or
     // garbled until the atlas is rebuilt at the live DPR. The extra frames
     // cover a window still settling its size/DPR on the first painted frame.
-    forceWebglRepaint(entry)
+    // Always full-window: atlas is shared across terminals (see forceWebglRepaint).
+    forceWebglRepaint()
     requestAnimationFrame(() => {
-      forceWebglRepaint(entry)
-      requestAnimationFrame(() => forceWebglRepaint(entry))
+      forceWebglRepaint()
+      requestAnimationFrame(() => forceWebglRepaint())
     })
 
     // Now that the xterm is sized to its real container, replay captured

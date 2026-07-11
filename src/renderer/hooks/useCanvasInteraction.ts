@@ -627,7 +627,7 @@ export function useCanvasInteraction(
         // — but only if the click landed on empty canvas (not on a node).
         if (!rightClickDidDrag.current && rightClickStart.current) {
           const target = e.target as HTMLElement
-          const isOnInteractive = target.closest('[data-node-id]') !== null || target.closest('[data-annotation-id]') !== null
+          const isOnInteractive = target.closest('[data-node-id]') !== null || target.closest('[data-annotation-id]') !== null || target.closest('[data-connection-id]') !== null
           if (!isOnInteractive) {
             const rect = canvasRef.current?.getBoundingClientRect()
             if (rect) {

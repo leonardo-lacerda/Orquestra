@@ -13,6 +13,7 @@ import { createKeyedDispatcher } from './batchedDispatcher'
 import { uploadEntriesToRuntime } from '../runtime/uploadEntries'
 import {
   FS_READ_FILE,
+  FS_READ_FILE_IF_EXISTS,
   FS_WRITE_FILE,
   FS_READ_DIR,
   FS_WATCH_START,
@@ -27,6 +28,7 @@ import {
   FS_SEARCH,
   FS_READ_BINARY,
 } from '../../shared/ipc-channels'
+import { toError } from './handlerError'
 import { FileTreeNode, FileSearchResult, FileSearchOptions } from '../../shared/types'
 import { sendToWindow, windowFromEvent } from '../windowRegistry'
 import { getSettingSync } from '../store'
@@ -303,6 +305,24 @@ export function registerHandlers(): void {
     const { runtime, path: p } = fileRuntimeFor(filePath)
     return await runtime.file.readFile(await runtime.validatePathStrict(p, win?.id, workspaceId))
   }))
+
+  // Optional snapshot / config reads: missing file is a normal miss, not a hard error.
+  // Does not use wrapHandler so ENOENT never hits log.error / Electron handler noise.
+  ipcMain.handle(FS_READ_FILE_IF_EXISTS, async (event, filePath: string, workspaceId?: string) => {
+    try {
+      const win = windowFromEvent(event)
+      const { runtime, path: p } = fileRuntimeFor(filePath)
+      return await runtime.file.readFile(await runtime.validatePathStrict(p, win?.id, workspaceId))
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      const msg = err?.message ?? String(error)
+      if (err?.code === 'ENOENT' || /ENOENT|no such file|not found/i.test(msg)) {
+        return null
+      }
+      log.error(`[${FS_READ_FILE_IF_EXISTS}]`, error)
+      throw toError(error)
+    }
+  })
 
   ipcMain.handle(FS_READ_BINARY, wrapHandler(`[${FS_READ_BINARY}]`, async (event, filePath: string, workspaceId?: string) => {
     const win = windowFromEvent(event)

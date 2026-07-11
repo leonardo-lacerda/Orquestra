@@ -23,6 +23,8 @@ import { WorktreeTerritoryLayer } from './worktree'
 import type { Point, PanelType } from '../../shared/types'
 import { openFileAsPanel } from '../lib/fs/fileRouting'
 import { setPendingReveal } from '../lib/editor/editorReveal'
+import { terminalRegistry } from '../lib/terminal/terminalRegistry'
+import { t } from '../i18n/useTranslation'
 
 // Module-level style injection — shared across all Canvas instances
 let canvasStyleInjected = false
@@ -162,6 +164,13 @@ interface CanvasProps {
 const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) => {
   const canvasRef = useRef<HTMLDivElement>(null)
   const worldRef = useRef<HTMLDivElement>(null)
+  // Sibling of world: same pan/zoom transform, but NEVER gets will-change.
+  // DrawingLayer/ConnectionLayer are SVG with overflow:visible inside a 1×1
+  // world box. When they share the world's will-change:transform GPU layer,
+  // Chromium bitmap-caches them with wrong paint bounds — they drift during
+  // pan/zoom and snap back when the layer demotes. Keeping annotations off
+  // that promoted layer fixes the drift without giving up smooth panel pans.
+  const annotationWorldRef = useRef<HTMLDivElement>(null)
   // Debounce handle for de-promoting the world layer after pan/zoom settles.
   const willChangeResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const canvasApi = useCanvasStoreApi()
@@ -203,26 +212,39 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
   // Inject the canvas-interacting style once at module level (not per mount)
   useEffect(injectCanvasInteractingStyle, [])
 
-  // Imperatively update the world div transform on zoom/offset changes so
-  // Canvas itself never re-renders during pan/zoom — only the world div moves.
+  // Imperatively update the world (+ annotation) transforms on zoom/offset
+  // changes so Canvas itself never re-renders during pan/zoom.
   useEffect(() => {
     const applyTransform = (zoom: number, offset: { x: number; y: number }) => {
-      const el = worldRef.current
-      if (!el) return
-      el.style.transform = `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`
-      el.style.setProperty('--zoom', String(zoom))
+      const transform = `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`
+      const zoomStr = String(zoom)
 
-      // Promote the world to its own GPU layer for the duration of the gesture so
-      // pan/zoom stays smooth, then de-promote once it settles. While promoted,
-      // Chromium bitmap-scales the layer's cached texture (blurs thin SVG icon
-      // strokes); removing will-change forces a crisp re-raster at the resting
-      // transform. Debounced so it only fires after the user stops interacting.
-      el.style.willChange = 'transform'
+      const el = worldRef.current
+      if (el) {
+        el.style.transform = transform
+        el.style.setProperty('--zoom', zoomStr)
+
+        // Promote ONLY the panel world for the gesture. Annotation world is
+        // updated below without will-change (see annotationWorldRef comment).
+        el.style.willChange = 'transform'
+      }
+
+      const ann = annotationWorldRef.current
+      if (ann) {
+        ann.style.transform = transform
+        ann.style.setProperty('--zoom', zoomStr)
+      }
+
       if (willChangeResetRef.current) clearTimeout(willChangeResetRef.current)
       willChangeResetRef.current = setTimeout(() => {
         const node = worldRef.current
         if (node) node.style.willChange = 'auto'
         willChangeResetRef.current = null
+        // After the compositor demotes the layer, WebGL terminals
+        // (preserveDrawingBuffer:false) can paint blank/scrambled until their
+        // shared glyph atlas is rebuilt. Coalesces with TerminalPanel's zoom
+        // settle path via the same registry debounce.
+        terminalRegistry.scheduleZoomWebglRepaint()
       }, 150)
     }
 
@@ -499,27 +521,27 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
       if (onCreateAtPoint) {
         if (gitWorktrees.length > 1) {
           items.push({
-            label: 'New Terminal',
+            label: t('canvas.context.newTerminal'),
             submenu: gitWorktrees.map((g) => ({
               id: `new-terminal:${g.path}`,
               label: (g.branch || (g.isCurrent ? 'main' : '(detached)')) + (g.isCurrent ? ' (primary)' : ''),
             })),
           })
         } else {
-          items.push({ id: 'new-terminal', label: 'New Terminal' })
+          items.push({ id: 'new-terminal', label: t('canvas.context.newTerminal') })
         }
         items.push(
-          { id: 'new-editor', label: 'New Editor' },
-          { id: 'new-browser', label: 'New Browser' },
-          { id: 'new-agent', label: 'New Orquestra agent' },
-          { id: 'new-orchestration', label: 'New Orchestration' },
-          { id: 'new-canvas', label: 'New Canvas' },
+          { id: 'new-editor', label: t('canvas.context.newEditor') },
+          { id: 'new-browser', label: t('canvas.context.newBrowser') },
+          { id: 'new-agent', label: t('canvas.context.newAgent') },
+          { id: 'new-orchestration', label: t('canvas.context.newOrchestration') },
+          { id: 'new-canvas', label: t('canvas.context.newCanvas') },
           { type: 'separator' as const },
         )
       }
       items.push(
-        { id: 'auto-layout', label: 'Auto Layout' },
-        { id: 'zoom-to-fit', label: 'Zoom to Fit' },
+        { id: 'auto-layout', label: t('palette.autoLayout') },
+        { id: 'zoom-to-fit', label: t('palette.zoomToFit') },
       )
       const id = await window.electronAPI.showContextMenu(items)
       if (cancelled) return
@@ -604,7 +626,8 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
         />
       )}
 
-      {/* World div: transformed to implement pan/zoom */}
+      {/* World div: panels + placement chrome. will-change toggled during
+          pan/zoom for smooth GPU compositing (see applyTransform). */}
       <div
         ref={worldRef}
         style={{
@@ -614,8 +637,6 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
           width: 1,
           height: 1,
           transformOrigin: '0 0',
-          // will-change is toggled imperatively during pan/zoom (see applyTransform)
-          // so the layer de-promotes at rest and re-rasters icons crisply.
         }}
         onClick={handleWorldClick}
       >
@@ -637,10 +658,29 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
           />
         )}
         {children}
-        <DrawingLayer />
-        <ConnectionLayer />
         <GhostPlacementLayer />
         {(import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV && <PlacementVizOverlay />}
+      </div>
+
+      {/* Annotation world: same transform as world, never will-change.
+          Hosts SVG overlays (drawings, connections) so they don't drift under
+          the panel world's GPU layer promotion. */}
+      <div
+        ref={annotationWorldRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: 1,
+          height: 1,
+          transformOrigin: '0 0',
+          // pointer-events none here; DrawingLayer/ConnectionLayer re-enable
+          // on their interactive elements so empty space still hits the canvas.
+          pointerEvents: 'none',
+        }}
+      >
+        <DrawingLayer />
+        <ConnectionLayer />
       </div>
 
       <PlacementHint canvasRef={canvasRef} />

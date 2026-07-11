@@ -8,16 +8,17 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import type { PanelType } from '../../shared/types'
 import { Terminal as TerminalIcon, Globe, FileText, SquaresFour, Broadcast } from '@phosphor-icons/react'
+import { t, useTranslation } from '../i18n/useTranslation'
 
 export type SplitMenuItem = { type: PanelType; label: string; Icon: React.ComponentType<any> }
 
 // Items shown in the long-press split menu (order = display order).
 export const SPLIT_MENU_ITEMS: SplitMenuItem[] = [
-  { type: 'editor', label: 'Editor', Icon: FileText },
-  { type: 'terminal', label: 'Terminal', Icon: TerminalIcon },
-  { type: 'browser', label: 'Browser', Icon: Globe },
-  { type: 'canvas', label: 'Canvas', Icon: SquaresFour },
-  { type: 'orchestration', label: 'Orchestration', Icon: Broadcast },
+  { type: 'editor', label: t('dock.editor'), Icon: FileText },
+  { type: 'terminal', label: t('dock.terminal'), Icon: TerminalIcon },
+  { type: 'browser', label: t('dock.browser'), Icon: Globe },
+  { type: 'canvas', label: t('dock.canvas'), Icon: SquaresFour },
+  { type: 'orchestration', label: t('dock.orchestration'), Icon: Broadcast },
 ]
 
 export interface DockTabContextMenuProps {
@@ -29,6 +30,7 @@ export interface DockTabContextMenuProps {
 }
 
 export function DockTabContextMenu({ open, position, items, onPick, onClose }: DockTabContextMenuProps) {
+  const { t: tt } = useTranslation()
   if (!open || !position) return null
   return createPortal(
     <div
@@ -46,7 +48,7 @@ export function DockTabContextMenu({ open, position, items, onPick, onClose }: D
           }}
         >
           <Icon size={13} className="text-muted" />
-          <span>Split with {label}</span>
+          <span>{tt('dock.splitWith')} {label}</span>
         </button>
       ))}
     </div>,

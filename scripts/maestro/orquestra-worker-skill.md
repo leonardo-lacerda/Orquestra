@@ -28,3 +28,15 @@ Você é um WORKER no sistema de orquestração. Você recebeu uma tarefa espec�
   - Funcionalidade Y implementada
   - Próximo passo: Z
 ```
+
+## Conclusão (importante para o `wait` do orquestrador)
+
+Quando terminar (sucesso ou falha), imprima o resumo acima e **pare de produzir output**.
+O Orquestra grava `.orquestra-results/worker-<seu-nome>.json` quando o worker fica idle ou o processo sai.
+O maestro usa:
+
+```
+node orquestra.js wait --workers <seu-nome> --timeout 300
+```
+
+Não rode `orquestra recruit` a menos que nested workers estejam explicitamente liberados na policy.

@@ -4,6 +4,7 @@
 // =============================================================================
 
 import React, { useState, useCallback } from 'react'
+import { useTranslation } from '../i18n/useTranslation'
 
 interface LoginScreenProps {
   onLogin: (email: string, password: string) => Promise<string | null>
@@ -11,6 +12,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps): React.ReactElement {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,7 +33,7 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
       }
       // If no error, AuthGate will detect the state change and transition
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao fazer login.')
+      setError(err instanceof Error ? err.message : t('auth.login.error'))
       setLoading(false)
     }
   }, [email, password, onLogin])
@@ -80,10 +82,10 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
         }}>
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: '#e4e4e7' }}>
-              Bem-vindo de volta
+              {t('auth.login.welcomeBack')}
             </h1>
             <p style={{ margin: '6px 0 0', fontSize: 13, color: '#8b8b95' }}>
-              Entre com suas credenciais Orquestra
+              {t('auth.login.subtitle')}
             </p>
           </div>
 
@@ -105,13 +107,13 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 4 }}>
-                Email
+                {t('auth.login.email')}
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
+                placeholder={t('auth.login.emailPlaceholder')}
                 autoFocus
                 disabled={loading}
                 style={{
@@ -132,7 +134,7 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
 
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#a1a1aa', marginBottom: 4 }}>
-                Senha
+                {t('auth.login.password')}
               </label>
               <input
                 type="password"
@@ -173,14 +175,14 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
                 opacity: (!email.trim() || !password) && !loading ? 0.5 : 1,
               }}
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? t('auth.login.signingIn') : t('auth.login.signIn')}
             </button>
           </form>
         </div>
 
         {/* Register link */}
         <div style={{ fontSize: 13, color: '#8b8b95', textAlign: 'center' }}>
-          Não tem uma conta?{' '}
+          {t('auth.login.noAccount')}{' '}
           <span
             onClick={() => window.open('https://www.orquestra.space', '_blank')}
             style={{ color: '#7c6ff0', cursor: 'pointer', textDecoration: 'none' }}

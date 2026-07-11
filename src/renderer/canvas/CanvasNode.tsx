@@ -14,6 +14,7 @@ import { isMaximized as checkMaximized } from '../../shared/types'
 import { useCanvasStoreContext, useCanvasStoreApi } from '../stores/CanvasStoreContext'
 import { useAppStore, useSelectedWorkspace } from '../stores/appStore'
 import { useUIStore } from '../stores/uiStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useDragStore, useDragSourceVisibility } from '../drag'
 import { useNodeResize } from '../hooks/useNodeResize'
 import { useCanvasNodeStyle } from './useCanvasNodeStyle'
@@ -27,14 +28,27 @@ import DockTabStack from '../docking/DockTabStack'
 import { activeLeafPanelId } from '../panels/nodeDockRegistry'
 import { setActivePanel } from '../lib/activePanel'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 import DockSplitContainer from '../docking/DockSplitContainer'
 import { confirmCloseDirtyPanels } from '../lib/confirmCloseDirty'
 import { confirmCloseRunningTerminals } from '../lib/confirmCloseTerminal'
 import { collectPanelIds } from '../lib/canvas/collectPanelIds'
 import { ArrowsOutSimple, ArrowsInSimple, X, Lock, LockOpen, Crown, Gear } from '@phosphor-icons/react'
 import { PANEL_DEFINITIONS } from '../../shared/panels'
+import {
+  inferCanvasConnectionType,
+  isConnectionSourcePanelType,
+  isConnectionTargetPanelType,
+} from '../../shared/canvasConnections'
 import { terminalRegistry } from '../lib/terminal/terminalRegistry'
+import { useOrchestrationRunStore, type OrchestrationWorkerEntry } from '../stores/orchestrationRunStore'
+import { useShallow } from 'zustand/react/shallow'
 import ConnectionHandles from './ConnectionHandles'
+import { MaestroSettingsPopover } from './MaestroSettingsPopover'
+
+/** Stable empty list — returning `[]` from a zustand selector re-creates the
+ *  reference every getSnapshot and triggers React 18 "Maximum update depth". */
+const EMPTY_RUN_WORKERS: OrchestrationWorkerEntry[] = []
 import { getPendingConnection, endPendingConnection, startPendingConnection } from './ConnectionLayer'
 
 // When the Hand tool is active, a left-press on a node must pan
@@ -110,17 +124,20 @@ function GrabButton({
   title,
   onClick,
   color,
+  buttonRef,
   children,
 }: {
   title: string
   onClick: (e: React.MouseEvent) => void
   color?: string
+  buttonRef?: React.Ref<HTMLButtonElement>
   children: React.ReactNode
 }) {
   const baseColor = color ?? 'var(--text-secondary)'
   return (
     <Tooltip label={title}>
       <button
+        ref={buttonRef}
         data-grab-button
         aria-label={title}
         onClick={onClick}
@@ -148,6 +165,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
   title: _title = 'Panel',
 }) => {
   ensureKeyframes()
+  const { t } = useTranslation()
   useRenderCount('CanvasNode')
 
   const canvasApi = useCanvasStoreApi()
@@ -176,6 +194,13 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
   const removeNode = useCanvasStoreContext((s) => s.removeNode)
   const toggleMaximize = useCanvasStoreContext((s) => s.toggleMaximize)
   const isSelected = useCanvasStoreContext((s) => isNodeSelected(s, nodeId))
+  const linkedContextCount = useCanvasStoreContext((s) =>
+    Object.values(s.connections).filter(
+      (connection) =>
+        (connection.type ?? 'pipe') === 'context' &&
+        connection.targetNodeId === nodeId,
+    ).length,
+  )
   const isDockDragging = useDragStore((s) => s.isDragging)
   const { hidden: isWholeNodeDragSource } = useDragSourceVisibility(nodeId)
 
@@ -225,6 +250,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
   const { handleMouseDown } = useNodeResizeCursor()
   const wsId = useAppStore((s) => s.selectedWorkspaceId)
   const currentWorkspace = useSelectedWorkspace()
+  const orchestrationMaxWorkers = useSettingsStore((s) => s.orchestrationMaxWorkers)
 
   // Terminals follow the single unified theme, so node chrome is never tinted
   // per-panel any more.
@@ -376,6 +402,8 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
     if (!id) return primaryPanel
     return currentWorkspace?.panels[id] ?? primaryPanel
   }, [layout, currentWorkspace, primaryPanel])
+  // Prefer run-tracker active count; fall back to tracked list from main only
+  // (avoid counting unrelated terminals on the canvas).
 
   // --- Worktree identity: follows the ACTIVE tab --------------------------
   // The node adopts whichever tab is open. Gated on 2+ worktrees (matching the
@@ -411,104 +439,295 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
     return () => canvasApi.getState().setNodeActiveWorktree(nodeId, null)
   }, [nodeId, canvasApi])
 
-  // Maestro mode toggle (terminal panels only)
-  const [maestroEnabled, setMaestroEnabled] = React.useState(false)
+  // Maestro: store flag is source of truth (takeover clears other crowns).
+  const panelMaestroFlag = !!(
+    node?.panelId && currentWorkspace?.panels[node.panelId]?.maestro
+  )
+  const [maestroError, setMaestroError] = React.useState<string | null>(null)
   const [showMaestroSettings, setShowMaestroSettings] = React.useState(false)
-  const maestroSettingsRef = React.useRef<HTMLDivElement>(null)
+  const maestroSettingsButtonRef = React.useRef<HTMLButtonElement>(null)
+  const [maestroSettingsAnchor, setMaestroSettingsAnchor] = React.useState<{ top: number; right: number } | null>(null)
+  const [trackedWorkerCount, setTrackedWorkerCount] = React.useState<number | null>(null)
+  /** One-shot re-arm key so we never re-enter ensureMaestroArmed in a loop (React #185). */
+  const maestroArmKeyRef = React.useRef<string | null>(null)
+  // Registry is not reactive — tick so we re-read pty/alive after the terminal spawns.
+  const [maestroRegistryTick, setMaestroRegistryTick] = React.useState(0)
+  React.useEffect(() => {
+    if (primaryPanelType !== 'terminal') return
+    const id = window.setInterval(() => setMaestroRegistryTick((n) => n + 1), 500)
+    return () => window.clearInterval(id)
+  }, [primaryPanelType, node?.panelId])
 
-  const handleToggleMaestro = React.useCallback(() => {
-    if (!node?.panelId || primaryPanelType !== 'terminal') return
-    const next = !maestroEnabled
-    setMaestroEnabled(next)
-    // Resolve panelId → ptyId before sending to main process
-    const ptyId = terminalRegistry.ptyIdForPanel(node.panelId)
-    if (ptyId) {
-      const wsPath = currentWorkspace?.rootPath || ''
-      window.electronAPI?.terminalSetMaestro?.(ptyId, next, wsPath)
+  // Fresh registry read every tick (do not freeze ptyId in useMemo).
+  void maestroRegistryTick
+  const maestroPtyId = node?.panelId ? terminalRegistry.ptyIdForPanel(node.panelId) : null
+  const maestroPtyAlive = !!(
+    node?.panelId
+    && maestroPtyId
+    && terminalRegistry.isAlive(node.panelId)
+  )
+  const maestroEnabled = panelMaestroFlag
+  const maestroPaused = panelMaestroFlag && !maestroPtyAlive
+
+  // Restore / re-arm once per panel+pty when flag true and PTY live.
+  React.useEffect(() => {
+    if (primaryPanelType !== 'terminal' || !node?.panelId || !currentWorkspace?.id) return
+    if (!panelMaestroFlag) {
+      maestroArmKeyRef.current = null
+      return
     }
-  }, [node?.panelId, primaryPanelType, maestroEnabled])
+    if (!maestroPtyId || !maestroPtyAlive) return
+    const rootPath = currentWorkspace.rootPath || ''
+    if (!rootPath) return
+    const armKey = `${node.panelId}:${maestroPtyId}`
+    if (maestroArmKeyRef.current === armKey) return
+
+    let cancelled = false
+    void import('../lib/maestro/ensureMaestroArmed').then(({ ensureMaestroArmed }) => {
+      void ensureMaestroArmed({
+        workspaceId: currentWorkspace.id,
+        panelId: node.panelId!,
+        ptyId: maestroPtyId,
+        rootPath,
+      }).then((result) => {
+        if (cancelled) return
+        if (result.ok) {
+          maestroArmKeyRef.current = armKey
+          setMaestroError((prev) => (prev == null ? prev : null))
+        } else if (result.code !== 'PTY_GONE') {
+          setMaestroError(result.error)
+          useAppStore.getState().setPanelMaestro(currentWorkspace.id, node.panelId!, false)
+          maestroArmKeyRef.current = null
+        }
+      })
+    })
+    return () => { cancelled = true }
+  }, [
+    primaryPanelType,
+    panelMaestroFlag,
+    maestroPtyId,
+    maestroPtyAlive,
+    currentWorkspace?.id,
+    currentWorkspace?.rootPath,
+    node?.panelId,
+  ])
+
+  // PTY exit while maestro: clear armed map (Paused UI via !alive).
+  React.useEffect(() => {
+    if (!node?.panelId || !panelMaestroFlag) return
+    if (maestroPtyAlive) return
+    maestroArmKeyRef.current = null
+    void import('../lib/maestro/ensureMaestroArmed').then(({ onMaestroRegistryExit }) => {
+      onMaestroRegistryExit(node.panelId!)
+    })
+  }, [node?.panelId, panelMaestroFlag, maestroPtyAlive])
+
+  const handleToggleMaestro = React.useCallback(async () => {
+    if (!node?.panelId || primaryPanelType !== 'terminal' || !currentWorkspace?.id) return
+    const wsPath = currentWorkspace.rootPath || ''
+    const panelId = node.panelId
+
+    if (maestroEnabled) {
+      const { disableMaestroForPanel } = await import('../lib/maestro/disableMaestroForPanel')
+      await disableMaestroForPanel(currentWorkspace.id, panelId)
+      maestroArmKeyRef.current = null
+      setMaestroError(null)
+      return
+    }
+
+    // Fresh lookup — PTY may have attached after last render.
+    const resolveLivePty = (): string | null => {
+      const id = terminalRegistry.ptyIdForPanel(panelId)
+      if (id && terminalRegistry.isAlive(panelId)) return id
+      return null
+    }
+
+    let ptyId = resolveLivePty()
+    if (!ptyId) {
+      // Wait briefly for terminal spawn (getOrCreate is async on first paint).
+      const deadline = Date.now() + 4000
+      while (!ptyId && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 100))
+        ptyId = resolveLivePty()
+      }
+    }
+
+    if (!ptyId) {
+      // Do NOT set panel.maestro — leave crown off with a clear error.
+      setMaestroError('Terminal not ready — wait for the shell to start, then enable Maestro again')
+      return
+    }
+
+    const { ensureMaestroArmed } = await import('../lib/maestro/ensureMaestroArmed')
+    const result = await ensureMaestroArmed({
+      workspaceId: currentWorkspace.id,
+      panelId,
+      ptyId,
+      rootPath: wsPath,
+    })
+    if (!result.ok) {
+      setMaestroError(result.error)
+      return
+    }
+    maestroArmKeyRef.current = `${panelId}:${ptyId}`
+    // Success: do NOT terminalWrite a notice — that goes to the shell as typed
+    // input (cmd tries to run "[orquestra] ..." as a command). Status is visible
+    // in the crown popover; agent should be started AFTER Maestro is on.
+    setMaestroError(null)
+  }, [
+    node?.panelId,
+    primaryPanelType,
+    maestroEnabled,
+    currentWorkspace?.rootPath,
+    currentWorkspace?.id,
+  ])
+
+  const updateMaestroSettingsAnchor = React.useCallback(() => {
+    const rect = maestroSettingsButtonRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setMaestroSettingsAnchor({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    })
+  }, [])
 
   // Close maestro settings popup on outside click
   React.useEffect(() => {
     if (!showMaestroSettings) return
     const handler = (e: MouseEvent) => {
-      if (maestroSettingsRef.current && !maestroSettingsRef.current.contains(e.target as Node)) {
-        setShowMaestroSettings(false)
+      const target = e.target as Node
+      if (
+        maestroSettingsButtonRef.current?.contains(target) ||
+        (target instanceof Element && target.closest('[data-maestro-settings-popover]'))
+      ) {
+        return
+      }
+      setShowMaestroSettings(false)
+    }
+    const reposition = () => updateMaestroSettingsAnchor()
+    updateMaestroSettingsAnchor()
+    document.addEventListener('mousedown', handler, true)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      document.removeEventListener('mousedown', handler, true)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [showMaestroSettings, updateMaestroSettingsAnchor])
+
+  React.useEffect(() => {
+    if (!showMaestroSettings) {
+      setMaestroSettingsAnchor(null)
+    }
+  }, [showMaestroSettings])
+
+  React.useEffect(() => {
+    if (primaryPanelType !== 'terminal') {
+      setShowMaestroSettings(false)
+    }
+  }, [primaryPanelType])
+
+  // Keep the popover closed when maestro gets disabled.
+  React.useEffect(() => {
+    if (!maestroEnabled) {
+      setShowMaestroSettings(false)
+    }
+  }, [maestroEnabled])
+
+  // useShallow: listForMaestro builds a new array each call; without shallow
+  // compare React 18 useSyncExternalStore loops (error #185).
+  const runWorkers = useOrchestrationRunStore(
+    useShallow((s) => (maestroPtyId ? s.listForMaestro(maestroPtyId) : EMPTY_RUN_WORKERS)),
+  )
+  const runActiveCount = useOrchestrationRunStore((s) =>
+    (maestroPtyId ? s.activeCountForMaestro(maestroPtyId) : 0),
+  )
+
+  const handleFocusWorker = React.useCallback((panelId: string) => {
+    const store = canvasApi.getState()
+    const nodeEntry = Object.values(store.nodes).find((n) => n.panelId === panelId)
+    if (nodeEntry) {
+      store.focusNode(nodeEntry.id)
+    }
+    setShowMaestroSettings(false)
+  }, [canvasApi])
+
+  React.useEffect(() => {
+    if (!showMaestroSettings || !maestroPtyId) {
+      setTrackedWorkerCount(null)
+      return
+    }
+
+    let cancelled = false
+    const refreshWorkers = async () => {
+      try {
+        const workers = await window.electronAPI?.orquestraListWorkers?.(maestroPtyId)
+        if (!cancelled) setTrackedWorkerCount(workers?.length ?? null)
+      } catch {
+        if (!cancelled) setTrackedWorkerCount(null)
       }
     }
-    document.addEventListener('mousedown', handler, true)
-    return () => document.removeEventListener('mousedown', handler, true)
-  }, [showMaestroSettings])
+
+    void refreshWorkers()
+    const intervalId = window.setInterval(refreshWorkers, 2000)
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [showMaestroSettings, maestroPtyId])
+
+  const activeWorkerCount = Math.max(runActiveCount, trackedWorkerCount ?? 0)
+
+  const closeMaestroSettings = React.useCallback(() => {
+    setShowMaestroSettings(false)
+  }, [])
+
+  const toggleMaestroSettings = React.useCallback(() => {
+    updateMaestroSettingsAnchor()
+    setShowMaestroSettings((v) => !v)
+  }, [updateMaestroSettingsAnchor])
 
   const nodeControlButtons = (
     <>
       {primaryPanelType === 'terminal' && (
         <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
         <GrabButton
-          title={maestroEnabled ? 'Disable Maestro' : 'Enable Maestro'}
-          onClick={(e) => { e.stopPropagation(); handleToggleMaestro() }}
-          color={maestroEnabled ? '#A855F7' : undefined}
+          title={
+            maestroError
+              ? maestroError
+              : maestroPaused
+                ? 'Maestro paused — terminal exited. Restart shell or click to disable.'
+                : maestroEnabled
+                  ? 'Disable Maestro'
+                  : 'Enable Maestro'
+          }
+          onClick={(e) => { e.stopPropagation(); void handleToggleMaestro() }}
+          color={
+            maestroError
+              ? '#ef4444'
+              : maestroPaused
+                ? '#a78bfa'
+                : maestroEnabled
+                  ? '#A855F7'
+                  : undefined
+          }
         >
           <Crown size={TAB_ICON_SIZE} />
         </GrabButton>
         {maestroEnabled && (
           <GrabButton
             title="Maestro Settings"
+            buttonRef={maestroSettingsButtonRef}
             onClick={(e) => {
               e.stopPropagation()
-              setShowMaestroSettings((v) => !v)
+              toggleMaestroSettings()
             }}
           >
             <Gear size={TAB_ICON_SIZE} />
           </GrabButton>
         )}
-        {showMaestroSettings && (
-          <div
-            ref={maestroSettingsRef}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'absolute',
-              top: '100%',
-              right: 0,
-              marginTop: 4,
-              background: 'var(--surface-2, #1e1e2e)',
-              border: '1px solid var(--border, #333)',
-              borderRadius: 8,
-              padding: '8px 12px',
-              zIndex: 100000,
-              minWidth: 200,
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: 'var(--text, #ccc)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 6, color: '#A855F7' }}>
-              ⚡ Maestro Settings
-            </div>
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ opacity: 0.6 }}>Status</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
-                  background: maestroEnabled ? '#22c55e' : '#666',
-                }} />
-                {maestroEnabled ? 'Active' : 'Inactive'}
-              </div>
-            </div>
-            {currentWorkspace?.rootPath && (
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ opacity: 0.6 }}>Workspace</div>
-                <div style={{ fontSize: 11, wordBreak: 'break-all' }}>
-                  {currentWorkspace.rootPath}
-                </div>
-              </div>
-            )}
-            <div style={{ opacity: 0.5, fontSize: 10, marginTop: 4 }}>
-              Workers appear as new terminal panels with orange arrows
-            </div>
-          </div>
-        )}
+
         </div>
       )}
       <GrabButton
@@ -621,9 +840,10 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
 
       // If there's a pending connection from another node, complete it here
       const pending = getPendingConnection()
-      if (pending && pending.sourceNodeId !== nodeId) {
+      const connectionType = pending ? inferCanvasConnectionType(pending.sourcePanelType, primaryPanelType) : null
+      if (pending && pending.sourceNodeId !== nodeId && connectionType) {
         e.stopPropagation()
-        canvasApi.getState().addConnection(pending.sourceNodeId, nodeId)
+        canvasApi.getState().addConnection(pending.sourceNodeId, nodeId, connectionType)
         endPendingConnection()
         return
       }
@@ -643,7 +863,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         focusThisNode()
       }
     },
-    [isFocused, focusThisNode, nodeId, wasDragged],
+    [isFocused, focusThisNode, nodeId, primaryPanelType, wasDragged],
   )
 
   // Grab strip: double-click toggles maximize, drag moves node
@@ -675,7 +895,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         { id: 'maximize', label: maximized ? 'Restore' : 'Maximize' },
         { id: 'pin', label: node?.isPinned ? 'Unlock' : 'Lock' },
         { type: 'separator' },
-        ...(primaryPanelType === 'terminal' || primaryPanelType === 'agent'
+        ...(isConnectionSourcePanelType(primaryPanelType)
           ? [{ id: 'connect', label: '🔗 Connect to...' }, { type: 'separator' as const }]
           : []),
         ...(hasConnections
@@ -683,8 +903,8 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
             ? [{ id: 'disconnect-all', label: '✂️ Disconnect' }, { type: 'separator' as const }]
             : [{ id: 'disconnect-all', label: `✂️ Disconnect All (${nodeConnections.length})` }, { type: 'separator' as const }]
           : []),
-        { id: 'front', label: 'Move to Front' },
-        { id: 'back', label: 'Move to Back' },
+        { id: 'front', label: t('canvas.node.moveToFront') },
+        { id: 'back', label: t('canvas.node.moveToBack') },
         { type: 'separator' },
         { id: 'close', label: 'Close', accelerator: 'Cmd+W' },
       ])
@@ -695,7 +915,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         case 'back': canvasApi.getState().moveToBack(nodeId); break
         case 'close': handleClose(); break
         case 'connect': {
-          startPendingConnection(nodeId)
+          startPendingConnection(nodeId, primaryPanelType)
           break
         }
         case 'disconnect-all': {
@@ -705,7 +925,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         }
       }
     },
-    [maximized, node?.isPinned, handleToggleMaximize, handleTogglePin, handleClose, canvasApi, nodeId],
+    [maximized, node?.isPinned, handleToggleMaximize, handleTogglePin, handleClose, canvasApi, nodeId, primaryPanelType],
   )
 
   // --- Computed styles -------------------------------------------------------
@@ -729,6 +949,25 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
   return (
     <>
     {glowStyle && <div aria-hidden data-glow-for={nodeId} style={glowStyle} />}
+    {showMaestroSettings && (
+      <MaestroSettingsPopover
+        anchor={maestroSettingsAnchor}
+        maestroEnabled={maestroEnabled && !maestroPaused}
+        maestroPaused={maestroPaused}
+        maestroError={maestroError}
+        workspacePath={currentWorkspace?.rootPath}
+        activeWorkers={activeWorkerCount}
+        workers={runWorkers.map((w) => ({
+          panelId: w.panelId,
+          name: w.name,
+          role: w.role,
+          status: w.status,
+        }))}
+        onFocusWorker={handleFocusWorker}
+        onDisable={() => { void handleToggleMaestro() }}
+        onClose={closeMaestroSettings}
+      />
+    )}
     <div
       ref={nodeRef}
       data-node-id={nodeId}
@@ -864,9 +1103,33 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         </DockStoreProvider>
       </div>
       {/* Connection handles — only for terminal and agent panels */}
+      {linkedContextCount > 0 && isConnectionTargetPanelType(primaryPanelType) && (
+        <div
+          aria-label={`${linkedContextCount} linked context source${linkedContextCount === 1 ? '' : 's'}`}
+          title={`${linkedContextCount} linked context source${linkedContextCount === 1 ? '' : 's'} · agents read .orquestra/context/INDEX.md`}
+          style={{
+            position: 'absolute',
+            left: 8,
+            bottom: 8,
+            zIndex: 3,
+            padding: '2px 6px',
+            borderRadius: 4,
+            border: '1px solid color-mix(in srgb, var(--accent) 55%, var(--border-subtle))',
+            background: 'color-mix(in srgb, var(--surface-2) 92%, transparent)',
+            color: 'var(--text-secondary)',
+            fontSize: 10,
+            lineHeight: '14px',
+            pointerEvents: 'none',
+          }}
+        >
+          {linkedContextCount} context{linkedContextCount === 1 ? '' : 's'}
+        </div>
+      )}
       <ConnectionHandles
         nodeId={nodeId}
-        isConnectable={primaryPanelType === 'terminal' || primaryPanelType === 'agent'}
+        panelType={primaryPanelType}
+        canStartConnection={isConnectionSourcePanelType(primaryPanelType)}
+        canEndConnection={isConnectionTargetPanelType(primaryPanelType)}
         nodeOrigin={node.origin}
         nodeSize={node.size}
       />

@@ -18,6 +18,8 @@ export const TERMINAL_SET_MAESTRO = 'terminal:setMaestro'      // renderer -> ma
 
 // Filesystem
 export const FS_READ_FILE = 'fs:readFile'
+/** Soft read: returns null on missing file (no error log). Other errors still throw. */
+export const FS_READ_FILE_IF_EXISTS = 'fs:readFileIfExists'
 export const FS_WRITE_FILE = 'fs:writeFile'
 export const FS_READ_DIR = 'fs:readDir'
 export const FS_WATCH_START = 'fs:watchStart'
@@ -31,6 +33,11 @@ export const FS_COPY = 'fs:copy'
 export const FS_IMPORT_ENTRIES = 'fs:import-entries'
 export const FS_SEARCH = 'fs:search'
 export const FS_READ_BINARY = 'fs:readBinary'
+
+// Linked context bundles
+export const LINKED_CONTEXT_WRITE = 'linkedContext:write'
+export const LINKED_CONTEXT_READ = 'linkedContext:read'
+export const LINKED_CONTEXT_OCR = 'linkedContext:ocr'
 
 // Content search (ripgrep-backed Search view)
 export const SEARCH_START = 'search:start'    // renderer -> main (invoke, returns searchId)
@@ -142,23 +149,6 @@ export const UPDATE_QUIT_AND_INSTALL = 'update:quitAndInstall'
 // Renderer -> main: pull the latest status (the modal can mount after the
 // download-finished event already fired). Returns the cached UpdateStatus.
 export const UPDATE_GET_STATUS = 'update:getStatus'
-
-// Analytics — post-update feedback prompt
-// Main -> renderer: show the modal. Payload: { fromVersion, toVersion }
-export const ANALYTICS_FEEDBACK_PROMPT = 'analytics:feedbackPrompt'
-// Renderer -> main: user submitted feedback. Payload: { rating: 1-5, comment? }
-export const ANALYTICS_FEEDBACK_SUBMIT = 'analytics:feedbackSubmit'
-// Renderer -> main: user dismissed the modal without submitting.
-export const ANALYTICS_FEEDBACK_DISMISS = 'analytics:feedbackDismiss'
-// Renderer -> main: pull-based check for pending feedback (returns payload or null).
-export const ANALYTICS_FEEDBACK_GET_PENDING = 'analytics:feedbackGetPending'
-// Renderer -> main: track a promo link click (Product Hunt, GitHub, newsletter).
-export const ANALYTICS_LINK_CLICK = 'analytics:linkClick'
-// Renderer -> main: user dismissed the telemetry notice (WelcomeDialog). No payload.
-export const TELEMETRY_ACKNOWLEDGE_NOTICE = 'telemetry:acknowledgeNotice'
-// Renderer -> main: a feature was used (anonymous usage signal). Payload:
-// { feature: string, props?: Record<string, string|number|boolean> }
-export const ANALYTICS_TRACK_USAGE = 'analytics:trackUsage'
 
 // Open an external URL in the user's default browser (renderer -> main).
 export const OPEN_EXTERNAL_URL = 'open:externalUrl'
@@ -425,6 +415,11 @@ export const MAESTRO_DISMISS = 'maestro:dismiss'             // main -> renderer
 export const MAESTRO_CONNECT = 'maestro:connect'             // main -> renderer
 export const MAESTRO_LIST = 'maestro:list'                   // main -> renderer
 export const ORQUESTRA_TRACK_WORKER = "orquestra:trackWorker"  // renderer -> main
+export const ORQUESTRA_LIST_WORKERS = 'orquestra:listWorkers'  // renderer -> main
+/** Renderer → main: mark role/task inject fingerprint so idle ignores echo. */
+export const ORQUESTRA_NOTE_ROLE_INJECT = 'orquestra:noteRoleInject'
+/** Main → renderer: worker result file written (idle completion or exit). */
+export const ORQUESTRA_WORKER_STATUS = 'orquestra:workerStatus'
 export const MAESTRO_REASSIGN = 'maestro:reassign'           // main -> renderer
 
 // Worker readiness check — return true if the worker terminal has produced

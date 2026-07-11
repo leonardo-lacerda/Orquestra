@@ -17,6 +17,10 @@ import { useSettingsStore } from '../stores/settingsStore'
 import {
   registerEditorSave,
   unregisterEditorSave,
+  registerEditorBuffer,
+  registerEditorBufferWriter,
+  unregisterEditorBuffer,
+  unregisterEditorBufferWriter,
   markEditorActive,
   clearEditorActive,
   getActiveEditorPanelId,
@@ -308,6 +312,7 @@ export default function EditorPanel({
   // from one markdown file to the next. Keying it by panelId also keeps each
   // tab's choice independent across canvas switches.
   const markdownPreview = !!ws?.panels[panelId]?.markdownPreview
+  const isDirty = !!ws?.panels[panelId]?.isDirty
   const setMarkdownPreview = useCallback(
     (next: boolean) =>
       useAppStore.getState().setPanelMarkdownPreview(workspaceId, panelId, next),
@@ -315,6 +320,7 @@ export default function EditorPanel({
   )
   const rootPath = ws?.rootPath
   const isMarkdown = !!filePath && /\.mdx?$/i.test(filePath)
+  const isScratch = !filePath
 
   const markdownPreviewRef = useRef(markdownPreview)
   markdownPreviewRef.current = markdownPreview
@@ -571,15 +577,20 @@ export default function EditorPanel({
       // that isn't a user edit, so don't flip the panel to dirty.
       if (sync.isExternalReplace()) return
       sync.noteUserEdit()
+      window.dispatchEvent(new CustomEvent('linked-context:source-changed', {
+        detail: { sourcePanelId: panelId },
+      }))
 
       // Persist scratch-editor content to the store (debounced) so it
-      // survives canvas/workspace switches and app restarts.
+      // survives canvas/workspace switches and app restarts. The session
+      // save path also flushes live Monaco buffers right before write, so
+      // a quit mid-debounce cannot drop the text either.
       if (!sync.filePathRef.current) {
         if (unsavedSaveTimer) clearTimeout(unsavedSaveTimer)
         unsavedSaveTimer = setTimeout(() => {
           const value = editor.getModel()?.getValue() ?? ''
           useAppStore.getState().setPanelUnsavedContent(workspaceId, panelId, value || undefined)
-        }, 300)
+        }, 150)
       }
     })
 
@@ -628,11 +639,23 @@ export default function EditorPanel({
     }
     window.addEventListener('save-file', handler)
     registerEditorSave(panelId, save)
+    registerEditorBuffer(panelId, () => getModel()?.getValue() ?? null)
+    registerEditorBufferWriter(panelId, (content, mode) => {
+      const model = getModel()
+      if (!model) return false
+      const next = mode === 'replace'
+        ? content
+        : `${model.getValue()}${model.getValue() ? '\n\n' : ''}${content}`
+      model.setValue(next)
+      return true
+    })
     return () => {
       window.removeEventListener('save-file', handler)
       unregisterEditorSave(panelId)
+      unregisterEditorBuffer(panelId)
+      unregisterEditorBufferWriter(panelId)
     }
-  }, [save, panelId])
+  }, [save, panelId, getModel])
 
   // ---------------------------------------------------------------------------
   // Watch settings changes: editor font size / family
@@ -745,24 +768,39 @@ export default function EditorPanel({
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Markdown header strip — the Source/Preview toggle lives in its own
-          row instead of floating over the first line of content (#370). */}
-      {isMarkdown && !diffMode && (
+      {/* Editor chrome — Save for all buffers (scratch Save-As + file overwrite);
+          markdown Source/Preview stays on the same row when relevant (#370). */}
+      {!diffMode && (
         <div
-          className="flex items-center justify-end shrink-0 px-1.5 py-1 border-b border-subtle"
+          className="flex items-center justify-end gap-1.5 shrink-0 px-1.5 py-1 border-b border-subtle"
           style={{ backgroundColor: 'var(--node-chrome-bg, var(--surface-1))' }}
         >
           <button
-            onClick={() => setMarkdownPreview(!markdownPreview)}
+            type="button"
+            onClick={() => { void save() }}
             className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-              markdownPreview
-                ? 'bg-agent/15 text-agent hover:bg-agent/25'
+              isDirty || isScratch
+                ? 'bg-[var(--focus-blue,#3b82f6)]/15 text-[var(--focus-blue,#3b82f6)] hover:bg-[var(--focus-blue,#3b82f6)]/25'
                 : 'bg-surface-3 text-secondary hover:bg-surface-4 hover:text-primary'
             }`}
-            title={markdownPreview ? 'Show source' : 'Preview markdown'}
+            title={isScratch ? 'Save as file… (Ctrl+S)' : 'Save (Ctrl+S)'}
           >
-            {markdownPreview ? 'Source' : 'Preview'}
+            {isScratch ? 'Save as…' : isDirty ? 'Save •' : 'Save'}
           </button>
+          {isMarkdown && (
+            <button
+              type="button"
+              onClick={() => setMarkdownPreview(!markdownPreview)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                markdownPreview
+                  ? 'bg-agent/15 text-agent hover:bg-agent/25'
+                  : 'bg-surface-3 text-secondary hover:bg-surface-4 hover:text-primary'
+              }`}
+              title={markdownPreview ? 'Show source' : 'Preview markdown'}
+            >
+              {markdownPreview ? 'Source' : 'Preview'}
+            </button>
+          )}
         </div>
       )}
       {conflict && !diffMode && (

@@ -22,7 +22,15 @@ import {
   release,
   setPendingTransfer,
 } from './terminalLifecycle'
-import { attach, detach, fit, restoreScroll } from './terminalDom'
+import {
+  attach,
+  detach,
+  fit,
+  restoreScroll,
+  forceWebglRepaint,
+  rebuildAllWebglRenderers,
+  scheduleZoomWebglRepaint,
+} from './terminalDom'
 import { findNext, findPrevious, clearSearch } from './terminalSearch'
 import { serializeTerminalState } from './scrollbackCapture'
 import {
@@ -55,6 +63,9 @@ export const terminalRegistry = {
   release,
   fit,
   restoreScroll,
+  forceWebglRepaint,
+  rebuildAllWebglRenderers,
+  scheduleZoomWebglRepaint,
   setPendingTransfer,
   getEntry,
   has,

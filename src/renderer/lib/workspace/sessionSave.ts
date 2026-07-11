@@ -16,6 +16,7 @@ import { collectPanelIds } from '../canvas/collectPanelIds'
 import { captureAndSaveScrollback } from '../terminal/captureAndSaveScrollback'
 import { deferredSnapshots } from './deferredRestore'
 import { terminalRegistry } from '../terminal/terminalRegistry'
+import { flushScratchEditorBuffersToStore } from '../editor/editorSaveRegistry'
 import { isLocalLocator } from '../../../main/runtime/locator'
 import { deriveSidebarSession } from './sidebarSession'
 import { buildWorkspaceFile, buildSessionFile, collectPanelIdsFromDockState } from './sessionSerialize'
@@ -39,6 +40,28 @@ let lastSidebarSessionSerialized: string | null = null
 let lastRemoteProjectsSerialized: string | null = null
 
 export async function saveSession(): Promise<void> {
+  // Scratch editors keep their live text in Monaco; store.unsavedContent is
+  // only updated on a 300ms debounce. A quit/restart before that timer fires
+  // used to drop the buffer. Pull every live scratch buffer into the store
+  // first so the snapshot below sees the latest keystrokes.
+  flushScratchEditorBuffersToStore(
+    (panelId) => {
+      for (const ws of useAppStore.getState().workspaces) {
+        const p = ws.panels[panelId]
+        if (p) return p
+      }
+      return undefined
+    },
+    (panelId, content) => {
+      for (const ws of useAppStore.getState().workspaces) {
+        if (ws.panels[panelId]) {
+          useAppStore.getState().setPanelUnsavedContent(ws.id, panelId, content)
+          return
+        }
+      }
+    },
+  )
+
   const updatedState = useAppStore.getState()
 
   const snapshots: SessionSnapshot[] = []

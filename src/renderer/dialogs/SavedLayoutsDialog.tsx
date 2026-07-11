@@ -18,8 +18,10 @@ import {
 import log from '../lib/logger'
 import { useEscapeKey } from '../lib/hooks/useEscapeKey'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 
 export function SavedLayoutsDialog() {
+  const { t } = useTranslation()
   const show = useUIStore((s) => s.showLayoutsDialog)
   const setShow = useUIStore((s) => s.setShowLayoutsDialog)
   const layoutsVersion = useUIStore((s) => s.layoutsVersion)
@@ -57,7 +59,7 @@ export function SavedLayoutsDialog() {
 
   const handleSave = useCallback(async () => {
     const name = saveName.trim()
-    if (!name) { setError('Name is required'); return }
+    if (!name) { setError(t('layouts.nameRequired')); return }
     setBusy(true); setError(null)
     try {
       await saveLayout(name, canvasApi)
@@ -65,7 +67,7 @@ export function SavedLayoutsDialog() {
       setSelected(name)
     } catch (err) {
       log.error('[SavedLayoutsDialog] save failed', err)
-      setError('Save failed')
+      setError(t('layouts.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -76,21 +78,21 @@ export function SavedLayoutsDialog() {
     try {
       const ok = await loadLayoutIntoActiveCanvas(name)
       if (ok) close()
-      else setError('Layout not found')
+      else setError(t('layouts.layoutNotFound'))
     } finally {
       setBusy(false)
     }
   }, [close])
 
   const handleDelete = useCallback(async (name: string) => {
-    if (!window.confirm(`Delete layout "${name}"?`)) return
+    if (!window.confirm(t('layouts.deleteConfirm').replace('{name}', name))) return
     setBusy(true); setError(null)
     try {
       await deleteLayout(name)
       if (selected === name) setSelected(null)
     } catch (err) {
       log.error('[SavedLayoutsDialog] delete failed', err)
-      setError('Delete failed')
+      setError(t('layouts.deleteFailed'))
     } finally {
       setBusy(false)
     }
@@ -115,7 +117,7 @@ export function SavedLayoutsDialog() {
               value={saveName}
               onChange={(e) => setSaveName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
-              placeholder="Save current canvas as…"
+              placeholder={t('layouts.savePlaceholder')}
               className="flex-1 bg-transparent text-primary text-[13px] outline-none placeholder:text-muted"
               disabled={busy}
             />
@@ -144,12 +146,12 @@ export function SavedLayoutsDialog() {
         <div className="flex-1 overflow-y-auto pb-1.5">
           {names.length === 0 ? (
             <div className="text-muted text-[13px] text-center py-5">
-              No saved layouts yet. Type a name above and hit Enter.
+              {t('layouts.emptyState')}
             </div>
           ) : (
             <>
               <div className="px-3.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                Saved Layouts
+                {t('layouts.savedLayouts')}
               </div>
               {names.map((name) => {
                 const isSelected = selected === name
@@ -170,17 +172,17 @@ export function SavedLayoutsDialog() {
                         onClick={(e) => { e.stopPropagation(); handleLoad(name) }}
                         disabled={busy}
                         className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-primary"
-                        title="Load"
+                        title={t('layouts.load')}
                       >
                         <FolderOpen size={12} />
-                        Load
+                        {t('layouts.load')}
                       </button>
-                      <Tooltip label="Delete">
+                      <Tooltip label={t('layouts.delete')}>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDelete(name) }}
                           disabled={busy}
                           className="p-1.5 rounded-md text-muted hover:text-red-400 hover:bg-red-600/10"
-                          aria-label="Delete"
+                          aria-label={t('layouts.delete')}
                         >
                           <Trash size={12} />
                         </button>

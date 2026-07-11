@@ -123,7 +123,8 @@ export const PANEL_DEFINITIONS: Record<PanelType, SharedPanelDefinition> = {
   },
   orchestration: {
     type: 'orchestration',
-    label: 'Orchestration',
+    // API-based orchestrator panel — experimental. Primary path is Maestro (crown).
+    label: 'Orchestration (experimental)',
     brandColor: '#A855F7',
     mutedColor: '#7c3aed',
     tintClass: 'text-purple-400',

@@ -55,6 +55,15 @@ extraResources:
     to: orquestra-extensions
     filter:
       - "**/*"
+  # Maestro crown CLI (orquestra.js + skills) — resolved by maestroAssets.ts
+  # via process.resourcesPath/orquestra-maestro-cli. Exclude tests.
+  - from: scripts/maestro
+    to: orquestra-maestro-cli
+    filter:
+      - "orquestra.js"
+      - "orquestra.cmd"
+      - "orquestra-skill.md"
+      - "orquestra-worker-skill.md"
   # Ship the orquestra-theme authoring skill so installThemeSkill can copy it into
   # ~/.claude/skills/orquestra-theme/ on first launch.
   - from: skills
@@ -78,10 +87,9 @@ toolsets:
   winCodeSign: "1.1.0"
 npmRebuild: false
 publish:
-  provider: github
-  owner: leonardo-lacerda
-  repo: orquestra
-  releaseType: release
+  provider: generic
+  url: https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases/
+  channel: latest
 mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
@@ -103,6 +111,10 @@ mac:
         - arm64
 win:
   icon: build/icon.ico
+  # Local/dev packaging without admin symlink privilege fails extracting
+  # winCodeSign (darwin dylib symlinks). Disable exe edit so NSIS/zip can
+  # finish; CI release still uses CSC_LINK for real signing when available.
+  signAndEditExecutable: false
   # Code signing is driven by CI env vars (CSC_LINK / CSC_KEY_PASSWORD), wired
   # from the WINDOWS_CERTS / WINDOWS_CERTS_PASSWORD repo secrets in
   # .github/workflows/release.yml. With them set, electron-builder signs the

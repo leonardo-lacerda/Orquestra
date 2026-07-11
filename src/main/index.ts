@@ -1,10 +1,11 @@
 import log from './logger'
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import path from 'path'
 import { registerHandlers as registerTerminalHandlers } from './ipc/terminal'
 import { runtimes } from './runtime/runtimeManager'
 import { registerRuntimeHandlers } from './ipc/runtime'
 import { registerHandlers as registerFilesystemHandlers } from './ipc/filesystem'
+import { registerHandlers as registerLinkedContextHandlers } from './ipc/linkedContext'
 import { registerHandlers as registerGitHandlers } from './ipc/git'
 import { registerHandlers as registerSearchHandlers } from './ipc/search'
 import { registerHandlers as registerShellHandlers } from './ipc/shell'
@@ -33,11 +34,9 @@ import { initShellEnv, getShellEnv } from './shellEnv'
 import { currentExclusionSet } from './ipc/filesystem'
 import { initAutoUpdater } from './auto-updater'
 import { initSentry, captureMainException, flushSentry } from './sentry'
-import { initAnalytics, devSimulateUpdateFrom, hasRunBefore } from './analytics'
 import { disableTrustScoping } from './featureFlags'
 import { startPerfMonitor, getLatestSnapshot } from './perf/perfMonitor'
-import { PERF_GET } from '../shared/ipc-channels'
-import { TELEMETRY_NOTICE_VERSION } from '../shared/types'
+import { PERF_GET, OPEN_EXTERNAL_URL } from '../shared/ipc-channels'
 import { installWebContentsSecurity } from './webSecurity'
 import { installProxyAuthHandler } from './browserProxy'
 import { installThemeSkill } from './installThemeSkill'
@@ -52,7 +51,6 @@ import { registerDockWindowHandlers } from './ipc/dockWindows'
 import { registerWindowPanelHandlers } from './ipc/windowPanels'
 import { registerDragHandlers } from './ipc/dragHandlers'
 import { setMainWindowReady, flushPendingOpenPaths, registerOpenFileHandler } from './lifecycle/openPath'
-import { fireStartupTelemetry, registerTelemetryNoticeHandler } from './lifecycle/telemetry'
 import { registerLifecycleHandlers } from './lifecycle/shutdown'
 
 // NOTE: runSmokeAssertions only ever runs when ORQUESTRA_SMOKE_TEST=1. The 1200 ms
@@ -95,6 +93,7 @@ function registerCriticalHandlers(): void {
   registerProjectStateHandlers()
   registerWorkspaceHandlers()
   registerFilesystemHandlers()
+  registerLinkedContextHandlers()
   registerTerminalHandlers()
   registerShellHandlers()
   registerMenuHandlers()
@@ -107,6 +106,12 @@ function registerCriticalHandlers(): void {
   registerDockWindowHandlers({ createWindow })
   registerWindowPanelHandlers()
   registerDragHandlers({ createWindow })
+  // Open external URLs in the default browser (not embedded).
+  ipcMain.on(OPEN_EXTERNAL_URL, (_e, url: string) => {
+    if (typeof url === 'string' && (url.startsWith('https:') || url.startsWith('http:'))) {
+      shell.openExternal(url).catch((err) => log.warn('Failed to open external URL:', err))
+    }
+  })
   // Resource profiler — no-op unless ORQUESTRA_PERF=1.
   startPerfMonitor()
   ipcMain.handle(PERF_GET, () => getLatestSnapshot())
@@ -153,8 +158,8 @@ if (!app.isPackaged) {
 
 // First-start simulation (`npm run dev:firststart`). Point userData at a
 // dedicated dir that's wiped on every launch, so the app boots exactly like a
-// brand-new install: telemetry notice + onboarding tour, empty session, no
-// recent projects or saved window geometry. Dev-only; never in a packaged app.
+// brand-new install: onboarding tour, empty session, no recent projects or
+// saved window geometry. Dev-only; never in a packaged app.
 if (!app.isPackaged && process.env.ORQUESTRA_FRESH_USERDATA === '1') {
   const fs = require('fs') as typeof import('fs')
   const dir = path.join(app.getPath('userData'), 'FirstStart')
@@ -162,26 +167,6 @@ if (!app.isPackaged && process.env.ORQUESTRA_FRESH_USERDATA === '1') {
   fs.mkdirSync(dir, { recursive: true })
   app.setPath('userData', dir)
   log.info('[firststart] fresh userData (wiped on each launch): %s', dir)
-}
-
-// Dev-only: simulate launching right after an update at a given level
-// (major / minor / patch). Uses its own wiped userData dir, then seeds the
-// analytics state so `checkAndReportUpdate` sees a version bump from a synthetic
-// previous version. The grandfather block below marks it as an existing
-// (already-onboarded) user, so the onboarding tour stays hidden — but the
-// telemetry notice still appears, because the simulated profile hasn't
-// acknowledged the current TELEMETRY_NOTICE_VERSION (exactly like a real user
-// updating into this release). On major/minor bumps the post-update feedback
-// dialog appears alongside it; a patch bump shows the notice only. See dev:update:*.
-if (!app.isPackaged && (process.env.ORQUESTRA_SIMULATE_UPDATE === 'major' || process.env.ORQUESTRA_SIMULATE_UPDATE === 'minor' || process.env.ORQUESTRA_SIMULATE_UPDATE === 'patch')) {
-  const level = process.env.ORQUESTRA_SIMULATE_UPDATE
-  const fs = require('fs') as typeof import('fs')
-  const dir = path.join(app.getPath('userData'), `SimUpdate-${level}`)
-  try { fs.rmSync(dir, { recursive: true, force: true }) } catch { /* noop */ }
-  fs.mkdirSync(dir, { recursive: true })
-  app.setPath('userData', dir)
-  const from = devSimulateUpdateFrom(level)
-  log.info('[sim-update] %s: simulating update %s → %s (userData: %s)', level, from, app.getVersion(), dir)
 }
 
 // In E2E mode, use a fresh tmpdir per launch so Playwright runs are isolated
@@ -236,32 +221,17 @@ if (getSettingSync('disableGpuRasterization')) {
   log.info('[gpu] GPU rasterization disabled via setting (text rendered on CPU)')
 }
 
-// Scope the onboarding tour to genuine first installs. Anyone who has launched
-// Orquestra before is marked past it, so an update never replays the tour. The
-// telemetry notice (WelcomeDialog) intentionally has NO such clause — every
-// user whose acknowledged notice version is below TELEMETRY_NOTICE_VERSION
-// sees it once, updaters included.
-if (hasRunBefore()) {
-  if (!getSettingSync('onboardingCompleted')) {
-    void setSettingsFromMain({ onboardingCompleted: true })
-  }
-}
-
 // Under Playwright the profile is a fresh tmpdir, which would otherwise trigger
-// the telemetry notice + onboarding takeover and cover the canvas the specs
-// drive. Mark both as already handled so e2e starts on a clean canvas. Runs
-// before the renderer queries settings, so the dialogs never flash.
+// the onboarding takeover and cover the canvas the specs drive. Mark as already
+// handled so e2e starts on a clean canvas. Runs before the renderer queries
+// settings, so the dialog never flashes.
 if (IS_E2E) {
-  void setSettingsFromMain({ telemetryNoticeAcknowledgedVersion: TELEMETRY_NOTICE_VERSION, onboardingCompleted: true })
+  void setSettingsFromMain({ onboardingCompleted: true })
 }
 
 // Initialize Sentry as early as possible — before any IPC handlers or windows.
 // Always on in packaged builds; no-op in dev unless SENTRY_DSN is set.
 initSentry()
-initAnalytics()
-
-// Telemetry-notice acknowledgement from the renderer (WelcomeDialog).
-registerTelemetryNoticeHandler()
 
 // Provide the menu module a way to spawn additional main windows without
 // importing this file (which would create a circular dependency).
@@ -300,13 +270,13 @@ process.on('SIGINT', () => {
 app.whenReady().then(async () => {
   // Phase 0 perf marker — log a high-resolution timestamp at app.whenReady
   // so cold-launch traces can be reconstructed from main + renderer logs.
-  log.info('[perf] app.whenReady t=%dms', Math.round(performance.now()))
-  log.info('App ready, resolving shell environment...')
+  log.debug('[perf] app.whenReady t=%dms', Math.round(performance.now()))
+  log.debug('App ready, resolving shell environment...')
 
   // Resolve the user's real shell environment before registering handlers.
   // This ensures MCP servers, `which` lookups, etc. see the full PATH.
   await initShellEnv()
-  log.info('Shell environment resolved')
+  log.debug('Shell environment resolved')
 
   // Bring the local workspace online: provision + launch the host-target runtime
   // tarball as a local daemon, the same path remote hosts use. Done after the shell
@@ -352,13 +322,13 @@ app.whenReady().then(async () => {
   // can query auth state on the very first IPC call.
   electronAuth.init(app.getPath('userData'))
   registerCriticalHandlers()
-  log.info('Critical IPC handlers registered')
+  log.debug('Critical IPC handlers registered')
 
   // Install the orquestra-theme authoring skill into ~/.claude/skills (copy-if-missing).
   void installThemeSkill()
 
   const mainWin = createWindow({ type: 'main' })
-  log.info('Main window created (id=%d)', mainWin.id)
+  log.debug('Main window created (id=%d)', mainWin.id)
 
   if (disableTrustScoping()) {
     addAllowedRoot(app.getPath('home'))
@@ -373,18 +343,15 @@ app.whenReady().then(async () => {
   const markMainWindowReady = (reason: string): void => {
     if (mainWindowReadyHandled || mainWin.isDestroyed()) return
     mainWindowReadyHandled = true
-    log.info('Main window ready via %s', reason)
+    log.debug('Main window ready via %s', reason)
     setMainWindowReady(true)
     flushPendingOpenPaths()
     // Register deferred IPC handlers and start the auto-updater now that the
     // first usable renderer load has landed. Anything not on the cold-launch
     // critical path belongs here.
     registerDeferredHandlers()
-    log.info('Deferred IPC handlers registered')
+    log.debug('Deferred IPC handlers registered')
     initAutoUpdater()
-    // Detect a version change since last launch and emit an app_updated event
-    // before app_start, so the upgrade path lands in analytics in order.
-    fireStartupTelemetry(mainWin)
     if (process.env.ORQUESTRA_SMOKE_TEST === '1') {
       runSmokeAssertions(mainWin)
         .then(() => app.exit(0))

@@ -11,7 +11,7 @@
 
 // @vitest-environment jsdom
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Shared event log so tests can assert ordering of cross-cutting calls
 // (terminal.open, terminal.write, panelTransferAck) during reconnect+attach.
@@ -64,7 +64,7 @@ vi.mock('@xterm/xterm', () => {
     hasSelection(): boolean { return false }
     attachCustomKeyEventHandler(): void { /* no-op */ }
     registerLinkProvider(): { dispose: () => void } { return { dispose: () => {} } }
-    refresh(): void { /* no-op */ }
+    refresh(): void { events.push('refresh') }
     focus(): void { /* no-op */ }
     scrollToLine(line: number): void {
       this.buffer.active.viewportY = Math.max(0, Math.min(line, this.buffer.active.baseY))
@@ -82,8 +82,14 @@ const fitProposal = { cols: 80, rows: 24 }
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class { proposeDimensions() { return { ...fitProposal } } fit() {} dispose() {} },
 }))
+// Shared counters so forceWebglRepaint tests can assert atlas clears.
+const webglAtlasClears: { count: number } = { count: 0 }
 vi.mock('@xterm/addon-webgl', () => ({
-  WebglAddon: class { onContextLoss() {} dispose() {} },
+  WebglAddon: class {
+    onContextLoss() {}
+    dispose() {}
+    clearTextureAtlas() { webglAtlasClears.count++ }
+  },
 }))
 vi.mock('@xterm/addon-search', () => ({
   SearchAddon: class { findNext() { return false } findPrevious() { return false } clearDecorations() {} },
@@ -126,6 +132,7 @@ const shellRegisterTerminal = vi.fn(async () => undefined)
 beforeEach(() => {
   fitProposal.cols = 80
   fitProposal.rows = 24
+  webglAtlasClears.count = 0
   settingsState.terminalFontFamily = ''
   settingsState.terminalFontSize = 0
   settingsState.terminalScrollback = 2000
@@ -180,6 +187,93 @@ describe('terminal font settings', () => {
     expect(entry.terminal.options.fontSize).toBe(16)
 
     terminalRegistry.dispose('panel-font-custom')
+  })
+})
+
+describe('forceWebglRepaint / scheduleZoomWebglRepaint', () => {
+  // Canvas zoom used to only call terminal.refresh(), leaving the shared WebGL
+  // glyph atlas and per-terminal models desynced → scrambled letters until a
+  // manual resize. forceWebglRepaint must clear EVERY live terminal's atlas
+  // (shared) + model; scheduleZoomWebglRepaint must debounce past the gesture.
+
+  afterEach(async () => {
+    const { cancelScheduledZoomWebglRepaint } = await import('./terminalDom')
+    cancelScheduledZoomWebglRepaint()
+    document.body.classList.remove('canvas-interacting')
+    vi.useRealTimers()
+  })
+
+  it('forceWebglRepaint clears atlas and refreshes every live terminal', async () => {
+    const { terminalRegistry } = await import('./terminalRegistry')
+    const a = await terminalRegistry.getOrCreate('panel-webgl-a', { workspaceId: 'ws-1' })
+    const b = await terminalRegistry.getOrCreate('panel-webgl-b', { workspaceId: 'ws-1' })
+
+    // Simulate attached WebGL addons (attach() would create them; we stub so
+    // the test does not depend on rAF fit timing).
+    const clearA = vi.fn()
+    const clearB = vi.fn()
+    a.webglAddon = { clearTextureAtlas: clearA, dispose: () => {}, onContextLoss: () => {} } as never
+    b.webglAddon = { clearTextureAtlas: clearB, dispose: () => {}, onContextLoss: () => {} } as never
+
+    const refreshesBefore = events.filter((e) => e === 'refresh').length
+    terminalRegistry.forceWebglRepaint()
+
+    expect(clearA).toHaveBeenCalledTimes(1)
+    expect(clearB).toHaveBeenCalledTimes(1)
+    expect(events.filter((e) => e === 'refresh').length).toBe(refreshesBefore + 2)
+
+    terminalRegistry.dispose('panel-webgl-a')
+    terminalRegistry.dispose('panel-webgl-b')
+  })
+
+  it('scheduleZoomWebglRepaint debounces into one recovery after the gesture settles', async () => {
+    vi.useFakeTimers()
+    const { terminalRegistry } = await import('./terminalRegistry')
+    const { cancelScheduledZoomWebglRepaint } = await import('./terminalDom')
+    const entry = await terminalRegistry.getOrCreate('panel-zoom-repaint', { workspaceId: 'ws-1' })
+    const clear = vi.fn()
+    entry.webglAddon = { clearTextureAtlas: clear, dispose: () => {}, onContextLoss: () => {} } as never
+    // Not in DOM → hard rebuild skips reload; soft clearTextureAtlas still runs.
+    ;(entry.terminal as { element?: HTMLElement }).element = undefined
+
+    terminalRegistry.scheduleZoomWebglRepaint()
+    terminalRegistry.scheduleZoomWebglRepaint()
+    terminalRegistry.scheduleZoomWebglRepaint()
+    expect(clear).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(200)
+    // Soft pass immediately; rAF rebuild may no-op without connected element;
+    // follow-up soft pass at +80ms.
+    await vi.advanceTimersByTimeAsync(0) // flush rAF if mocked
+    await vi.advanceTimersByTimeAsync(100)
+    expect(clear.mock.calls.length).toBeGreaterThanOrEqual(1)
+
+    cancelScheduledZoomWebglRepaint()
+    terminalRegistry.dispose('panel-zoom-repaint')
+  })
+
+  it('scheduleZoomWebglRepaint waits while canvas-interacting is held', async () => {
+    vi.useFakeTimers()
+    const { terminalRegistry } = await import('./terminalRegistry')
+    const { cancelScheduledZoomWebglRepaint } = await import('./terminalDom')
+    const entry = await terminalRegistry.getOrCreate('panel-zoom-interacting', { workspaceId: 'ws-1' })
+    const clear = vi.fn()
+    entry.webglAddon = { clearTextureAtlas: clear, dispose: () => {}, onContextLoss: () => {} } as never
+    ;(entry.terminal as { element?: HTMLElement }).element = undefined
+
+    document.body.classList.add('canvas-interacting')
+    terminalRegistry.scheduleZoomWebglRepaint()
+    await vi.advanceTimersByTimeAsync(200)
+    // Still interacting — recovery deferred.
+    expect(clear).not.toHaveBeenCalled()
+
+    document.body.classList.remove('canvas-interacting')
+    await vi.advanceTimersByTimeAsync(200)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(clear.mock.calls.length).toBeGreaterThanOrEqual(1)
+
+    cancelScheduledZoomWebglRepaint()
+    terminalRegistry.dispose('panel-zoom-interacting')
   })
 })
 

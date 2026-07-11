@@ -40,7 +40,6 @@ import { parseLocator, formatLocator, LOCAL_RUNTIME_ID } from '../../main/runtim
 import { runtimes } from '../../main/runtime/runtimeManager'
 import { readCustomOpenAI, saveCustomOpenAI } from './customModels'
 import log from '../../main/logger'
-import { sendEvent } from '../../main/analytics'
 import type {
   AgentCreateOptions,
   AgentExtensionUIResponse,
@@ -51,16 +50,6 @@ import type {
 } from '../../shared/types'
 import type { AuthManager } from './authManager'
 import type { AgentManager } from './agentManager'
-
-// Anonymous telemetry for user-sent agent messages. We record only the kind of
-// message, its length, and whether it carried images — never the message text.
-function trackMessageSent(kind: 'prompt' | 'steer' | 'follow_up', text: string, images?: unknown[]): void {
-  void sendEvent('agent_message_sent', {
-    kind,
-    chars: typeof text === 'string' ? text.length : 0,
-    has_images: Array.isArray(images) && images.length > 0,
-  })
-}
 
 export function registerAgentHandlers(authManager: AuthManager, agentManager: AgentManager): void {
   // webContents we've already hooked 'destroyed' on, so a window hosting many
@@ -94,7 +83,6 @@ export function registerAgentHandlers(authManager: AuthManager, agentManager: Ag
   ipcMain.handle(
     AGENT_PROMPT,
     async (_event, panelId: string, text: string, images?: AgentImageAttachment[]) => {
-      trackMessageSent('prompt', text, images)
       await agentManager.prompt(panelId, text, images)
     },
   )
@@ -102,7 +90,6 @@ export function registerAgentHandlers(authManager: AuthManager, agentManager: Ag
   ipcMain.handle(
     AGENT_STEER,
     async (_event, panelId: string, text: string, images?: AgentImageAttachment[]) => {
-      trackMessageSent('steer', text, images)
       await agentManager.steer(panelId, text, images)
     },
   )

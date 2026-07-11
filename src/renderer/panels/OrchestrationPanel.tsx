@@ -11,6 +11,7 @@ import { useAcpStore } from '../stores/acpStore'
 import { useAppStore } from '../stores/appStore'
 import { terminalRegistry } from '../lib/terminal/terminalRegistry'
 import type { ApiOrchestratorConfig } from '../../shared/acp-types'
+import { useTranslation } from '../i18n/useTranslation'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,6 +76,7 @@ const LogLine: React.FC<{ text: string }> = ({ text }) => (
 // ---------------------------------------------------------------------------
 
 const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
+  const { t } = useTranslation()
   const [input, setInput] = useState('')
   const [config, setConfig] = useState<ApiOrchestratorConfig>(DEFAULT_CONFIG)
   const [showConfig, setShowConfig] = useState(false)
@@ -119,7 +121,7 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
       // Parse [N] markers
       const tasks = parseWorkerCommands(response)
       if (tasks.length === 0) {
-        setLog((l) => [...l, '✗ Nenhum comando [N] encontrado na resposta'])
+        setLog((l) => [...l, t('orchestration.noCommandsFound')])
         setIsRunning(false)
         return
       }
@@ -130,7 +132,7 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
       for (const task of tasks) {
         const worker = workers[task.workerIndex - 1]
         if (!worker?.ptyId) {
-          setLog((l) => [...l, `  ✗ Worker ${task.workerIndex}: não encontrado`])
+          setLog((l) => [...l, t('orchestration.workerNotFound').replace('{index}', String(task.workerIndex))])
           continue
         }
         // Send command + Enter to the terminal
@@ -149,7 +151,7 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
     <div className="flex flex-col h-full bg-[var(--surface-0)] text-[var(--text)]">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]">
-        <span className="text-sm font-medium">Orchestration</span>
+        <span className="text-sm font-medium">{t('orchestration.panelTitle')}</span>
         <span className="text-xs text-[var(--text-muted)]">{workers.length} workers</span>
         <button
           onClick={() => setShowConfig(!showConfig)}
@@ -202,7 +204,7 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
       <div className="flex flex-wrap gap-1.5 px-3 py-1.5 border-b border-[var(--border)]">
         {workers.length === 0 ? (
           <span className="text-xs text-[var(--text-muted)]">
-            Nenhum terminal aberto. Abra terminais no canvas para usar como workers.
+            {t('orchestration.noTerminals')}
           </span>
         ) : (
           workers.map((w, i) => <WorkerBadge key={w.panelId} terminal={w} index={i + 1} />)
@@ -213,8 +215,8 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {log.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] text-sm">
-            <p className="mb-2">Descreva o que os workers devem fazer</p>
-            <p className="text-xs">A IA vai gerar comandos e injetar nos terminais</p>
+            <p className="mb-2">{t('orchestration.describeTask')}</p>
+            <p className="text-xs">{t('orchestration.aiGenerateInfo')}</p>
           </div>
         ) : (
           log.map((line, i) => <LogLine key={i} text={line} />)
@@ -229,7 +231,7 @@ const OrchestrationPanel: React.FC<{ panelId: string }> = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !isRunning && handleOrchestrate()}
-            placeholder="Descreva a tarefa para os workers..."
+            placeholder={t('orchestration.taskPlaceholder')}
             className="flex-1 bg-[var(--surface-1)] text-sm px-3 py-2 rounded border border-[var(--border)] outline-none"
             disabled={isRunning || workers.length === 0 || !config.apiKey}
           />

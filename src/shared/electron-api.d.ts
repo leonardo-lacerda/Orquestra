@@ -2,8 +2,9 @@
 // Type declaration for window.electronAPI exposed via contextBridge
 // =============================================================================
 
-import type { AgentCreateOptions, AgentEventEnvelope, AgentExtensionUIResponse, AgentImageAttachment, AgentModelRef, AgentModelDescriptor, AgentRpcState, AgentSessionListEntry, AgentSessionStats, AgentSlashCommand, AgentThinkingLevel, AppSettings, AgentState, AuthProviderDescriptor, AuthProviderStatus, CanvasLayoutSnapshot, OrquestraWindowParams, CustomOpenAIProvider, DockWindowInitPayload, DockWindowSyncState, DetachedDockWindowSnapshot, WindowPanelInfo, WindowPanelReport, DockStateSnapshot, FileSearchOptions, FileSearchResult, FileTreeNode, GitInfo, SearchOptions, SearchResultBatch, SearchDoneEvent, NotificationAction, OAuthFlowEvent, PanelState, PanelTransferSnapshot, PerfSnapshot, Point, SessionSnapshot, SidebarSession, TerminalActivity, WorkspaceInfo, WorkspaceMutationResult, RemoteConnectSpec, RuntimeConnectResult, RuntimeStatusEvent, RuntimeConnection, RuntimePhase, RemoteProjectEntry, SshHostEntry, UIState } from './types'
+import type { AgentCreateOptions, AgentEventEnvelope, AgentExtensionUIResponse, AgentImageAttachment, AgentModelRef, AgentModelDescriptor, AgentRpcState, AgentSessionListEntry, AgentSessionStats, AgentSlashCommand, AgentThinkingLevel, AppSettings, AgentState, AuthProviderDescriptor, AuthProviderStatus, CanvasLayoutSnapshot, OrquestraWindowParams, CustomOpenAIProvider, DockWindowInitPayload, DockWindowSyncState, DetachedDockWindowSnapshot, WindowPanelInfo, WindowPanelReport, DockStateSnapshot, FileSearchOptions, FileSearchResult, FileTreeNode, GitInfo, OrquestraWorkerSummary, SearchOptions, SearchResultBatch, SearchDoneEvent, NotificationAction, OAuthFlowEvent, PanelState, PanelTransferSnapshot, PerfSnapshot, Point, SessionSnapshot, SidebarSession, TerminalActivity, WorkspaceInfo, WorkspaceMutationResult, RemoteConnectSpec, RuntimeConnectResult, RuntimeStatusEvent, RuntimeConnection, RuntimePhase, RemoteProjectEntry, SshHostEntry, UIState } from './types'
 import type { AcpAgentConfig, AcpAgentInfo, AcpSessionInfo, AcpSessionUpdate, AcpPermissionRequest, ApiOrchestratorConfig } from './acp-types'
+import type { LinkedContextBundleWriteRequest, LinkedContextBundleWriteResult } from './linkedContext'
 import type { SavedSkill, InstalledSkill, SkillEntry, SkillSource, SkillTargetId } from './skills'
 
 /** Lifecycle state of the auto-updater, surfaced to the renderer for the
@@ -27,6 +28,15 @@ export interface AppAuthState {
   subscription: AuthSubscriptionInfo | null
   reason?: string
 }
+/** Result of crown Maestro enable/disable (fail-closed packaging path). */
+export type TerminalSetMaestroResult =
+  | { ok: true; tookOverFrom?: string }
+  | {
+      ok: false
+      error: string
+      code?: 'ASSETS_MISSING' | 'INVALID_PATH' | 'COPY_FAILED' | 'NO_WORKSPACE' | 'PTY_GONE'
+    }
+
 export interface UpdateStatus {
   state: UpdateState
   /** Version of the update in flight, or null when unknown. */
@@ -105,8 +115,22 @@ export interface ElectronAPI {
   /** Notify main of a terminal panel's on-screen visibility. Used by the
    *  idle-suspend logic to SIGSTOP terminals that are offscreen and silent. */
   terminalSetVisibility(terminalId: string, visible: boolean): Promise<void>
-  terminalSetMaestro(terminalId: string, enabled: boolean, workspacePath?: string): Promise<void>
+  terminalSetMaestro(
+    terminalId: string,
+    enabled: boolean,
+    workspacePath?: string,
+  ): Promise<TerminalSetMaestroResult>
   orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
+  orquestraListWorkers(orchestratorId?: string): Promise<OrquestraWorkerSummary[]>
+  /** Tell main inject + optional ROLE.md text so idle ignores their echo. */
+  orquestraNoteRoleInject(workerId: string, injectText: string, roleFileText?: string): Promise<void>
+  onOrquestraWorkerStatus?(callback: (event: {
+    workerId: string
+    orchestratorId: string
+    name: string
+    status: 'done' | 'failed'
+    exitCode: number | null
+  }) => void): () => void
 
   terminalClipboardWrite(text: string): Promise<void>
 
@@ -124,11 +148,20 @@ export interface ElectronAPI {
    *  validation to the owning workspace's allowed roots. */
   fsReadFile(filePath: string, workspaceId?: string): Promise<string>
 
+  /** Soft read: returns null when the file is missing (no main-process error spam).
+   *  Other errors (access denied, I/O) still reject. Use for optional snapshots. */
+  fsReadFileIfExists(filePath: string, workspaceId?: string): Promise<string | null>
+
   /** Read a file as binary (ArrayBuffer). */
   fsReadBinary(filePath: string, workspaceId?: string): Promise<ArrayBuffer>
 
   /** Write UTF-8 text to a file. */
   fsWriteFile(filePath: string, content: string, workspaceId?: string): Promise<void>
+
+  /** Write/read Orquestra linked-context bundles under `.orquestra/context`. */
+  linkedContextWrite(request: LinkedContextBundleWriteRequest): Promise<LinkedContextBundleWriteResult>
+  linkedContextRead(workspaceRoot: string, targetPanelId: string, workspaceId?: string): Promise<string | null>
+  linkedContextOcr(filePath: string, workspaceId?: string): Promise<string>
 
   /** Read a directory and return FileTreeNode entries. */
   fsReadDir(dirPath: string, workspaceId?: string): Promise<FileTreeNode[]>
@@ -884,32 +917,6 @@ export interface ElectronAPI {
    *  Resolves false if no update is staged or self-update isn't possible. */
   quitAndInstallUpdate(): Promise<boolean>
 
-  // -------------------------------------------------------------------------
-  // Analytics — post-update feedback prompt
-  // -------------------------------------------------------------------------
-
-  /** Subscribe to the main-process request to show the feedback modal. */
-  onFeedbackPrompt(
-    callback: (payload: { fromVersion: string; toVersion: string }) => void,
-  ): () => void
-  /** Send a feedback submission (1-5 rating + optional comment). Resolves
-   *  with `{ ok: true }` on a successful send, `{ ok: true, buffered: true }`
-   *  if the request failed but was queued for retry, or `{ ok: false }` on
-   *  fatal validation errors. The dialog uses this to show success/retry UX. */
-  submitFeedback(payload: { rating: number; comment?: string }): Promise<{ ok: boolean; buffered?: boolean }>
-  /** Mark the feedback prompt as dismissed without submitting. */
-  dismissFeedback(method: string): void
-  /** Pull-based check for pending feedback (renderer calls on mount). */
-  getPendingFeedback(): Promise<{ fromVersion: string; toVersion: string } | null>
-  /** Track a promo link click (e.g. product_hunt, github_star, newsletter). */
-  trackLinkClick(link: string): void
-  /** Record that the telemetry notice (WelcomeDialog) was acknowledged for the
-   *  current TELEMETRY_NOTICE_VERSION. Informational only — telemetry is always
-   *  on in packaged builds and does not depend on this. */
-  acknowledgeTelemetryNotice(): Promise<void>
-  /** Report an anonymous feature-usage signal (gated by analytics consent).
-   *  `feature` is a short key; `props` are small primitives, clamped in main. */
-  trackFeatureUsed(feature: string, props?: Record<string, string | number | boolean>): void
   /** Open an external URL in the user's default browser. */
   openExternalUrl(url: string): void
 
@@ -1105,13 +1112,28 @@ export interface ElectronAPI {
   apiOrchestrate(config: ApiOrchestratorConfig, task: string, workerCount: number): Promise<string>
 
   // Maestro — canvas manipulation from inside terminals
-  terminalSetMaestro(terminalId: string, enabled: boolean, workspacePath?: string): Promise<void>
+  terminalSetMaestro(
+    terminalId: string,
+    enabled: boolean,
+    workspacePath?: string,
+  ): Promise<TerminalSetMaestroResult>
   orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
+  orquestraListWorkers(orchestratorId?: string): Promise<OrquestraWorkerSummary[]>
+  /** Tell main inject + optional ROLE.md text so idle ignores their echo. */
+  orquestraNoteRoleInject(workerId: string, injectText: string, roleFileText?: string): Promise<void>
   onMaestroRecruit(callback: (maestroId: string, args: { role: string; agent?: string; name?: string }) => void): () => void
   onMaestroDismiss(callback: (maestroId: string, args: { target: string }) => void): () => void
   onMaestroConnect(callback: (maestroId: string, args: { target: string; path: string }) => void): () => void
   onMaestroList(callback: (maestroId: string, args: Record<string, never>) => void): () => void
   onMaestroReassign(callback: (maestroId: string, args: { target: string; role: string }) => void): () => void
+  /** Main → renderer when a worker result is written (idle→done or process exit). */
+  onOrquestraWorkerStatus(callback: (event: {
+    workerId: string
+    orchestratorId: string
+    name: string
+    status: 'done' | 'failed'
+    exitCode: number | null
+  }) => void): () => void
 
   /** Check if a worker terminal has produced any output (agent started). */
   workerHasOutput(workerPtyId: string): Promise<boolean>

@@ -1,13 +1,8 @@
-// =============================================================================
-// ConnectionHandles — circles on the edges of terminal/agent nodes
-// that allow the user to drag-to-connect terminals for agent orchestration.
-//
-// Right edge = output (source), Left edge = input (target).
-// Dragging from output to another node's input creates a connection.
-// =============================================================================
-
 import React, { useCallback, useEffect, useState } from 'react'
-import type { CanvasNodeId } from '../../shared/types'
+import type { CanvasNodeId, PanelType } from '../../shared/types'
+import {
+  inferCanvasConnectionType,
+} from '../../shared/canvasConnections'
 import {
   startPendingConnection,
   updatePendingConnectionPointer,
@@ -20,7 +15,9 @@ import { useCanvasStoreApi } from '../stores/CanvasStoreContext'
 
 interface ConnectionHandlesProps {
   nodeId: CanvasNodeId
-  isConnectable: boolean
+  panelType: PanelType
+  canStartConnection: boolean
+  canEndConnection: boolean
   nodeOrigin: { x: number; y: number }
   nodeSize: { width: number; height: number }
 }
@@ -28,7 +25,6 @@ interface ConnectionHandlesProps {
 const HANDLE_RADIUS = 10
 const HANDLE_COLOR = 'var(--focus-blue, #4A9EFF)'
 
-// Pulse keyframes (injected once)
 let pulseInjected = false
 function ensurePulse(): void {
   if (pulseInjected || typeof document === 'undefined') return
@@ -46,26 +42,27 @@ function ensurePulse(): void {
 
 const ConnectionHandles: React.FC<ConnectionHandlesProps> = ({
   nodeId,
-  isConnectable,
+  panelType,
+  canStartConnection,
+  canEndConnection,
 }) => {
   ensurePulse()
   const canvasApi = useCanvasStoreApi()
   const [hasPendingDrag, setHasPendingDrag] = useState(false)
 
-  // Subscribe to pending connection state so input handles pulse during drag
   useEffect(() => {
     return subscribePendingConnection(() => {
-      const p = getPendingConnection()
-      setHasPendingDrag(!!p && p.sourceNodeId !== nodeId)
+      const pending = getPendingConnection()
+      const connectionType = pending ? inferCanvasConnectionType(pending.sourcePanelType, panelType) : null
+      setHasPendingDrag(!!pending && pending.sourceNodeId !== nodeId && !!connectionType)
     })
-  }, [nodeId])
+  }, [nodeId, panelType])
 
-  // Output handle (right edge) — drag start
   const handleOutputMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
       e.preventDefault()
-      startPendingConnection(nodeId)
+      startPendingConnection(nodeId, panelType)
 
       const handleMouseMove = (ev: MouseEvent) => {
         const store = canvasApi.getState()
@@ -85,8 +82,10 @@ const ConnectionHandles: React.FC<ConnectionHandlesProps> = ({
         const inputHandle = target.closest('[data-connection-input]')
         if (inputHandle) {
           const targetNodeId = inputHandle.getAttribute('data-connection-input')
-          if (targetNodeId && targetNodeId !== nodeId) {
-            canvasApi.getState().addConnection(nodeId, targetNodeId)
+          const targetPanelType = inputHandle.getAttribute('data-connection-input-type') as PanelType | null
+          const connectionType = inferCanvasConnectionType(panelType, targetPanelType ?? undefined)
+          if (targetNodeId && targetNodeId !== nodeId && connectionType) {
+            canvasApi.getState().addConnection(nodeId, targetNodeId, connectionType)
           }
         }
 
@@ -98,23 +97,23 @@ const ConnectionHandles: React.FC<ConnectionHandlesProps> = ({
       document.addEventListener('mouseup', handleMouseUp)
       document.body.classList.add('connecting-terminal')
     },
-    [nodeId, canvasApi],
+    [nodeId, panelType, canvasApi],
   )
 
-  // Input handle click — complete a pending connection (from context menu flow)
   const handleInputClick = useCallback(
     (e: React.MouseEvent) => {
       const pending = getPendingConnection()
-      if (pending && pending.sourceNodeId !== nodeId) {
+      const connectionType = pending ? inferCanvasConnectionType(pending.sourcePanelType, panelType) : null
+      if (pending && pending.sourceNodeId !== nodeId && connectionType) {
         e.stopPropagation()
-        canvasApi.getState().addConnection(pending.sourceNodeId, nodeId)
+        canvasApi.getState().addConnection(pending.sourceNodeId, nodeId, connectionType)
         endPendingConnection()
       }
     },
-    [nodeId, canvasApi],
+    [nodeId, panelType, canvasApi],
   )
 
-  if (!isConnectable) return null
+  if (!canStartConnection && !canEndConnection) return null
 
   const handleBase: React.CSSProperties = {
     position: 'absolute',
@@ -129,46 +128,48 @@ const ConnectionHandles: React.FC<ConnectionHandlesProps> = ({
 
   return (
     <>
-      {/* Output handle — right edge */}
-      <div
-        data-connection-output={nodeId}
-        onMouseDown={handleOutputMouseDown}
-        style={{
-          ...handleBase,
-          right: -HANDLE_RADIUS,
-          transform: 'translateY(-50%)',
-          background: HANDLE_COLOR,
-          border: '2px solid var(--surface-0, #1e1e1e)',
-          opacity: 0.85,
-          transition: 'opacity 150ms ease',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.85' }}
-      />
+      {canStartConnection && (
+        <div
+          data-connection-output={nodeId}
+          data-connection-output-type={panelType}
+          onMouseDown={handleOutputMouseDown}
+          style={{
+            ...handleBase,
+            right: -HANDLE_RADIUS,
+            transform: 'translateY(-50%)',
+            background: HANDLE_COLOR,
+            border: '2px solid var(--surface-0, #1e1e1e)',
+            opacity: 0.85,
+            transition: 'opacity 150ms ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.85' }}
+        />
+      )}
 
-      {/* Input handle — left edge. Pulses when a drag is in progress from another node. */}
-      <div
-        data-connection-input={nodeId}
-        onClick={handleInputClick}
-        style={{
-          ...handleBase,
-          left: -HANDLE_RADIUS,
-          transform: 'translateY(-50%)',
-          background: hasPendingDrag ? HANDLE_COLOR : 'var(--surface-3, #444)',
-          border: `2px solid ${HANDLE_COLOR}`,
-          opacity: hasPendingDrag ? 1 : 0.6,
-          cursor: hasPendingDrag ? 'pointer' : 'crosshair',
-          animation: hasPendingDrag
-            ? 'connectionTargetPulse 1s ease-in-out infinite'
-            : 'none',
-        }}
-        onMouseEnter={(e) => {
-          if (!hasPendingDrag) e.currentTarget.style.opacity = '1'
-        }}
-        onMouseLeave={(e) => {
-          if (!hasPendingDrag) e.currentTarget.style.opacity = '0.6'
-        }}
-      />
+      {canEndConnection && (
+        <div
+          data-connection-input={nodeId}
+          data-connection-input-type={panelType}
+          onClick={handleInputClick}
+          style={{
+            ...handleBase,
+            left: -HANDLE_RADIUS,
+            transform: 'translateY(-50%)',
+            background: hasPendingDrag ? HANDLE_COLOR : 'var(--surface-3, #444)',
+            border: `2px solid ${HANDLE_COLOR}`,
+            opacity: hasPendingDrag ? 1 : 0.6,
+            cursor: hasPendingDrag ? 'pointer' : 'crosshair',
+            animation: hasPendingDrag ? 'connectionTargetPulse 1s ease-in-out infinite' : 'none',
+          }}
+          onMouseEnter={(e) => {
+            if (!hasPendingDrag) e.currentTarget.style.opacity = '1'
+          }}
+          onMouseLeave={(e) => {
+            if (!hasPendingDrag) e.currentTarget.style.opacity = '0.6'
+          }}
+        />
+      )}
     </>
   )
 }

@@ -13,6 +13,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { LoginScreen } from './LoginScreen'
+import { useTranslation } from '../i18n/useTranslation'
 import type { AppAuthState } from '../../shared/electron-api'
 
 type Phase = 'loading' | 'login' | 'authorized'
@@ -22,6 +23,7 @@ interface AuthGateProps {
 }
 
 export function AuthGate({ children }: AuthGateProps): React.ReactElement {
+  const { t } = useTranslation()
   const [phase, setPhase] = useState<Phase>('loading')
   const [error, setError] = useState<string | undefined>()
   const [reason, setReason] = useState<string | undefined>()
@@ -78,9 +80,9 @@ export function AuthGate({ children }: AuthGateProps): React.ReactElement {
         setReason(undefined)
         return null
       }
-      return state.reason ?? 'Falha ao fazer login.'
+      return state.reason ?? t('auth.login.error')
     } catch (err) {
-      return err instanceof Error ? err.message : 'Erro ao conectar com servidor.'
+      return err instanceof Error ? err.message : t('auth.login.serverError')
     }
   }, [])
 
@@ -95,7 +97,7 @@ export function AuthGate({ children }: AuthGateProps): React.ReactElement {
         justifyContent: 'center',
         backgroundColor: '#1a1a1e',
       }}>
-        <div style={{ color: '#8b8b95', fontSize: 14 }}>Verificando sessão...</div>
+        <div style={{ color: '#8b8b95', fontSize: 14 }}>{t('auth.login.verifyingSession')}</div>
       </div>
     )
   }

@@ -121,4 +121,31 @@ describe('settingsFile', () => {
     const onDisk = JSON.parse(fs.readFileSync(settingsPath(), 'utf-8'))
     expect(onDisk.betaUpdatesEnabled).toBe(true)
   })
+
+  it('seeds orchestration settings with defaults', async () => {
+    const m = await freshModule()
+    m.loadSettingsSync()
+
+    expect(m.isSettingsKey('orchestrationMode')).toBe(true)
+    expect(m.isSettingsKey('orchestrationMaxWorkers')).toBe(true)
+    expect(m.isSettingsKey('orchestrationAllowNetwork')).toBe(true)
+    expect(m.getSetting('orchestrationMode')).toBe(DEFAULT_SETTINGS.orchestrationMode)
+    expect(m.getSetting('orchestrationMaxWorkers')).toBe(DEFAULT_SETTINGS.orchestrationMaxWorkers)
+    expect(m.getSetting('orchestrationOnWorkerDone')).toBe(DEFAULT_SETTINGS.orchestrationOnWorkerDone)
+  })
+
+  it('rejects wrong types for hand-edited orchestration settings', async () => {
+    fs.writeFileSync(settingsPath(), JSON.stringify({
+      orchestrationMode: 'auto',
+      orchestrationMaxWorkers: 'many',
+      orchestrationAllowNetwork: 'yes',
+    }))
+
+    const m = await freshModule()
+    m.loadSettingsSync()
+
+    expect(m.getSetting('orchestrationMode')).toBe('auto')
+    expect(m.getSetting('orchestrationMaxWorkers')).toBe(DEFAULT_SETTINGS.orchestrationMaxWorkers)
+    expect(m.getSetting('orchestrationAllowNetwork')).toBe(DEFAULT_SETTINGS.orchestrationAllowNetwork)
+  })
 })

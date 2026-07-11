@@ -9,6 +9,7 @@
 
 import React, { forwardRef } from 'react'
 import { Folder, File } from '@phosphor-icons/react'
+import { useTranslation } from '../i18n/useTranslation'
 import { InlineEditInput } from './InlineEditInput'
 
 export interface CreateFileFormProps {
@@ -24,7 +25,9 @@ export interface CreateFileFormProps {
 }
 
 export const CreateFileForm = forwardRef<HTMLInputElement, CreateFileFormProps>(
-  ({ type, value, onChange, onSubmit, onCancel, paddingLeft, iconSize = 14 }, ref) => (
+  ({ type, value, onChange, onSubmit, onCancel, paddingLeft, iconSize = 14 }, ref) => {
+    const { t } = useTranslation()
+    return (
     <div className="h-7 flex items-center gap-1.5 px-2" style={{ paddingLeft }}>
       <span className="flex-shrink-0 w-3" />
       <span className="flex-shrink-0" style={{ color: type === 'folder' ? '#E2B855' : '#9CA3AF' }}>
@@ -34,14 +37,15 @@ export const CreateFileForm = forwardRef<HTMLInputElement, CreateFileFormProps>(
         ref={ref}
         className="flex-1 min-w-0 bg-surface-5 text-primary text-sm px-1 rounded border border-blue-500/50 outline-none"
         value={value}
-        placeholder={type === 'folder' ? 'folder name' : 'file name'}
+        placeholder={type === 'folder' ? t('explorer.newFolderPlaceholder') : t('explorer.newFilePlaceholder')}
         onChange={onChange}
         onSubmit={onSubmit}
         onCancel={onCancel}
         stopKeyPropagation
       />
     </div>
-  ),
+    )
+  },
 )
 
 CreateFileForm.displayName = 'CreateFileForm'

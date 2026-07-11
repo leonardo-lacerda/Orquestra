@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { PuzzlePiece, CaretRight } from '@phosphor-icons/react'
 import { useAppStore } from '../stores/appStore'
 import { useUIStore } from '../stores/uiStore'
+import { useTranslation } from '../i18n/useTranslation'
 import { getAgentLogoById } from '../lib/agent/agentLogos'
 import { OrquestraLogo } from '../ui/OrquestraLogo'
 import { SKILL_TARGETS, type SkillTargetId } from '../../shared/skills'
@@ -63,6 +64,7 @@ export const WorkspaceSkillsTree: React.FC<{ workspaceId: string; rootPath: stri
   workspaceId,
   rootPath,
 }) => {
+  const { t } = useTranslation()
   const [groups, setGroups] = useState<SkillTargetGroup[]>([])
   const [open, setOpen] = useState(true)
   // Refetch when the Skills dialog closes — an install/uninstall there should
@@ -100,7 +102,7 @@ export const WorkspaceSkillsTree: React.FC<{ workspaceId: string; rootPath: stri
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title={open ? 'Collapse skills' : 'Expand skills'}
+        title={open ? t('workspace.collapse') + ' ' + t('sidebar.skills') : t('workspace.expand') + ' ' + t('sidebar.skills')}
         className="flex items-center gap-1.5 h-7 pl-3 pr-2 text-[13px] text-muted hover:text-primary hover:bg-hover text-left min-w-0 w-full focus:outline-none"
       >
         <CaretRight
@@ -108,7 +110,7 @@ export const WorkspaceSkillsTree: React.FC<{ workspaceId: string; rootPath: stri
           className={`flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
         />
         <PuzzlePiece size={11} className="flex-shrink-0" style={{ opacity: 0.6 }} />
-        <span className="truncate min-w-0 flex-1">Skills</span>
+        <span className="truncate min-w-0 flex-1">{t('sidebar.skills')}</span>
       </button>
 
       {open &&

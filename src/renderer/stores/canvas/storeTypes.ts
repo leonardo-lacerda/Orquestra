@@ -14,6 +14,7 @@ import type {
   Size,
   PanelType,
   TerminalConnection,
+  CanvasConnectionType,
   DrawingElement,
 } from '../../../shared/types'
 import type { PlacementCandidate, PlacementTrace } from '../../canvas/placement'
@@ -234,9 +235,14 @@ export interface CanvasStoreActions {
     drawings?: DrawingElement[],
   ) => void
 
-  // Terminal connections (agent orchestration)
-  addConnection: (sourceNodeId: CanvasNodeId, targetNodeId: CanvasNodeId) => string | null
+  // Canvas connections (pipe, orchestration, context)
+  addConnection: (
+    sourceNodeId: CanvasNodeId,
+    targetNodeId: CanvasNodeId,
+    connectionType?: CanvasConnectionType,
+  ) => string | null
   removeConnection: (id: string) => void
+  setConnectionType: (id: string, type: CanvasConnectionType) => void
   removeConnectionsForNode: (nodeId: CanvasNodeId) => void
   getConnections: (nodeId: CanvasNodeId) => TerminalConnection[]
   loadConnections: (connections: Record<string, TerminalConnection>) => void

@@ -35,6 +35,7 @@ import { useUIStore } from '../stores/uiStore'
 import { useAppStore } from '../stores/appStore'
 import log from '../lib/logger'
 import { errorMessage } from '../lib/errorMessage'
+import { useTranslation } from '../i18n/useTranslation'
 import { useEscapeKey } from '../lib/hooks/useEscapeKey'
 import { Tooltip } from '../ui/Tooltip'
 import {
@@ -50,7 +51,7 @@ const api = () => window.electronAPI
 // The list of repos the curated catalog is crawled from. Linked at the bottom so
 // anyone can PR a missing skill's source repo in (the CI crawler turns this into
 // skills-index.json).
-const SKILL_SOURCES_URL = 'https://github.com/0-AI-UG/orquestra/blob/main/registry/sources.json'
+const SKILL_SOURCES_URL = 'https://github.com/leonardo-lacerda/Orquestra/blob/main/registry/sources.json'
 
 function matches(entry: SkillEntry, terms: string[]): boolean {
   if (terms.length === 0) return true
@@ -97,6 +98,7 @@ function stubEntry(m: InstalledSkill): SkillEntry {
 }
 
 export function SkillsDialog() {
+  const { t } = useTranslation()
   const show = useUIStore((s) => s.showSkillsDialog)
   const setShow = useUIStore((s) => s.setShowSkillsDialog)
   const workspaces = useAppStore((s) => s.workspaces)
@@ -237,7 +239,7 @@ export function SkillsDialog() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery('') } }}
-              placeholder="Search skills…"
+              placeholder={t('skills.searchPlaceholder')}
               spellCheck={false}
               className="flex-1 bg-transparent text-primary text-[13px] outline-none placeholder:text-muted"
             />
@@ -246,12 +248,14 @@ export function SkillsDialog() {
             className="shrink-0 max-w-[130px] truncate text-[11px] text-muted"
             title={rootPath ? currentWs?.name : undefined}
           >
-            {rootPath ? `into ${currentWs?.name || 'workspace'}` : 'no folder open'}
+            {rootPath
+              ? t('skills.intoWorkspace').replace('{name}', currentWs?.name || 'workspace')
+              : t('skills.noFolderOpen')}
           </span>
-          <IconBtn title="Refresh catalog" onClick={() => void loadIndex(true)}>
+          <IconBtn title={t('skills.refreshCatalog')} onClick={() => void loadIndex(true)}>
             <ArrowsClockwise size={15} className={loading ? 'animate-spin' : undefined} />
           </IconBtn>
-          <IconBtn title="Skill sources & settings" onClick={() => useUIStore.getState().openSettings('skills')}>
+          <IconBtn title={t('skills.sourcesAndSettings')} onClick={() => useUIStore.getState().openSettings('skills')}>
             <SlidersHorizontal size={15} />
           </IconBtn>
         </div>
@@ -267,30 +271,34 @@ export function SkillsDialog() {
         <div className="flex-1 overflow-y-auto pb-2">
           {installedRows.length > 0 && (
             <>
-              <GroupLabel>Installed · {installedRows.length}</GroupLabel>
+              <GroupLabel>{t('skills.installed').replace('{count}', String(installedRows.length))}</GroupLabel>
               {installedRows.map((e) => renderRow(e, true))}
             </>
           )}
 
           {savedRows.length > 0 && (
             <>
-              <GroupLabel>Saved · {savedRows.length}</GroupLabel>
+              <GroupLabel>{t('skills.saved').replace('{count}', String(savedRows.length))}</GroupLabel>
               {savedRows.map((e) => renderRow(e, false))}
             </>
           )}
 
-          <GroupLabel>Browse{browseRows.length > 0 && ` · ${browseRows.length}`}</GroupLabel>
+          <GroupLabel>
+            {browseRows.length > 0
+              ? t('skills.browse').replace('{count}', String(browseRows.length))
+              : t('skills.browse').replace(/ \u00B7 \{count\}/, '')}
+          </GroupLabel>
           {loading && browseRows.length === 0 ? (
             <div className="px-4 py-6 text-center text-[13px] text-muted">Loading…</div>
           ) : browseRows.length === 0 ? (
             <div className="px-4 py-6 text-center text-[13px] text-muted">
               {index.length === 0
-                ? 'No catalog yet. Add a repo in Settings → Skills.'
+                ? t('skills.noCatalog')
                 : empty
                   ? 'No matches.'
                   : terms.length
-                    ? 'No other catalog matches.'
-                    : 'Everything in the catalog is already here.'}
+                    ? t('skills.noOtherMatches')
+                    : t('skills.allInCatalog')}
             </div>
           ) : (
             browseRows.map((e) => renderRow(e, false))
@@ -300,12 +308,12 @@ export function SkillsDialog() {
         {/* Pinned footer — PR a missing skill into the curated index. Stays put
             below the (possibly very long) scrolling list so it's always seen. */}
         <div className="shrink-0 border-t border-subtle px-3.5 py-2 text-[11px] text-muted">
-          Missing a skill?{' '}
+          {t('skills.missingSkill')}{' '}
           <button
             onClick={() => window.electronAPI?.openExternalUrl(SKILL_SOURCES_URL)}
             className="inline-flex items-center gap-0.5 text-secondary hover:text-primary underline decoration-dotted underline-offset-2"
           >
-            Add its source
+            {t('skills.addSource')}
             <ArrowSquareOut size={11} />
           </button>
         </div>
@@ -335,6 +343,7 @@ function SkillRow({
   onChanged: () => void
   onError: (m: string | null) => void
 }) {
+  const { t } = useTranslation()
   const installRef = useRef<HTMLButtonElement>(null)
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -365,11 +374,11 @@ function SkillRow({
 
   return (
     <div className="group flex items-center gap-2 mx-1.5 px-2 py-1.5 rounded-md hover:bg-surface-5/60">
-      <Tooltip label={saved ? 'Saved — click to remove from your library' : 'Save to your library (cached for reuse)'}>
+      <Tooltip label={saved ? t('skills.savedTooltip') : t('skills.saveToLibrary')}>
       <button
         onClick={() => void toggleSave()}
         disabled={saveBusy}
-        aria-label={saved ? 'Remove from your library' : 'Save to your library'}
+        aria-label={saved ? t('skills.savedTooltip') : t('skills.saveToLibrary')}
         className="shrink-0 w-6 h-6 flex items-center justify-center rounded disabled:opacity-50"
       >
         {saveBusy ? (
@@ -397,10 +406,10 @@ function SkillRow({
       </div>
 
       {link && (
-        <Tooltip label="Open skill on GitHub">
+        <Tooltip label={t('skills.openOnGitHub')}>
           <button
             onClick={() => window.electronAPI?.openExternalUrl(link)}
-            aria-label="Open skill on GitHub"
+            aria-label={t('skills.openOnGitHub')}
             className="shrink-0 w-6 h-6 flex items-center justify-center rounded text-muted hover:text-secondary"
           >
             <ArrowSquareOut size={14} />
@@ -415,9 +424,9 @@ function SkillRow({
         className={`shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 disabled:opacity-40 ${
           installed ? 'text-secondary hover:text-primary' : 'text-primary'
         }`}
-        title={rootPath ? 'Install for an agent in this workspace' : 'Open a folder first'}
+        title={rootPath ? t('skills.installFor') : t('skills.openFolderFirst')}
       >
-        {installed ? 'Agents' : 'Install'}
+        {installed ? t('skills.agents') : t('skills.install')}
         <CaretDown size={10} className="opacity-60" />
       </button>
 
@@ -461,6 +470,7 @@ function AgentMenu({
   onError: (m: string | null) => void
   onClose: () => void
 }) {
+  const { t: tr } = useTranslation()
   const rootRef = useRef<HTMLDivElement>(null)
   const [busy, setBusy] = useState<SkillTargetId | null>(null)
 
@@ -504,7 +514,7 @@ function AgentMenu({
       style={{ top: anchor.top, left: anchor.left }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="px-2.5 pt-0.5 pb-1 text-[10px] uppercase tracking-wide text-muted select-none">Install for</div>
+      <div className="px-2.5 pt-0.5 pb-1 text-[10px] uppercase tracking-wide text-muted select-none">{tr('skills.installFor')}</div>
       {SKILL_TARGETS.map((t) => {
         const on = installedKeys.has(`${entry.id}:${t.id}`)
         const working = busy === t.id
@@ -514,7 +524,7 @@ function AgentMenu({
             onClick={() => void toggle(t.id)}
             disabled={working}
             className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-secondary hover:bg-surface-4 hover:text-primary disabled:opacity-50"
-            title={on ? 'Installed — click to remove' : 'Install here'}
+            title={on ? tr('skills.installedTooltip') : tr('skills.installHere')}
           >
             <span className="w-3.5 shrink-0 flex items-center justify-center text-accent">
               {working ? <CircleNotch size={11} className="animate-spin" /> : on ? <Check size={11} weight="bold" /> : null}

@@ -13,6 +13,8 @@
 // lookups match cross-platform.
 // =============================================================================
 
+import { t } from '../i18n/useTranslation'
+
 /** One file entry from the GIT_STATUS IPC result (paths are repo-cwd-relative). */
 export interface GitStatusFileEntry {
   path: string
@@ -81,14 +83,14 @@ export function effectiveStatusChar(index: string, workingDir: string): string {
 export function gitDecorationFor(index: string, workingDir: string): GitDecoration | null {
   const c = effectiveStatusChar(index, workingDir)
   switch (c) {
-    case 'M': return { letter: 'M', colorClass: 'text-yellow-400', title: 'Modified' }
-    case 'A': return { letter: 'A', colorClass: 'text-green-400', title: 'Added' }
-    case 'D': return { letter: 'D', colorClass: 'text-red-400', title: 'Deleted', strike: true }
-    case 'R': return { letter: 'R', colorClass: 'text-blue-400', title: 'Renamed' }
-    case 'C': return { letter: 'C', colorClass: 'text-green-400', title: 'Copied' }
-    case 'T': return { letter: 'T', colorClass: 'text-yellow-400', title: 'Type changed' }
-    case '?': return { letter: 'U', colorClass: 'text-green-400', title: 'Untracked' }
-    case 'U': return { letter: '!', colorClass: 'text-orange-400', title: 'Conflict' }
+    case 'M': return { letter: 'M', colorClass: 'text-yellow-400', title: t('gitStatus.modified') }
+    case 'A': return { letter: 'A', colorClass: 'text-green-400', title: t('gitStatus.added') }
+    case 'D': return { letter: 'D', colorClass: 'text-red-400', title: t('gitStatus.deleted'), strike: true }
+    case 'R': return { letter: 'R', colorClass: 'text-blue-400', title: t('gitStatus.renamed') }
+    case 'C': return { letter: 'C', colorClass: 'text-green-400', title: t('gitStatus.copied') }
+    case 'T': return { letter: 'T', colorClass: 'text-yellow-400', title: t('gitStatus.typeChanged') }
+    case '?': return { letter: 'U', colorClass: 'text-green-400', title: t('gitStatus.untracked') }
+    case 'U': return { letter: '!', colorClass: 'text-orange-400', title: t('gitStatus.conflict') }
     case ' ':
     case '':
       return null

@@ -41,16 +41,18 @@ export interface TerminalKeymapEntry {
 
 const ESC = '\x1b'
 
+import { t } from '../../i18n/useTranslation'
+
 /** macOS terminal line-editing chords, mirroring VS Code's defaults. Ctrl and
  *  Shift must both be absent for a row to match (enforced by the resolver). */
 export const MAC_TERMINAL_KEYMAP: readonly TerminalKeymapEntry[] = [
-  { key: 'Backspace', meta: true, alt: false, send: '\x15', label: 'Delete to line start' },
-  { key: 'Backspace', meta: false, alt: true, send: '\x17', label: 'Delete word left' },
-  { key: 'Delete', meta: false, alt: true, send: `${ESC}d`, label: 'Delete word right' },
-  { key: 'ArrowLeft', meta: true, alt: false, send: '\x01', label: 'Move to line start' },
-  { key: 'ArrowRight', meta: true, alt: false, send: '\x05', label: 'Move to line end' },
-  { key: 'ArrowLeft', meta: false, alt: true, send: `${ESC}b`, label: 'Move word left' },
-  { key: 'ArrowRight', meta: false, alt: true, send: `${ESC}f`, label: 'Move word right' },
+  { key: 'Backspace', meta: true, alt: false, send: '\x15', label: t('terminalKeymap.deleteToLineStart') },
+  { key: 'Backspace', meta: false, alt: true, send: '\x17', label: t('terminalKeymap.deleteWordLeft') },
+  { key: 'Delete', meta: false, alt: true, send: `${ESC}d`, label: t('terminalKeymap.deleteWordRight') },
+  { key: 'ArrowLeft', meta: true, alt: false, send: '\x01', label: t('terminalKeymap.moveToLineStart') },
+  { key: 'ArrowRight', meta: true, alt: false, send: '\x05', label: t('terminalKeymap.moveToLineEnd') },
+  { key: 'ArrowLeft', meta: false, alt: true, send: `${ESC}b`, label: t('terminalKeymap.moveWordLeft') },
+  { key: 'ArrowRight', meta: false, alt: true, send: `${ESC}f`, label: t('terminalKeymap.moveWordRight') },
 ]
 
 /**

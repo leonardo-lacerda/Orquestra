@@ -96,6 +96,8 @@ export interface AppStoreActions {
    *  revert the panel to the shared (direct) browser session. */
   updatePanelProxy: (workspaceId: string, panelId: string, proxyUrl?: string) => void
   updatePanelFilePath: (workspaceId: string, panelId: string, filePath: string) => void
+  /** Terminal panels only: crown Maestro mode (used by hard nested-worker guards). */
+  setPanelMaestro: (workspaceId: string, panelId: string, maestro: boolean) => void
   setPanelDirty: (workspaceId: string, panelId: string, dirty: boolean) => void
   setPanelMarkdownPreview: (workspaceId: string, panelId: string, preview: boolean) => void
   setPanelUnsavedContent: (workspaceId: string, panelId: string, content: string | undefined) => void

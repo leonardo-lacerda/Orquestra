@@ -104,7 +104,7 @@ export class ElectronAuth {
         detectSessionInUrl: false,
       },
     })
-    log.info('[electronAuth] initialized')
+    log.debug('[electronAuth] initialized')
 
     // Listen for auth state changes — fires on token refresh success/failure
     // and when the session is invalidated server-side.
@@ -134,17 +134,34 @@ export class ElectronAuth {
       return this._state
     }
 
-    const { data, error } = await this.supabase.auth.setSession(session)
-    if (error || !data.session) {
-      log.warn('[electronAuth] session restore failed: %O', error)
-      await this.clearSession()
-      this._state = { authorized: false, user: null, subscription: null, reason: 'Sessão expirada. Faça login novamente.' }
+    try {
+      const { data, error } = await this.supabase.auth.setSession(session)
+      if (error || !data.session) {
+        const msg = error?.message ?? 'no session'
+        // Offline / DNS (ENOTFOUND) is expected noise — don't dump stacks.
+        if (/fetch failed|ENOTFOUND|ECONNREFUSED|network/i.test(msg)) {
+          log.debug('[electronAuth] session restore offline: %s', msg)
+        } else {
+          log.warn('[electronAuth] session restore failed: %s', msg)
+        }
+        await this.clearSession()
+        this._state = { authorized: false, user: null, subscription: null, reason: 'Sessão expirada. Faça login novamente.' }
+        return this._state
+      }
+
+      const result = await this.refreshAuthState(data.session.user)
+      if (result.authorized) this.startRevalidation()
+      return result
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/fetch failed|ENOTFOUND|ECONNREFUSED|network|getaddrinfo/i.test(msg)) {
+        log.debug('[electronAuth] session restore offline: %s', msg)
+      } else {
+        log.warn('[electronAuth] session restore error: %s', msg)
+      }
+      this._state = { authorized: false, user: null, subscription: null, reason: 'Sem ligação ao servidor de auth.' }
       return this._state
     }
-
-    const result = await this.refreshAuthState(data.session.user)
-    if (result.authorized) this.startRevalidation()
-    return result
   }
 
   /** Sign in with email + password. Returns the new auth state. */
@@ -171,7 +188,7 @@ export class ElectronAuth {
   /** Start periodic subscription revalidation. Called after successful auth. */
   private startRevalidation(): void {
     this.stopRevalidation()
-    log.info('[electronAuth] starting periodic revalidation (every %d min)', REVALIDATION_INTERVAL_MS / 60_000)
+    log.debug('[electronAuth] starting periodic revalidation (every %d min)', REVALIDATION_INTERVAL_MS / 60_000)
     this._revalidationTimer = setInterval(async () => {
       if (this._state.authorized) {
         const state = await this.refreshSubscription()
@@ -248,7 +265,12 @@ export class ElectronAuth {
       .maybeSingle()
 
     if (error) {
-      log.warn('[electronAuth] subscription fetch failed: %O', error)
+      const msg = error.message ?? String(error)
+      if (/fetch failed|ENOTFOUND|ECONNREFUSED|network|getaddrinfo/i.test(msg)) {
+        log.debug('[electronAuth] subscription fetch offline: %s', msg)
+      } else {
+        log.warn('[electronAuth] subscription fetch failed: %s', msg)
+      }
       return null
     }
 

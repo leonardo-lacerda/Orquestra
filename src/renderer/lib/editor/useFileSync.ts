@@ -126,6 +126,12 @@ export function useFileSync({
     if (filePathRef.current) {
       const fileName = filePathRef.current.split('/').pop() ?? 'Untitled'
       useAppStore.getState().updatePanelTitle(workspaceId, panelId, `${fileName} •`)
+    } else {
+      // Scratch/untitled — show dirty marker on the tab title too.
+      const panel = useAppStore.getState().workspaces
+        .find((w) => w.id === workspaceId)?.panels[panelId]
+      const base = (panel?.title ?? 'Untitled').replace(/\s•\s*$/, '').trim() || 'Untitled'
+      useAppStore.getState().updatePanelTitle(workspaceId, panelId, `${base} •`)
     }
   }, [workspaceId, panelId])
 
@@ -135,6 +141,11 @@ export function useFileSync({
     if (filePathRef.current) {
       const fileName = filePathRef.current.split('/').pop() ?? 'Untitled'
       useAppStore.getState().updatePanelTitle(workspaceId, panelId, fileName)
+    } else {
+      const panel = useAppStore.getState().workspaces
+        .find((w) => w.id === workspaceId)?.panels[panelId]
+      const base = (panel?.title ?? 'Untitled').replace(/\s•\s*$/, '').trim() || 'Untitled'
+      useAppStore.getState().updatePanelTitle(workspaceId, panelId, base)
     }
   }, [workspaceId, panelId])
 

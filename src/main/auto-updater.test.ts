@@ -5,7 +5,7 @@ import { UPDATE_STATUS } from '../shared/ipc-channels'
 // ---------------------------------------------------------------------------
 // Mocks. electron-updater's autoUpdater is an EventEmitter with stubbed methods
 // + settable config flags. electron app/dialog/shell, the settings store, the
-// eligibility check, the analytics emitter, the logger, and the json-state
+// eligibility check, the logger, and the json-state
 // factory are all faked so the module under test runs in plain node.
 // ---------------------------------------------------------------------------
 
@@ -54,7 +54,6 @@ const h = vi.hoisted(() => {
     ipcMain: { handle: vi.fn(), on: vi.fn(), removeHandler: vi.fn() },
     broadcastToAll: vi.fn(),
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    sendEvent: vi.fn((_name: string, _props?: Record<string, unknown>) => Promise.resolve(true)),
     getSettingSync: vi.fn(() => false),
     canSelfUpdate: vi.fn(() => true),
   }
@@ -66,7 +65,6 @@ vi.mock('./windowRegistry', () => ({ broadcastToAll: h.broadcastToAll }))
 vi.mock('./logger', () => ({ default: h.log }))
 vi.mock('./store', () => ({ getSettingSync: h.getSettingSync }))
 vi.mock('./updateInstaller', () => ({ canSelfUpdate: h.canSelfUpdate }))
-vi.mock('./analytics', () => ({ sendEvent: h.sendEvent }))
 vi.mock('./jsonStateFile', () => ({ createJsonStateFile: h.createJsonStateFile }))
 
 // Fresh module state per test (module-level flags + the store singleton).
@@ -199,87 +197,6 @@ describe('initAutoUpdater — config', () => {
   })
 })
 
-describe('initAutoUpdater — event telemetry', () => {
-  async function initAndGet() {
-    const mod = await loadModule()
-    mod.initAutoUpdater()
-    return mod
-  }
-
-  it('emits update_check_started on checking-for-update', async () => {
-    await initAndGet()
-    h.autoUpdater.emit('checking-for-update')
-    expect(h.sendEvent).toHaveBeenCalledWith('update_check_started', expect.anything())
-  })
-
-  it('emits update_check_started only once per session despite the 15-min poll', async () => {
-    // The updater checks on launch and every 15 minutes thereafter. Tracking
-    // every check turns this into an uptime heartbeat that swamps real
-    // user-action events in analytics — collapse it to once per process.
-    await initAndGet()
-    h.autoUpdater.emit('checking-for-update')
-    h.autoUpdater.emit('checking-for-update')
-    h.autoUpdater.emit('checking-for-update')
-    const calls = h.sendEvent.mock.calls.filter((c) => c[0] === 'update_check_started')
-    expect(calls.length).toBe(1)
-  })
-
-  it('emits update_available with the version', async () => {
-    await initAndGet()
-    h.autoUpdater.emit('update-available', { version: '1.2.3' })
-    expect(h.sendEvent).toHaveBeenCalledWith('update_available', expect.objectContaining({ version: '1.2.3' }))
-  })
-
-  it('logs but does not emit on update-not-available', async () => {
-    await initAndGet()
-    h.autoUpdater.emit('update-not-available', { version: '1.2.2' })
-    expect(h.sendEvent).not.toHaveBeenCalledWith('update_not_available', expect.anything())
-  })
-
-  it('emits update_error and logs on error', async () => {
-    await initAndGet()
-    h.autoUpdater.emit('error', new Error('boom'))
-    expect(h.log.error).toHaveBeenCalled()
-    expect(h.sendEvent).toHaveBeenCalledWith('update_error', expect.objectContaining({ message: 'boom' }))
-  })
-
-  it('throttles download-progress to milestone buckets', async () => {
-    await initAndGet()
-    for (const p of [3, 10, 26, 30, 51, 76, 99, 100]) {
-      h.autoUpdater.emit('download-progress', { percent: p })
-    }
-    const progressCalls = h.sendEvent.mock.calls.filter((c) => c[0] === 'update_download_progress')
-    // 0/25/50/75/100 buckets crossed once each — not one per event.
-    expect(progressCalls.length).toBeGreaterThan(0)
-    expect(progressCalls.length).toBeLessThanOrEqual(5)
-  })
-
-  it('on update-downloaded: flips pending flag, emits, and records the version', async () => {
-    const mod = await initAndGet()
-    expect(mod.isUpdatePendingInstall()).toBe(false)
-    h.autoUpdater.emit('update-downloaded', { version: '1.2.3' })
-    expect(mod.isUpdatePendingInstall()).toBe(true)
-    expect(h.sendEvent).toHaveBeenCalledWith('update_downloaded', expect.objectContaining({ version: '1.2.3' }))
-    expect(h.cell.value).toEqual({ pendingVersion: '1.2.3', attempts: 0 })
-  })
-
-  it('on update-downloaded: preserves attempts when re-staging the same version', async () => {
-    await initAndGet()
-    // A silent install failure re-downloads the same version next launch — the
-    // accumulated failure count must survive so the loop detector can progress.
-    h.cell.value = { pendingVersion: '1.2.3', attempts: 1 }
-    h.autoUpdater.emit('update-downloaded', { version: '1.2.3' })
-    expect(h.cell.value).toEqual({ pendingVersion: '1.2.3', attempts: 1 })
-  })
-
-  it('on update-downloaded: resets attempts for a genuinely new version', async () => {
-    await initAndGet()
-    h.cell.value = { pendingVersion: '1.2.3', attempts: 1 }
-    h.autoUpdater.emit('update-downloaded', { version: '2.0.0' })
-    expect(h.cell.value).toEqual({ pendingVersion: '2.0.0', attempts: 0 })
-  })
-})
-
 describe('install-loop detection on launch', () => {
   it('clears the record and emits success when we came up on the staged version', async () => {
     seedRecord({ pendingVersion: '1.2.2', attempts: 1 })
@@ -287,7 +204,6 @@ describe('install-loop detection on launch', () => {
     const { initAutoUpdater } = await loadModule()
     initAutoUpdater()
     expect(h.cell.value).toEqual(DEFAULT_UPDATE_RECORD)
-    expect(h.sendEvent).toHaveBeenCalledWith('update_install_succeeded', expect.anything())
   })
 
   it('shows the manual fallback after repeated failed installs', async () => {
@@ -295,7 +211,6 @@ describe('install-loop detection on launch', () => {
     h.app.getVersion.mockReturnValue('1.2.2')
     const { initAutoUpdater } = await loadModule()
     initAutoUpdater()
-    expect(h.sendEvent).toHaveBeenCalledWith('update_install_failed_repeatedly', expect.anything())
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
   })
 
@@ -335,7 +250,6 @@ describe('install-loop detection on launch', () => {
 
     // Launch 3: still on the old version → counter hits the cap → manual fallback.
     await launch()
-    expect(h.sendEvent).toHaveBeenCalledWith('update_install_failed_repeatedly', expect.anything())
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
   })
 })
@@ -349,7 +263,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('update-available', { version: '1.2.3' })
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/leonardo-lacerda/Orquestra/releases'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('supabase.co/storage/v1'))
   })
 
   it('prompts at most once per launch', async () => {
@@ -372,7 +286,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('error', new Error('ditto: Couldn’t read PKZip signature'))
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('github.com/leonardo-lacerda/Orquestra/releases'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('supabase.co/storage/v1'))
   })
 
   it('a bare error with no update found does NOT prompt (e.g. transient check failure)', async () => {

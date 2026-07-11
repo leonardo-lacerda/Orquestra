@@ -23,9 +23,11 @@ import type { BrowserPanelProps } from './types'
 import type { BrowserShortcutAction } from '../../shared/types'
 import type { NativeContextMenuItem } from '../../shared/electron-api'
 import { portalRegistry } from '../lib/portalRegistry'
+import { registerBrowserContext, unregisterBrowserContext } from '../lib/browser/browserContextRegistry'
 import { isUrl, normalizeUrl } from './browserUrl'
 import { pageLoadErrorFrom } from './browserLoadError'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 
 // -----------------------------------------------------------------------------
 // Type declarations for Electron's <webview> element
@@ -83,6 +85,7 @@ interface WebviewElement extends HTMLElement {
   getURL(): string
   getTitle(): string
   getWebContentsId(): number
+  executeJavaScript(code: string): Promise<unknown>
   addEventListener(type: string, listener: (event: any) => void): void
   removeEventListener(type: string, listener: (event: any) => void): void
 }
@@ -114,6 +117,7 @@ export default function BrowserPanel({
   const toggleBookmark = useBrowserStore((s) => s.toggleBookmark)
   const querySuggestions = useBrowserStore((s) => s.querySuggestions)
 
+  const { t } = useTranslation()
   const isFocused = useCanvasStoreContext((s) => focusedNodeId(s) === nodeId)
 
   // A new browser panel with no saved URL lands on the start page (unless the
@@ -365,6 +369,12 @@ export default function BrowserPanel({
     }
   }, [screenshot])
 
+  const notifyLinkedContextSourceChanged = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('linked-context:source-changed', {
+      detail: { sourcePanelId: panelId },
+    }))
+  }, [panelId])
+
   const dismissScreenshot = useCallback(() => {
     if (screenshotTimerRef.current) clearTimeout(screenshotTimerRef.current)
     setScreenshot(null)
@@ -480,13 +490,13 @@ export default function BrowserPanel({
   const handleProxyContextMenu = useCallback(async (e: React.MouseEvent) => {
     e.preventDefault()
     const items: NativeContextMenuItem[] = [
-      { id: 'configure', label: 'Configure Proxy…' },
+      { id: 'configure', label: t('browser.configureProxy') },
     ]
-    if (activeProxy) items.push({ id: 'clear', label: 'Clear Proxy (Direct)' })
+    if (activeProxy) items.push({ id: 'clear', label: t('browser.clearProxy') })
     const id = await window.electronAPI.showContextMenu(items)
     if (id === 'configure') openProxyDialog()
     else if (id === 'clear') applyProxy(undefined)
-  }, [activeProxy, openProxyDialog, applyProxy])
+  }, [activeProxy, openProxyDialog, applyProxy, t])
 
   // -------------------------------------------------------------------------
   // Browser navigation shortcuts (Cmd+R/[/]/L)
@@ -592,6 +602,7 @@ export default function BrowserPanel({
       updatePanelUrl(workspaceId, panelId, url)
       patchActiveTab({ url, title: webview.getTitle() || '' })
       recordVisit(url, webview.getTitle() || '')
+      notifyLinkedContextSourceChanged()
     }
 
     const onDidNavigateInPage = (event: any) => {
@@ -604,6 +615,7 @@ export default function BrowserPanel({
       currentUrlRef.current = url
       updatePanelUrl(workspaceId, panelId, url)
       patchActiveTab({ url })
+      notifyLinkedContextSourceChanged()
     }
 
     const onPageTitleUpdated = (event: any) => {
@@ -614,6 +626,7 @@ export default function BrowserPanel({
         // Capture the real title once the page sets it (dedups by URL in main).
         const navUrl = webview.getURL()
         if (navUrl && navUrl !== 'about:blank') recordVisit(navUrl, title)
+        notifyLinkedContextSourceChanged()
       }
     }
 
@@ -649,6 +662,7 @@ export default function BrowserPanel({
 
     const onDidStopLoading = () => {
       setIsLoading(false)
+      notifyLinkedContextSourceChanged()
     }
 
     // Navigation/new-window enforcement lives in the main process on the guest
@@ -664,6 +678,40 @@ export default function BrowserPanel({
     // re-attached after a navigation crash.
     const onDomReady = (): void => {
       try { portalRegistry.register(panelId, webview as any) } catch { /* ignore */ }
+      registerBrowserContext(panelId, {
+        getSnapshot: async (options) => {
+          const title = webview.getTitle?.() || undefined
+          const url = webview.getURL?.() || currentUrlRef.current
+          let visibleText: string | undefined
+          try {
+            const value = await webview.executeJavaScript(`
+              (() => {
+                const root = document.body || document.documentElement;
+                const text = root ? (root.innerText || root.textContent || '') : '';
+                return String(text).replace(/\\s+/g, ' ').trim();
+              })()
+            `)
+            visibleText = typeof value === 'string' ? value : undefined
+          } catch {
+            visibleText = undefined
+          }
+
+          let screenshotPath: string | undefined
+          if (options?.includeScreenshot) {
+            try {
+              const wcId = webview.getWebContentsId()
+              if (wcId) {
+                const result = await window.electronAPI.webviewScreenshot(wcId)
+                screenshotPath = result?.filePath
+              }
+            } catch {
+              screenshotPath = undefined
+            }
+          }
+
+          return { title, url, visibleText, screenshotPath }
+        },
+      })
     }
     webview.addEventListener('dom-ready', onDomReady)
 
@@ -678,6 +726,7 @@ export default function BrowserPanel({
 
     return () => {
       try { portalRegistry.unregister(panelId) } catch { /* ignore */ }
+      unregisterBrowserContext(panelId)
       webview.removeEventListener('dom-ready', onDomReady)
       webview.removeEventListener('did-navigate', onDidNavigate)
       webview.removeEventListener('did-navigate-in-page', onDidNavigateInPage)
@@ -691,7 +740,7 @@ export default function BrowserPanel({
     // `partition` + `proxyReady` are deps so the listeners re-bind to the fresh
     // <webview> element after a proxy change remounts it (key={partition} +
     // the proxyReady gate); without them the new element would have no handlers.
-  }, [panelId, workspaceId, updatePanelTitle, updatePanelUrl, partition, proxyReady, recordVisit, patchActiveTab])
+  }, [panelId, workspaceId, updatePanelTitle, updatePanelUrl, partition, proxyReady, recordVisit, patchActiveTab, notifyLinkedContextSourceChanged])
 
   // -------------------------------------------------------------------------
   // Render

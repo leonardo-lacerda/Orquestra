@@ -21,6 +21,7 @@ import {
 import { useAppStore } from '../stores/appStore'
 import { SidebarSectionHeader, SidebarHeaderButton } from './SidebarSectionHeader'
 import { Tooltip } from '../ui/Tooltip'
+import { useTranslation } from '../i18n/useTranslation'
 import { useGitStatusSnapshot, gitStatusStore } from '../stores/gitStatusStore'
 import { useWorktrees } from '../stores/useWorktrees'
 import { errorMessage } from '../lib/errorMessage'
@@ -157,6 +158,7 @@ const FileEntry: React.FC<{
   onDiscard?: () => void
   onClick?: () => void
 }> = ({ file, statusChar, onStage, onUnstage, onDiscard, onClick }) => {
+  const { t } = useTranslation()
   const dir = dirName(file.path)
   return (
     <div
@@ -172,33 +174,33 @@ const FileEntry: React.FC<{
       </span>
       <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
         {onDiscard && (
-          <Tooltip label="Discard changes">
+          <Tooltip label={t('git.discardChanges')}>
             <button
               className="p-0.5 rounded hover:bg-hover text-muted hover:text-red-400"
               onClick={(e) => { e.stopPropagation(); onDiscard() }}
-              aria-label="Discard changes"
+              aria-label={t('git.discardChanges')}
             >
               <ArrowUUpLeft size={13} />
             </button>
           </Tooltip>
         )}
         {onStage && (
-          <Tooltip label="Stage file">
+          <Tooltip label={t('git.stageFile')}>
             <button
               className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
               onClick={(e) => { e.stopPropagation(); onStage() }}
-              aria-label="Stage file"
+              aria-label={t('git.stageFile')}
             >
               <Plus size={13} />
             </button>
           </Tooltip>
         )}
         {onUnstage && (
-          <Tooltip label="Unstage file">
+          <Tooltip label={t('git.unstageFile')}>
             <button
               className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
               onClick={(e) => { e.stopPropagation(); onUnstage() }}
-              aria-label="Unstage file"
+              aria-label={t('git.unstageFile')}
             >
               <Minus size={13} />
             </button>
@@ -218,6 +220,7 @@ const BranchPicker: React.FC<{
   currentBranch: string | null
   onSwitch: () => void
 }> = ({ rootPath, currentBranch, onSwitch }) => {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [branches, setBranches] = useState<GitBranchInfo[]>([])
   const [filter, setFilter] = useState('')
@@ -295,7 +298,7 @@ const BranchPicker: React.FC<{
         onClick={() => setIsOpen(!isOpen)}
       >
         {isOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
-        <span className="flex-1">Branches</span>
+        <span className="flex-1">{t('git.branches')}</span>
         <span className="text-muted font-normal normal-case">{branchCount}</span>
         {!isOpen && (
           <span className="text-muted font-normal text-[10px] truncate max-w-[80px]">{currentBranch}</span>
@@ -313,14 +316,14 @@ const BranchPicker: React.FC<{
                   onChange={(e) => setNewBranchName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false) }}
                   className="flex-1 min-w-0 bg-surface-5 border border-subtle rounded px-2 py-1 text-[11px] text-primary placeholder:text-muted focus:outline-none focus:border-subtle"
-                  placeholder="New branch name..."
+                  placeholder={t('git.newBranchPlaceholder')}
                   autoFocus
                 />
-                <Tooltip label="Create branch">
-                  <button onClick={handleCreate} aria-label="Create branch" className="p-0.5 rounded hover:bg-hover text-green-400/70"><Check size={13} /></button>
+                <Tooltip label={t('git.createBranch')}>
+                  <button onClick={handleCreate} aria-label={t('git.createBranch')} className="p-0.5 rounded hover:bg-hover text-green-400/70"><Check size={13} /></button>
                 </Tooltip>
-                <Tooltip label="Cancel">
-                  <button onClick={() => setCreating(false)} aria-label="Cancel" className="p-0.5 rounded hover:bg-hover text-muted"><X size={13} /></button>
+                <Tooltip label={t('git.cancel')}>
+                  <button onClick={() => setCreating(false)} aria-label={t('git.cancel')} className="p-0.5 rounded hover:bg-hover text-muted"><X size={13} /></button>
                 </Tooltip>
               </div>
             ) : (
@@ -329,13 +332,13 @@ const BranchPicker: React.FC<{
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   className="flex-1 min-w-0 bg-surface-5 border border-subtle rounded px-2 py-1 text-[11px] text-primary placeholder:text-muted focus:outline-none focus:border-subtle"
-                  placeholder="Filter branches..."
+                  placeholder={t('git.filterBranchesPlaceholder')}
                 />
-                <Tooltip label="New branch">
+                <Tooltip label={t('git.newBranch')}>
                   <button
                     onClick={() => setCreating(true)}
                     className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
-                    aria-label="New branch"
+                    aria-label={t('git.newBranch')}
                   >
                     <Plus size={13} />
                   </button>
@@ -357,13 +360,13 @@ const BranchPicker: React.FC<{
             >
               <GitBranch size={11} className="flex-shrink-0" />
               <span className="truncate flex-1 min-w-0">{b.name}</span>
-              {b.current && <span className="text-[9px] text-green-400/60 flex-shrink-0">current</span>}
+              {b.current && <span className="text-[9px] text-green-400/60 flex-shrink-0">{t('git.current')}</span>}
               {!b.current && (
-                <Tooltip label="Delete branch">
+                <Tooltip label={t('git.deleteBranch')}>
                   <button
                     className="hidden group-hover:block p-0.5 rounded hover:bg-hover text-muted hover:text-red-400 flex-shrink-0"
                     onClick={(e) => handleDelete(b.name, e)}
-                    aria-label="Delete branch"
+                    aria-label={t('git.deleteBranch')}
                   >
                     <Trash size={10} />
                   </button>
@@ -373,7 +376,7 @@ const BranchPicker: React.FC<{
           ))}
           {filtered(remoteBranches).length > 0 && (
             <>
-              <div className="px-3 py-0.5 text-[10px] text-muted uppercase mt-1">Remote</div>
+              <div className="px-3 py-0.5 text-[10px] text-muted uppercase mt-1">{t('git.remote')}</div>
               {filtered(remoteBranches).map(b => (
                 <div
                   key={b.name}
@@ -406,6 +409,7 @@ interface RepoSourceControlProps {
 }
 
 const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested = false }) => {
+  const { t } = useTranslation()
   const [sectionOpen, setSectionOpen] = useState(true)
   // status + worktrees come from the single per-workspace gitStatusStore (the
   // shared fsWatch + focus + branch-update loop). The Source Control list can
@@ -619,7 +623,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
   if (!rootPath) {
     return (
       <div className="flex items-center justify-center h-full text-muted text-xs p-4">
-        No folder open
+        {t('sidebar.noFolderOpen')}
       </div>
     )
   }
@@ -641,23 +645,23 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
 
   const headerActions = (
     <>
-      <Tooltip label="Fetch from remote">
-        <SidebarHeaderButton onClick={fetch_} aria-label="Fetch from remote" disabled={fetching} spinning={fetching}>
+      <Tooltip label={t('git.fetch')}>
+        <SidebarHeaderButton onClick={fetch_} aria-label={t('git.fetch')} disabled={fetching} spinning={fetching}>
           <Download size={12} />
         </SidebarHeaderButton>
       </Tooltip>
-      <Tooltip label="Pull from remote">
-        <SidebarHeaderButton onClick={pull} aria-label="Pull from remote" disabled={pulling}>
+      <Tooltip label={t('git.pull')}>
+        <SidebarHeaderButton onClick={pull} aria-label={t('git.pull')} disabled={pulling}>
           <ArrowDown size={12} />
         </SidebarHeaderButton>
       </Tooltip>
-      <Tooltip label="Push to remote">
-        <SidebarHeaderButton onClick={push} aria-label="Push to remote" disabled={pushing}>
+      <Tooltip label={t('git.push')}>
+        <SidebarHeaderButton onClick={push} aria-label={t('git.push')} disabled={pushing}>
           <ArrowUp size={12} />
         </SidebarHeaderButton>
       </Tooltip>
-      <Tooltip label="Refresh status">
-        <SidebarHeaderButton onClick={refresh} aria-label="Refresh status" spinning={loading}>
+      <Tooltip label={t('git.refresh')}>
+        <SidebarHeaderButton onClick={refresh} aria-label={t('git.refresh')} spinning={loading}>
           <ArrowClockwise size={12} />
         </SidebarHeaderButton>
       </Tooltip>
@@ -684,7 +688,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
         </div>
       ) : (
         <SidebarSectionHeader
-          title="Source Control"
+          title={t('git.sourceControl')}
           subtitle={branchSubtitle}
           actions={headerActions}
         />
@@ -696,8 +700,8 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
       {actionError && (
         <div className="flex items-center gap-1 px-2 py-1 bg-red-500/[0.1] text-red-400/80 text-[11px] flex-shrink-0">
           <span className="flex-1 truncate">{actionError}</span>
-          <Tooltip label="Dismiss">
-            <button onClick={() => setActionError(null)} aria-label="Dismiss" className="p-0.5 hover:bg-hover rounded">
+          <Tooltip label={t('git.dismiss')}>
+            <button onClick={() => setActionError(null)} aria-label={t('git.dismiss')} className="p-0.5 hover:bg-hover rounded">
               <X size={12} />
             </button>
           </Tooltip>
@@ -709,7 +713,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
         <textarea
           ref={textareaRef}
           className="w-full bg-surface-5 border border-subtle rounded px-2 py-1.5 text-[12px] text-primary placeholder:text-muted resize-none focus:outline-none focus:border-subtle"
-          placeholder="Commit message"
+          placeholder={t('git.commitPlaceholder')}
           value={commitMessage}
           onChange={(e) => setCommitMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -726,22 +730,22 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
             disabled={!commitMessage.trim() || stagedFiles.length === 0 || committing}
             onClick={commit}
           >
-            {committing ? 'Committing...' : 'Commit'}
+            {committing ? t('git.committing') : t('git.commit')}
           </button>
-          <Tooltip label="Stash changes" placement="top">
+          <Tooltip label={t('git.stash')} placement="top">
             <button
               className="px-2 py-1 rounded text-[11px] transition-colors bg-surface-5 hover:bg-hover text-secondary"
               onClick={stash}
-              aria-label="Stash changes"
+              aria-label={t('git.stash')}
             >
               <Archive size={13} />
             </button>
           </Tooltip>
-          <Tooltip label="Pop latest stash" placement="top">
+          <Tooltip label={t('git.popStash')} placement="top">
             <button
               className="px-2 py-1 rounded text-[11px] transition-colors bg-surface-5 hover:bg-hover text-secondary"
               onClick={stashPop}
-              aria-label="Pop latest stash"
+              aria-label={t('git.popStash')}
             >
               <BoxArrowUp size={13} />
             </button>
@@ -754,14 +758,14 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
       <div className={nested ? '' : 'flex-1 min-h-0 overflow-y-auto'}>
         {/* Staged Changes */}
         <Section
-          title="Staged Changes"
+          title={t('git.stagedChanges')}
           count={stagedFiles.length}
           actions={
-            <Tooltip label="Unstage all">
+            <Tooltip label={t('git.unstageAll')}>
               <button
                 className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
                 onClick={() => unstageAll(stagedFiles)}
-                aria-label="Unstage all"
+                aria-label={t('git.unstageAll')}
               >
                 <Minus size={13} />
               </button>
@@ -781,14 +785,14 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
 
         {/* Changes */}
         <Section
-          title="Changes"
+          title={t('git.changesTitle')}
           count={changedFiles.length}
           actions={
-            <Tooltip label="Stage all">
+            <Tooltip label={t('git.stageAll')}>
               <button
                 className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
                 onClick={() => stageAll(changedFiles)}
-                aria-label="Stage all"
+                aria-label={t('git.stageAll')}
               >
                 <Plus size={13} />
               </button>
@@ -809,15 +813,15 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
 
         {/* Untracked */}
         <Section
-          title="Untracked"
+          title={t('git.untracked')}
           count={untrackedFiles.length}
           defaultOpen={false}
           actions={
-            <Tooltip label="Stage all">
+            <Tooltip label={t('git.stageAll')}>
               <button
                 className="p-0.5 rounded hover:bg-hover text-muted hover:text-primary"
                 onClick={() => stageAll(untrackedFiles)}
-                aria-label="Stage all"
+                aria-label={t('git.stageAll')}
               >
                 <Plus size={13} />
               </button>
@@ -843,7 +847,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
         />
 
         {/* Commit Log */}
-        <Section title="Commit Log" count={logEntries.length} defaultOpen={false}>
+        <Section title={t('git.commitLog')} count={logEntries.length} defaultOpen={false}>
           {logEntries.map((entry) => (
             <div
               key={entry.hash}
@@ -865,7 +869,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
         {/* Worktrees — read-only mirror; manage from the canvas toolbar's
             parallel-worktrees drop-up. */}
         <Section
-          title="Worktrees"
+          title={t('git.worktrees')}
           count={worktrees.filter((wt) => !wt.isOrphan).length}
           defaultOpen={false}
         >
@@ -880,7 +884,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
               <GitBranch size={12} className="flex-shrink-0" />
               <span className="truncate flex-1">{wt.label || wt.branch || '(detached)'}</span>
               {wt.isCurrent && (
-                <span className="text-[10px] text-green-400/60">current</span>
+                <span className="text-[10px] text-green-400/60">{t('git.current')}</span>
               )}
             </div>
           ))}
@@ -889,7 +893,7 @@ const RepoSourceControl: React.FC<RepoSourceControlProps> = ({ rootPath, nested 
         {/* Empty state */}
         {status && stagedFiles.length === 0 && changedFiles.length === 0 && untrackedFiles.length === 0 && (
           <div className="flex items-center justify-center py-8 text-muted text-[11px]">
-            No changes detected
+            {t('git.noChangesDetected')}
           </div>
         )}
       </div>
@@ -911,6 +915,7 @@ interface SourceControlViewProps {
 }
 
 export const SourceControlView: React.FC<SourceControlViewProps> = ({ rootPath }) => {
+  const { t } = useTranslation()
   // null = discovery hasn't resolved yet; render the single view meanwhile so
   // the common (root-is-a-repo) case never flashes an intermediate layout.
   const [repos, setRepos] = useState<string[] | null>(null)
@@ -941,7 +946,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({ rootPath }
   if (!rootPath) {
     return (
       <div className="flex items-center justify-center h-full text-muted text-xs p-4">
-        No folder open
+        {t('sidebar.noFolderOpen')}
       </div>
     )
   }
@@ -957,7 +962,7 @@ export const SourceControlView: React.FC<SourceControlViewProps> = ({ rootPath }
   return (
     <div className="flex flex-col h-full overflow-hidden text-[12px]">
       <SidebarSectionHeader
-        title="Source Control"
+        title={t('git.sourceControl')}
         subtitle={<span className="text-muted">{repos.length} repositories</span>}
       />
       <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-subtle">

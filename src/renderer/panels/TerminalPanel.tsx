@@ -435,25 +435,34 @@ export default function TerminalPanel({
   // pinch only rebuilds the atlas at gesture end (each rebuild is expensive).
   // -------------------------------------------------------------------------
 
-  const rescaleRafRef = useRef<number | null>(null)
+  // Defer renderScale steps until the canvas gesture ends. Applying fontSize
+  // mid-zoom rebuilds the shared WebGL atlas while will-change is still on and
+  // is a major source of residual scramble after the soft clearTextureAtlas fix.
+  const rescaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     const target = snapRenderScale(zoomLevel)
     if (target === renderScale) return
-    if (rescaleRafRef.current !== null) cancelAnimationFrame(rescaleRafRef.current)
-    const capturedZoom = zoomLevel
-    rescaleRafRef.current = requestAnimationFrame(() => {
-      rescaleRafRef.current = requestAnimationFrame(() => {
-        rescaleRafRef.current = null
-        if (snapRenderScale(capturedZoom) === target) setRenderScale(target)
-      })
-    })
+    if (rescaleTimerRef.current !== null) clearTimeout(rescaleTimerRef.current)
+
+    const tryApply = () => {
+      rescaleTimerRef.current = null
+      if (document.body.classList.contains('canvas-interacting')) {
+        rescaleTimerRef.current = setTimeout(tryApply, 80)
+        return
+      }
+      // Re-snap against the settled zoom — a continuous pinch may have moved on.
+      const settled = snapRenderScale(canvasApi.getState().zoomLevel)
+      if (settled !== renderScale) setRenderScale(settled)
+    }
+    // Small delay so we apply after the last zoom tick, then wait out interacting.
+    rescaleTimerRef.current = setTimeout(tryApply, 120)
     return () => {
-      if (rescaleRafRef.current !== null) {
-        cancelAnimationFrame(rescaleRafRef.current)
-        rescaleRafRef.current = null
+      if (rescaleTimerRef.current !== null) {
+        clearTimeout(rescaleTimerRef.current)
+        rescaleTimerRef.current = null
       }
     }
-  }, [zoomLevel, renderScale])
+  }, [zoomLevel, renderScale, canvasApi])
 
   useEffect(() => {
     const renderBox = renderBoxRef.current
@@ -488,52 +497,29 @@ export default function TerminalPanel({
       lastFitSizeRef.current = { w: renderBox.clientWidth, h: renderBox.clientHeight }
 
       if (wasAtBottom) entry.terminal.scrollToBottom()
+
+      // Soft atlas clear for siblings, then schedule the hard WebGL reload that
+      // also runs after pure zoom (no step change). Coalesces with Canvas demote.
+      terminalRegistry.forceWebglRepaint()
+      terminalRegistry.scheduleZoomWebglRepaint()
     } catch {
       // Ignore — fit can throw on zero-size frames during layout transitions.
     }
   }, [renderScale, panelId, terminalBaseFontSize])
 
   // -------------------------------------------------------------------------
-  // Repaint after the zoom settles
+  // Hard WebGL recovery after zoom/pan settles
   //
-  // The world div carries `will-change: transform`, so it (and every terminal's
-  // WebGL <canvas>) lives on a GPU compositing layer. The WebGL renderer draws
-  // with preserveDrawingBuffer:false and only repaints dirty rows, so when the
-  // compositor re-rasterizes the layer at a new scale a static terminal's
-  // drawing buffer comes up blank until xterm draws another frame.
-  //
-  // Zoom-IN happens to recover on its own because crossing a render-scale step
-  // runs the fontSize/fit/refresh effect above. Zoom-OUT clamps renderScale to
-  // 1.0 (snapRenderScale), so that effect early-returns and nothing ever
-  // repaints — leaving the terminal blank until the next PTY output or a
-  // zoom-in. Force a full refresh once the gesture settles to cover both
-  // directions. Two idle frames debounce a continuous pinch to a single repaint.
+  // will-change:transform promotes the world (and every xterm WebGL canvas)
+  // onto a GPU layer. On demote, preserveDrawingBuffer:false buffers can come
+  // up blank/scrambled. clearTextureAtlas helps shared-atlas desync; a full
+  // WebglAddon dispose+reload (see rebuildAllWebglRenderers) is what matches
+  // "resize fixed it" without SIGWINCH. Debounced + coalesced in the registry.
   // -------------------------------------------------------------------------
 
-  const repaintRafRef = useRef<number | null>(null)
   useEffect(() => {
-    if (repaintRafRef.current !== null) cancelAnimationFrame(repaintRafRef.current)
-    repaintRafRef.current = requestAnimationFrame(() => {
-      repaintRafRef.current = requestAnimationFrame(() => {
-        repaintRafRef.current = null
-        const renderBox = renderBoxRef.current
-        if (!renderBox || renderBox.offsetParent === null) return
-        const entry = terminalRegistry.getEntry(panelId)
-        if (!entry) return
-        try {
-          entry.terminal.refresh(0, entry.terminal.rows - 1)
-        } catch {
-          // Ignore — refresh can throw mid-layout / mid-dispose.
-        }
-      })
-    })
-    return () => {
-      if (repaintRafRef.current !== null) {
-        cancelAnimationFrame(repaintRafRef.current)
-        repaintRafRef.current = null
-      }
-    }
-  }, [zoomLevel, panelId])
+    terminalRegistry.scheduleZoomWebglRepaint()
+  }, [zoomLevel])
 
   // -------------------------------------------------------------------------
   // Fix mouse coordinates for CSS-scaled canvas

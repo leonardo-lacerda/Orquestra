@@ -1122,6 +1122,40 @@ export interface LayoutSnapshot {
 // -----------------------------------------------------------------------------
 
 export type TerminalLinkOpenTarget = 'ask' | 'canvas' | 'external'
+export type OrchestrationMode = 'manual' | 'assisted' | 'auto'
+export type OrchestrationWorkerKind = 'terminal' | 'agent'
+export type OrchestrationTaskSplitStrategy = 'auto' | 'by-task' | 'by-file' | 'by-stage'
+export type OrchestrationContextPolicy = 'summary' | 'relevant-files' | 'full'
+export type OrchestrationReviewPolicy = 'never' | 'on-changes' | 'always'
+export type OrchestrationWorkerDoneAction = 'keep-open' | 'hide' | 'close-on-success'
+/**
+ * How worker agent CLIs handle tool permission prompts:
+ * - `ask`: agent waits for user approval (safer; may stall unattended runs)
+ * - `bypass`: launch with that agent’s auto-approve / YOLO flags (unattended; higher risk)
+ */
+export type OrchestrationPermissionMode = 'ask' | 'bypass'
+/**
+ * Default AI CLI used when recruiting terminal workers.
+ * `custom` uses free-text `orchestrationDefaultAgentCommand`.
+ */
+export type OrchestrationWorkerAgent =
+  | 'verboo'
+  | 'claude'
+  | 'codex'
+  | 'opencode'
+  | 'custom'
+export type LinkedContextDefaultMode = 'path' | 'summary' | 'full'
+
+export interface OrquestraWorkerSummary {
+  workerId: string
+  orchestratorId: string
+  name: string
+  role: string
+  workspacePath: string
+  status: 'starting' | 'running'
+  outputLineCount: number
+  lastActivity: number
+}
 
 export type CanvasGridStyle = 'dots' | 'lines' | 'none'
 
@@ -1165,11 +1199,6 @@ export interface SidebarLayout {
   left: SidebarView[]
   right: SidebarView[]
 }
-
-/** Version of the telemetry/privacy notice. Bump when the privacy policy
- *  materially changes so every user sees the informational notice once more.
- *  v1 = the old opt-in consent dialog era; v2 = always-on telemetry notice. */
-export const TELEMETRY_NOTICE_VERSION = 2
 
 export interface AppSettings {
   // General
@@ -1266,6 +1295,56 @@ export interface AppSettings {
    *  no effect on Windows. */
   autoSuspendIdleTerminals: boolean
 
+  // Orchestration
+  /** How aggressively Maestro may coordinate terminal workers. Manual means the
+   *  user drives delegation, assisted means Maestro can suggest and coordinate,
+   *  and auto allows conservative worker creation for clearly parallel tasks. */
+  orchestrationMode: OrchestrationMode
+  /** Maximum number of workers a single orchestrator should create. */
+  orchestrationMaxWorkers: number
+  /** Default panel type for workers when a recruit request asks for "auto". */
+  orchestrationDefaultWorkerKind: OrchestrationWorkerKind
+  /**
+   * Which AI CLI workers should start (Verboo, Claude Code, Codex, OpenCode, or custom).
+   * Drives the base command and the correct bypass-permission flags.
+   */
+  orchestrationDefaultWorkerAgent: OrchestrationWorkerAgent
+  /**
+   * Free-text command when `orchestrationDefaultWorkerAgent` is `custom`.
+   * Ignored for presets (verboo/claude/codex/opencode) except as a legacy fallback.
+   */
+  orchestrationDefaultAgentCommand: string
+  /** Preferred strategy Maestro should use when dividing work. */
+  orchestrationTaskSplitStrategy: OrchestrationTaskSplitStrategy
+  /** How much project context should be passed to workers. */
+  orchestrationContextPolicy: OrchestrationContextPolicy
+  /** Whether and when Maestro should create/perform a review step. */
+  orchestrationReviewPolicy: OrchestrationReviewPolicy
+  /** What to do with worker panels after they complete. */
+  orchestrationOnWorkerDone: OrchestrationWorkerDoneAction
+  /** Prefix used when automatically naming workers. */
+  orchestrationWorkerNamePrefix: string
+  /**
+   * Whether worker agent CLIs auto-approve tools or wait for permission.
+   * Applied when starting the agent command on recruit (not mid-session).
+   * Flags differ per agent (Claude/Verboo/OpenCode vs Codex).
+   */
+  orchestrationPermissionMode: OrchestrationPermissionMode
+  /** Prompt-level worker permission defaults. Runtime enforcement may be added
+   *  later; these settings are still useful as explicit orchestration policy. */
+  orchestrationAllowFileEdits: boolean
+  orchestrationAllowCommands: boolean
+  orchestrationAllowNetwork: boolean
+  orchestrationAllowNestedWorkers: boolean
+
+  // Linked context
+  linkedContextDefaultMode: LinkedContextDefaultMode
+  linkedContextMaxFileBytes: number
+  linkedContextMaxBundleBytes: number
+  linkedContextAutoRefresh: boolean
+  linkedContextIncludeBrowserScreenshots: boolean
+  linkedContextRedactSecrets: boolean
+
   // Browser
   browserHomepage: string
   browserSearchEngine: BrowserSearchEngine
@@ -1303,13 +1382,6 @@ export interface AppSettings {
   usageAnalyticsEnabled: boolean
   /** DEPRECATED — see crashReportingEnabled. */
   telemetryConsentDecided: boolean
-  /** Highest TELEMETRY_NOTICE_VERSION the user has dismissed the telemetry
-   *  notice (WelcomeDialog) for. The notice shows whenever this is below the
-   *  current TELEMETRY_NOTICE_VERSION — on first install, and again for every
-   *  existing user when the constant is bumped. Informational only — telemetry
-   *  does not depend on it. */
-  telemetryNoticeAcknowledgedVersion: number
-
   // Onboarding
   /** Whether the user has finished (or skipped) the first-run guided tour.
    *  Set false to replay it. */
@@ -1384,6 +1456,34 @@ export const DEFAULT_SETTINGS: AppSettings = {
   terminalOptionIsMeta: true,
   autoSuspendIdleTerminals: true,
 
+  // Orchestration
+  orchestrationMode: 'assisted',
+  orchestrationMaxWorkers: 4,
+  orchestrationDefaultWorkerKind: 'terminal',
+  orchestrationDefaultWorkerAgent: 'verboo',
+  orchestrationDefaultAgentCommand: 'verboo',
+  orchestrationTaskSplitStrategy: 'auto',
+  orchestrationContextPolicy: 'relevant-files',
+  orchestrationReviewPolicy: 'on-changes',
+  orchestrationOnWorkerDone: 'keep-open',
+  orchestrationWorkerNamePrefix: 'worker',
+  // Default ask: safer. Switch to bypass for unattended multi-worker runs.
+  orchestrationPermissionMode: 'ask',
+  orchestrationAllowFileEdits: true,
+  orchestrationAllowCommands: true,
+  orchestrationAllowNetwork: false,
+  orchestrationAllowNestedWorkers: false,
+
+  // Linked context
+  linkedContextDefaultMode: 'summary',
+  linkedContextMaxFileBytes: 80000,
+  linkedContextMaxBundleBytes: 250000,
+  // Default on: edits to a linked editor/browser should re-write latest.md and
+  // CLAUDE.local.md so agents see the new text without a manual "Refresh context".
+  linkedContextAutoRefresh: true,
+  linkedContextIncludeBrowserScreenshots: true,
+  linkedContextRedactSecrets: true,
+
   // Browser
   browserHomepage: '',
   browserSearchEngine: 'google',
@@ -1409,8 +1509,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   crashReportingEnabled: true,
   usageAnalyticsEnabled: true,
   telemetryConsentDecided: false,
-  telemetryNoticeAcknowledgedVersion: 0,
-
   // Onboarding
   onboardingCompleted: false,
 
@@ -1430,7 +1528,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   },
 
   // Language
-  language: 'en',
+  language: 'pt-BR',
 }
 
 // -----------------------------------------------------------------------------
@@ -1785,7 +1883,14 @@ export const DEFAULT_DRAWING_FONT_SIZE = 16
 /** A directed connection between two terminal nodes on the canvas.
  *  Source terminal's PTY output is forwarded as input to the target terminal's
  *  PTY, enabling multi-agent orchestration workflows. */
-export interface TerminalConnection {
+export type CanvasConnectionType =
+  | 'pipe'
+  | 'orchestration'
+  | 'context'
+  | 'review'
+  | 'output'
+
+export interface CanvasConnection {
   id: string
   /** The terminal node whose output is piped (the "orchestrator"). */
   sourceNodeId: CanvasNodeId
@@ -1793,10 +1898,22 @@ export interface TerminalConnection {
   targetNodeId: CanvasNodeId
   /** When true, also forward a trailing newline after each chunk so the
    *  target shell executes the received text as a command. Default: true. */
-  autoExecute: boolean
+  autoExecute?: boolean
   /** Connection type:
    *  - 'pipe': PTY pipe (output forwarded to input, existing behavior)
    *  - 'orchestration': visual arrow only (no PTY pipe), auto-created when
    *    an orquestrador terminal recruits a worker. */
-  type?: 'pipe' | 'orchestration'
+  type?: CanvasConnectionType
+  metadata?: {
+    createdAt?: number
+    lastSyncedAt?: number
+    sourcePanelId?: string
+    targetPanelId?: string
+    contextMode?: 'path' | 'summary' | 'full' | 'visible' | 'screenshot' | 'buffer'
+    sourceKind?: 'file' | 'editor' | 'folder' | 'browser' | 'terminal' | 'agent' | 'orchestration'
+    bundlePath?: string
+    error?: string
+  }
 }
+
+export type TerminalConnection = CanvasConnection

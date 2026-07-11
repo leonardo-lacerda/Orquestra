@@ -193,7 +193,6 @@ export const CommandPalette: React.FC = () => {
         // Replays the first-run guided tour by clearing the completed flag.
         action: () => {
           useSettingsStore.getState().setSetting('onboardingCompleted', false)
-          try { window.electronAPI?.trackFeatureUsed?.('onboarding_replayed') } catch { /* noop */ }
         },
       },
       { id: 'reloadWorkspace', title: t('palette.reloadWorkspace'), icon: <ReloadIcon />, action: run('reloadWorkspace') },

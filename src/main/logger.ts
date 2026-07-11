@@ -14,9 +14,14 @@ log.transports.file.level = 'info'
 log.transports.file.maxSize = 5 * 1024 * 1024 // 5MB per file
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
 
-// Console transport: verbose in dev, disabled in prod. Packaged macOS apps
-// launched from Finder have no attached stdout/stderr, so writes throw EIO.
-log.transports.console.level = process.env.NODE_ENV === 'development' ? 'debug' : false
+// Console transport: info+ in dev (debug floods orchestration/terminal noise).
+// File still gets info+. Set ORQUESTRA_LOG_DEBUG=1 for full console debug.
+// Packaged macOS apps launched from Finder have no attached stdout/stderr.
+const wantDebug = process.env.ORQUESTRA_LOG_DEBUG === '1' || process.env.ORQUESTRA_LOG_DEBUG === 'true'
+log.transports.console.level =
+  process.env.NODE_ENV === 'development'
+    ? (wantDebug ? 'debug' : 'info')
+    : false
 
 // Guard against EIO on broken stderr even in dev (parent terminal closed).
 process.stderr?.on?.('error', () => {})
