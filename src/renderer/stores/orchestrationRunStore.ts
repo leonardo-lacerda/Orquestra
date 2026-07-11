@@ -204,12 +204,15 @@ export const useOrchestrationRunStore = create<OrchestrationRunState>((set, get)
   hydrateFromSnapshot(snapshot) {
     const maestroPtyId = snapshot.maestroPtyId || 'unknown'
     const workers: Record<string, OrchestrationWorkerEntry> = {}
+    // After reload we have no live PTY evidence — never claim recruiting/running.
+    const demoteLive = (s: OrchestrationWorkerUiStatus): OrchestrationWorkerUiStatus =>
+      (s === 'recruiting' || s === 'running' ? 'done' : s)
     for (const w of snapshot.workers) {
       workers[w.panelId] = {
         panelId: w.panelId,
         name: w.name,
         role: w.role,
-        status: w.status,
+        status: demoteLive(w.status),
         maestroPtyId: w.maestroPtyId || maestroPtyId,
         workerPtyId: w.workerPtyId,
         updatedAt: w.updatedAt,

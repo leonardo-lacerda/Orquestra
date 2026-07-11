@@ -157,14 +157,29 @@ describe('worker idle eligibility (KD6 + inject-echo guard)', () => {
     expect(isWorkerIdleEligible({ outputBuffer: [], firstOutputAt: null }).eligible).toBe(false)
   })
 
-  it('is eligible with marker for short timeout (no inject fingerprint)', async () => {
+  it('is eligible with ORQUESTRA_WORKER_DONE for short timeout (strict default)', async () => {
     const { isWorkerIdleEligible } = await import('./terminal')
     const r = isWorkerIdleEligible({
-      outputBuffer: ['✅ Task complete'],
+      outputBuffer: ['ORQUESTRA_WORKER_DONE'],
       firstOutputAt: Date.now() - 1000,
     })
-    expect(r.eligible).toBe(true)
-    expect(r.timeoutMs).toBe(10_000)
+    // Bare token without real work lines → not eligible (realWorkLines filters bare marker)
+    expect(r.eligible).toBe(false)
+    const r2 = isWorkerIdleEligible({
+      outputBuffer: ['Wrote app.js', 'ORQUESTRA_WORKER_DONE'],
+      firstOutputAt: Date.now() - 1000,
+    })
+    expect(r2.eligible).toBe(true)
+    expect(r2.timeoutMs).toBe(10_000)
+  })
+
+  it('✅ alone is NOT idle-eligible under strict completion marker (default)', async () => {
+    const { isWorkerIdleEligible } = await import('./terminal')
+    const r = isWorkerIdleEligible({
+      outputBuffer: ['Wrote app.js', '✅ Task complete'],
+      firstOutputAt: Date.now() - 12_000,
+    })
+    expect(r.eligible).toBe(false)
   })
 
   it('is NOT eligible with min lines alone when completion marker is required (default)', async () => {
@@ -521,7 +536,31 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
     }
   })
 
-  it('onWorkerIdle keeps running when only marker is missing (mid-task)', async () => {
+  it('cascadeOrchestratorWorkers writes failed result files for wait', async () => {
+    const fs = await import('node:fs')
+    const os = await import('node:os')
+    const path = await import('node:path')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-cascade-'))
+    try {
+      const { trackWorker, cascadeOrchestratorWorkers } = await import('./terminal')
+      trackWorker('pty-w', 'pty-maestro', 'html', 'Create only index.html', dir)
+      cascadeOrchestratorWorkers('pty-maestro', 'takeover')
+      const file = path.join(dir, '.orquestra-results', 'worker-html.json')
+      expect(fs.existsSync(file)).toBe(true)
+      const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+        status: string
+        exitCode: number
+        summary: string
+      }
+      expect(payload.status).toBe('failed')
+      expect(payload.exitCode).toBe(1)
+      expect(payload.summary).toMatch(/taken over|Takeover/i)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('onWorkerIdle keeps running mid-task without ORQUESTRA_WORKER_DONE (strict marker)', async () => {
     const fs = await import('node:fs')
     const os = await import('node:os')
     const path = await import('node:path')
@@ -533,7 +572,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       const { trackWorker, onWorkerIdle, feedWorkerOutput, noteWorkerRoleInjected, finalizeWorkerCompletion } =
         await import('./terminal')
       fs.writeFileSync(path.join(dir, 'app.js'), 'console.log(1)\n')
-      // ✅ makes idle eligible; accept still requires ORQUESTRA_WORKER_DONE → re-arm running
+      // Real work + ✅ but no ORQUESTRA_WORKER_DONE → not idle-eligible → stay running
       const role = 'In app.js change class names for the nav menu'
       trackWorker('pty-mid', 'pty-m', 'js', role, dir)
       noteWorkerRoleInjected('pty-mid', role)

@@ -59,6 +59,10 @@ import { validatePathStrict } from './pathValidation'
 import { getAllSettings } from '../settingsFile'
 import { buildMaestroInstructions, buildMaestroSettingsSnapshot } from '../maestro/maestroInstructions'
 import { checkMaestroAssets, resolveMaestroCliDir } from '../maestro/maestroAssets'
+import {
+  mergeMaestroIntoClaudeLocal,
+  removeMaestroFromClaudeLocal,
+} from '../maestro/claudeLocalManaged'
 import type { TerminalSetMaestroResult } from '../../shared/electron-api'
 
 // Set true during app shutdown so PTY data/exit callbacks no-op instead of
@@ -161,7 +165,12 @@ export function onMaestroPtyGone(terminalId: string): void {
         const crownMarker = path.join(wsPath, '.orquestra', 'crown.json')
         if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
         const claudeLocalPath = path.join(wsPath, 'CLAUDE.local.md')
-        if (fs.existsSync(claudeLocalPath)) fs.unlinkSync(claudeLocalPath)
+        if (fs.existsSync(claudeLocalPath)) {
+          const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
+          const next = removeMaestroFromClaudeLocal(prev)
+          if (next == null) fs.unlinkSync(claudeLocalPath)
+          else fs.writeFileSync(claudeLocalPath, next, 'utf-8')
+        }
       } catch {
         // best-effort marker cleanup
       }
@@ -369,7 +378,13 @@ const WORKER_POST_INJECT_MARKER_GRACE_MS = 5_000
 const RESPONSE_QUEUE_MAX = 100   // max pending responses per orchestrator
 const ORQUESTRA_RESULTS_DIR = '.orquestra-results'
 
-const DONE_MARKERS = [
+/** Canonical completion token — must match accept DEFAULT_COMPLETION_TOKEN. */
+const STRICT_DONE_MARKERS = [
+  /\bORQUESTRA_WORKER_DONE\b/i,
+]
+
+/** Loose markers only when requireCompletionMarker is explicitly false (legacy). */
+const LOOSE_DONE_MARKERS = [
   /\bORQUESTRA_WORKER_DONE\b/i,
   /✅/,
   /task\s+complete/i,
@@ -377,8 +392,13 @@ const DONE_MARKERS = [
   // Intentionally NO bare /\bDONE\b/ — too many false positives in English prompts.
 ]
 
-function workerHasDoneMarker(lines: string[]): boolean {
-  return lines.some((l) => DONE_MARKERS.some((re) => re.test(l)))
+function workerHasDoneMarker(
+  lines: string[],
+  opts?: { requireCompletionMarker?: boolean },
+): boolean {
+  const strict = opts?.requireCompletionMarker !== false
+  const markers = strict ? STRICT_DONE_MARKERS : LOOSE_DONE_MARKERS
+  return lines.some((l) => markers.some((re) => re.test(l)))
 }
 
 /** Line is only the completion token (no real deliverable work). */
@@ -519,7 +539,8 @@ export function isWorkerIdleEligible(tracking: {
   }
 
   // Marker path: need real work + marker (not ROLE.md instruction alone).
-  if (workerHasDoneMarker(meaningful)) {
+  // Strict mode requires ORQUESTRA_WORKER_DONE so ✅ alone cannot idle-complete.
+  if (workerHasDoneMarker(meaningful, { requireCompletionMarker: requireMarker })) {
     if (injectedAt != null && now - injectedAt < WORKER_POST_INJECT_MARKER_GRACE_MS) {
       return { eligible: false, timeoutMs: WORKER_MARKER_IDLE_MS }
     }
@@ -749,7 +770,8 @@ export function extractWorkerCompletionSummary(
     outputBuffer,
     opts?.injectText ?? null,
     opts?.roleFileText ?? null,
-  ).find((l) => DONE_MARKERS.some((re) => re.test(l)))
+  ).find((l) => STRICT_DONE_MARKERS.some((re) => re.test(l))
+    || LOOSE_DONE_MARKERS.some((re) => re.test(l)))
 
   const tail = work.slice(-8)
   if (markerLine && !tail.some((l) => l.includes(markerLine.trim()))) {
@@ -1434,7 +1456,12 @@ export function registerHandlers(): void {
             const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
             if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
             const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-            if (fs.existsSync(claudeLocalPath)) fs.unlinkSync(claudeLocalPath)
+            if (fs.existsSync(claudeLocalPath)) {
+              const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
+              const next = removeMaestroFromClaudeLocal(prev)
+              if (next == null) fs.unlinkSync(claudeLocalPath)
+              else fs.writeFileSync(claudeLocalPath, next, 'utf-8')
+            }
           } catch (err) {
             log.error('[terminal] failed to remove crown markers: %s', err)
           }
@@ -1566,8 +1593,16 @@ export function registerHandlers(): void {
 
         const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
         const maestroInstructions = buildMaestroInstructions(orchestrationSettings)
-        fs.writeFileSync(claudeLocalPath, maestroInstructions)
-        partial.push(claudeLocalPath)
+        let prevClaude = ''
+        try {
+          if (fs.existsSync(claudeLocalPath)) {
+            prevClaude = fs.readFileSync(claudeLocalPath, 'utf-8')
+          }
+        } catch { /* empty */ }
+        const mergedClaude = mergeMaestroIntoClaudeLocal(prevClaude, maestroInstructions)
+        fs.writeFileSync(claudeLocalPath, mergedClaude, 'utf-8')
+        // Only roll back CLAUDE.local if we created it from empty (avoid wiping user text)
+        if (!prevClaude.trim()) partial.push(claudeLocalPath)
         void import('./linkedContext')
           .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
           .catch(() => { /* non-fatal */ })

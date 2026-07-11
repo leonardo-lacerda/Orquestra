@@ -467,7 +467,15 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
     && terminalRegistry.isAlive(node.panelId)
   )
   const maestroEnabled = panelMaestroFlag
-  const maestroPaused = panelMaestroFlag && !maestroPtyAlive
+  // Armed for this live PTY only after successful ensureMaestroArmed (not mere flag).
+  const maestroArmedForLivePty = !!(
+    maestroPtyId
+    && maestroPtyAlive
+    && maestroArmKeyRef.current === `${node?.panelId}:${maestroPtyId}`
+  )
+  // Use pure decision helper for Active vs Paused (no silent green before rearm).
+  // Error is layered separately via maestroError string.
+  const maestroPaused = panelMaestroFlag && (!maestroPtyAlive || !maestroArmedForLivePty)
 
   // Restore / re-arm once per panel+pty when flag true and PTY live.
   React.useEffect(() => {
@@ -476,27 +484,30 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
       maestroArmKeyRef.current = null
       return
     }
-    if (!maestroPtyId || !maestroPtyAlive) return
     const rootPath = currentWorkspace.rootPath || ''
-    if (!rootPath) return
-    const armKey = `${node.panelId}:${maestroPtyId}`
+    const panelId = node.panelId
+    const ptyId = maestroPtyId
+    if (!ptyId || !maestroPtyAlive || !rootPath.trim()) return
+    const armKey = `${panelId}:${ptyId}`
     if (maestroArmKeyRef.current === armKey) return
 
     let cancelled = false
     void import('../lib/maestro/ensureMaestroArmed').then(({ ensureMaestroArmed }) => {
+      if (cancelled) return
       void ensureMaestroArmed({
         workspaceId: currentWorkspace.id,
-        panelId: node.panelId!,
-        ptyId: maestroPtyId,
+        panelId,
+        ptyId,
         rootPath,
       }).then((result) => {
         if (cancelled) return
         if (result.ok) {
           maestroArmKeyRef.current = armKey
           setMaestroError((prev) => (prev == null ? prev : null))
+          setMaestroRegistryTick((n) => n + 1)
         } else if (result.code !== 'PTY_GONE') {
           setMaestroError(result.error)
-          useAppStore.getState().setPanelMaestro(currentWorkspace.id, node.panelId!, false)
+          useAppStore.getState().setPanelMaestro(currentWorkspace.id, panelId, false)
           maestroArmKeyRef.current = null
         }
       })

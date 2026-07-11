@@ -67,6 +67,31 @@ describe('orchestrationRunStore', () => {
     expect(useOrchestrationRunStore.getState().activeCountForMaestro('m1')).toBe(1)
   })
 
+  it('hydrateFromSnapshot demotes recruiting/running so reload is not falsely live', () => {
+    const snap: OrchestrationRunSnapshot = {
+      version: 1,
+      runId: 'run-1',
+      updatedAt: Date.now(),
+      maestroPtyId: 'pty-m',
+      namesByPanelId: { p1: 'html' },
+      workers: [
+        {
+          panelId: 'p1',
+          name: 'html',
+          role: 'Build',
+          status: 'running',
+          maestroPtyId: 'pty-m',
+          updatedAt: Date.now(),
+        },
+      ],
+    }
+    useOrchestrationRunStore.getState().hydrateFromSnapshot(snap)
+    const list = useOrchestrationRunStore.getState().listForMaestro('pty-m')
+    expect(list).toHaveLength(1)
+    expect(list[0].status).toBe('done')
+    expect(useOrchestrationRunStore.getState().activeCountForMaestro('pty-m')).toBe(0)
+  })
+
   it('supports idle-completion path: recruit → running → done without process exit', () => {
     // Mirrors ORQUESTRA_WORKER_STATUS from onWorkerIdle (no TERMINAL_EXIT).
     const store = useOrchestrationRunStore.getState()
