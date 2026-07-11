@@ -48,7 +48,8 @@
     "package": "node scripts/package.mjs",
     "package:mac": "node scripts/package.mjs --mac",
     "package:win": "node scripts/package.mjs --win",
-    "package:linux": "node scripts/package.mjs --linux"
+    "package:linux": "node scripts/package.mjs --linux",
+    "publish:release": "node scripts/publish-release.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -102,6 +103,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1085.0",
     "@earendil-works/pi-coding-agent": "^0.80.3",
     "@electron/rebuild": "^4.0.3",
     "@eslint/js": "^9.39.0",

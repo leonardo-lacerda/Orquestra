@@ -263,7 +263,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('update-available', { version: '1.2.3' })
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('supabase.co/storage/v1'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringMatching(/r2\.dev|releases|PLACEHOLDER/))
   })
 
   it('prompts at most once per launch', async () => {
@@ -286,7 +286,7 @@ describe('manual-reinstall fallback', () => {
     h.autoUpdater.emit('error', new Error('ditto: Couldn’t read PKZip signature'))
     await flushMicrotasks()
     expect(h.dialog.showMessageBox).toHaveBeenCalled()
-    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringContaining('supabase.co/storage/v1'))
+    expect(h.shell.openExternal).toHaveBeenCalledWith(expect.stringMatching(/r2\.dev|releases|PLACEHOLDER/))
   })
 
   it('a bare error with no update found does NOT prompt (e.g. transient check failure)', async () => {

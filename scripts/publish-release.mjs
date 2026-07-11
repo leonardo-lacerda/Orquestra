@@ -1,185 +1,178 @@
 // =============================================================================
-// publish-release.mjs — upload build artifacts to Supabase Storage
-// for the auto-updater (generic provider).
+// publish-release.mjs — upload Windows/mac/linux artifacts to Cloudflare R2
+// for electron-updater (generic provider).
 //
 // Usage:
-//   node scripts/publish-release.mjs [--bucket orquestra-releases]
+//   # Required env (R2 API token with Object Read & Write on the bucket):
+//   set R2_ACCOUNT_ID=...
+//   set R2_ACCESS_KEY_ID=...
+//   set R2_SECRET_ACCESS_KEY=...
+//   set R2_BUCKET=orquestra-releases
+//   set ORQUESTRA_RELEASES_URL=https://pub-xxxx.r2.dev/orquestra-releases
 //
-// Environment:
-//   SUPABASE_URL       — Supabase project URL (default: from electron-builder.yml)
-//   SUPABASE_SERVICE_KEY — service_role key for bucket management + upload
+//   node scripts/publish-release.mjs
 //
-// Bucket must be set to public (Downloads) in Supabase Dashboard > Storage.
-// The service key is only used for uploads — the public URL serves downloads.
+// Optional:
+//   R2_ENDPOINT  — default https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com
+//   --dir path   — default ./release
+//
+// Public URL (ORQUESTRA_RELEASES_URL) must match electron-builder.yml publish.url
+// and src/shared/releasesFeed.ts so auto-update can read latest.yml.
 // =============================================================================
 
-import { execSync } from 'child_process'
-import { createReadStream } from 'fs'
-import { readFileSync, readdirSync, statSync } from 'fs'
-import { join, basename } from 'path'
-import { Readable } from 'stream'
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
+import { join, basename, dirname } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 
-const ROOT = new URL('..', import.meta.url).pathname
+const require = createRequire(import.meta.url)
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// ── Config ──────────────────────────────────────────────────────────────────
-const SUPABASE_URL =
-  process.env.SUPABASE_URL || 'https://yktidzsrldsksvaubagt.supabase.co'
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
-const BUCKET = process.argv.includes('--bucket')
-  ? process.argv[process.argv.indexOf('--bucket') + 1]
-  : 'orquestra-releases'
+const ACCOUNT_ID = process.env.R2_ACCOUNT_ID || ''
+const ACCESS_KEY = process.env.R2_ACCESS_KEY_ID || ''
+const SECRET_KEY = process.env.R2_SECRET_ACCESS_KEY || ''
+const BUCKET = process.env.R2_BUCKET || 'orquestra-releases'
+const ENDPOINT =
+  process.env.R2_ENDPOINT ||
+  (ACCOUNT_ID ? `https://${ACCOUNT_ID}.r2.cloudflarestorage.com` : '')
+const PUBLIC_URL = (process.env.ORQUESTRA_RELEASES_URL || '').replace(/\/+$/, '')
 
-const RELEASE_DIR = join(ROOT, 'release')
+const dirFlag = process.argv.indexOf('--dir')
+const RELEASE_DIR =
+  dirFlag >= 0 && process.argv[dirFlag + 1]
+    ? process.argv[dirFlag + 1]
+    : join(ROOT, 'release')
 
-if (!SERVICE_KEY) {
-  console.error('❌ SUPABASE_SERVICE_KEY env var is required')
-  console.error('   Get it from Supabase Dashboard > Project Settings > API > service_role key')
+function die(msg) {
+  console.error(`❌ ${msg}`)
   process.exit(1)
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-async function supFetch(path, options = {}) {
-  const url = `${SUPABASE_URL}/storage/v1${path}`
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SERVICE_KEY}`,
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Supabase API error ${res.status}: ${body}`)
-  }
-  return res
-}
-
-async function ensureBucket(name) {
-  // Check if it exists
-  const res = await supFetch('/buckets')
-  const buckets = await res.json()
-  if (buckets.some((b) => b.id === name)) {
-    console.log(`ℹ️  Bucket "${name}" already exists`)
-    return
-  }
-  // Create it as public
-  await supFetch('/buckets', {
-    method: 'POST',
-    body: JSON.stringify({
-      id: name,
-      name,
-      public: true,
-      file_size_limit: 1048576000, // 1 GB
-      allowed_mime_types: [
-        'application/x-yaml',
-        'application/octet-stream',
-        'application/json',
-        'application/x-msdownload',
-        'application/x-msdos-program',
-        'application/x-zip-compressed',
-        'application/zip',
-        'application/x-rar-compressed',
-        'application/gzip',
-      ],
-    }),
-  })
-  // Set public RLS policy
-  await supFetch(`/buckets/${name}/public`, { method: 'PUT' })
-  console.log(`✅  Created bucket "${name}" (public)`)
-}
-
-async function uploadFile(filePath, destPath) {
-  const content = readFileSync(filePath)
-  const mime = mimeType(filePath)
-  console.log(`   Uploading ${basename(filePath)} → ${destPath} (${(content.length / 1024 / 1024).toFixed(1)} MB)`)
-
-  const res = await fetch(
-    `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${destPath}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SERVICE_KEY}`,
-        'Content-Type': mime,
-        'x-upsert': 'true',
-      },
-      body: content,
-    }
-  )
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Upload failed for ${destPath}: ${res.status} ${body}`)
-  }
-}
-
 function mimeType(filePath) {
-  const ext = filePath.split('.').pop().toLowerCase()
-  const map = {
-    yml: 'application/x-yaml',
-    yaml: 'application/x-yaml',
-    exe: 'application/x-msdownload',
-    zip: 'application/zip',
-    blockmap: 'application/octet-stream',
-    dmg: 'application/x-apple-diskimage',
-    'tar.gz': 'application/gzip',
-    AppImage: 'application/octet-stream',
-    deb: 'application/vnd.debian.binary-package',
-  }
-  return map[ext] || 'application/octet-stream'
+  const name = basename(filePath).toLowerCase()
+  if (name.endsWith('.yml') || name.endsWith('.yaml')) return 'text/yaml'
+  if (name.endsWith('.exe')) return 'application/x-msdownload'
+  if (name.endsWith('.zip')) return 'application/zip'
+  if (name.endsWith('.blockmap')) return 'application/octet-stream'
+  if (name.endsWith('.dmg')) return 'application/x-apple-diskimage'
+  if (name.endsWith('.appimage')) return 'application/octet-stream'
+  if (name.endsWith('.deb')) return 'application/vnd.debian.binary-package'
+  if (name.endsWith('.tar.gz') || name.endsWith('.tgz')) return 'application/gzip'
+  return 'application/octet-stream'
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
+async function loadS3() {
+  try {
+    // Prefer installed package; works when listed in package.json devDependencies
+    return await import('@aws-sdk/client-s3')
+  } catch {
+    die(
+      'Missing @aws-sdk/client-s3. Install with:\n' +
+        '   npm install -D @aws-sdk/client-s3\n',
+    )
+  }
+}
 
 async function main() {
   console.log('')
-  console.log('=== Publish Release to Supabase Storage ===')
-  console.log(`   Bucket: ${BUCKET}`)
-  console.log(`   From:   ${RELEASE_DIR}`)
+  console.log('=== Publish Release → Cloudflare R2 ===')
+  console.log(`   Bucket:   ${BUCKET}`)
+  console.log(`   Endpoint: ${ENDPOINT || '(missing R2_ACCOUNT_ID)'}`)
+  console.log(`   Public:   ${PUBLIC_URL || '(set ORQUESTRA_RELEASES_URL)'}`)
+  console.log(`   From:     ${RELEASE_DIR}`)
   console.log('')
 
-  // Check the release directory
-  const files = readdirSync(RELEASE_DIR).filter((f) => {
-    if (f.endsWith('.json') || f === 'builder-debug.yml') return false
-    if (statSync(join(RELEASE_DIR, f)).isDirectory()) return false
-    return true
-  })
-
-  if (files.length === 0) {
-    console.error('❌ No release files found in release/')
-    console.error('   Run "npm run package:win" first')
-    process.exit(1)
+  if (!ACCOUNT_ID || !ACCESS_KEY || !SECRET_KEY) {
+    die(
+      'Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY\n' +
+        '   Cloudflare Dashboard → R2 → Manage R2 API Tokens → Create API token\n' +
+        '   (Object Read & Write on the releases bucket)',
+    )
+  }
+  if (!PUBLIC_URL || PUBLIC_URL.includes('PLACEHOLDER')) {
+    die(
+      'Set ORQUESTRA_RELEASES_URL to your public R2 URL (no trailing slash).\n' +
+        '   Example: https://pub-xxxxxxxx.r2.dev/orquestra-releases\n' +
+        '   Enable public access on the bucket (R2 → Settings → Public access)\n' +
+        '   or attach a custom domain.',
+    )
+  }
+  if (!existsSync(RELEASE_DIR)) {
+    die(`Release dir not found: ${RELEASE_DIR}\n   Run: npm run package:win`)
   }
 
-  console.log(`📦 Found ${files.length} artifacts:`)
+  const files = readdirSync(RELEASE_DIR).filter((f) => {
+    if (f === 'builder-debug.yml' || f.endsWith('.json')) return false
+    const p = join(RELEASE_DIR, f)
+    return statSync(p).isFile()
+  })
+  if (files.length === 0) {
+    die('No artifacts in release/. Run npm run package:win first.')
+  }
+
+  console.log(`📦 ${files.length} artifacts:`)
   for (const f of files) {
     const size = statSync(join(RELEASE_DIR, f)).size
     console.log(`   - ${f} (${(size / 1024 / 1024).toFixed(1)} MB)`)
   }
   console.log('')
 
-  // Ensure bucket exists
-  console.log('🔧 Ensuring bucket exists...')
-  await ensureBucket(BUCKET)
+  const { S3Client, PutObjectCommand, HeadBucketCommand } = await loadS3()
+  const client = new S3Client({
+    region: 'auto',
+    endpoint: ENDPOINT,
+    credentials: {
+      accessKeyId: ACCESS_KEY,
+      secretAccessKey: SECRET_KEY,
+    },
+  })
 
-  // Upload each file to the bucket root
-  console.log('')
-  console.log('⬆️  Uploading artifacts...')
-  for (const f of files) {
-    const filePath = join(RELEASE_DIR, f)
-    await uploadFile(filePath, f)
+  try {
+    await client.send(new HeadBucketCommand({ Bucket: BUCKET }))
+    console.log(`ℹ️  Bucket "${BUCKET}" reachable`)
+  } catch (err) {
+    die(
+      `Cannot access bucket "${BUCKET}": ${err?.message || err}\n` +
+        '   Create it in Cloudflare Dashboard → R2 → Create bucket\n' +
+        '   Name must match R2_BUCKET (default orquestra-releases)',
+    )
   }
 
   console.log('')
-  console.log('✅  All artifacts uploaded!')
-  console.log(`   Public URL: ${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`)
+  console.log('⬆️  Uploading…')
+  for (const f of files) {
+    const filePath = join(RELEASE_DIR, f)
+    const body = readFileSync(filePath)
+    const key = f // root of bucket (or prefix if PUBLIC_URL has a path)
+    // If public URL is .../orquestra-releases, objects live at bucket root when
+    // the bucket IS orquestra-releases. If using a path prefix on a larger bucket,
+    // set R2_KEY_PREFIX=orquestra-releases/
+    const prefix = (process.env.R2_KEY_PREFIX || '').replace(/^\/+|\/+$/g, '')
+    const objectKey = prefix ? `${prefix}/${key}` : key
+    console.log(`   ${f} → s3://${BUCKET}/${objectKey} (${(body.length / 1024 / 1024).toFixed(1)} MB)`)
+    await client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: objectKey,
+        Body: body,
+        ContentType: mimeType(filePath),
+        // Public read is controlled by bucket settings / custom domain, not ACL
+        // (R2 ignores many AWS ACL fields).
+      }),
+    )
+  }
+
   console.log('')
-  console.log('📋 The auto-updater will check this URL for the latest.yml')
+  console.log('✅  Upload complete')
+  console.log(`   Feed URL: ${PUBLIC_URL}/`)
+  console.log(`   Check:    ${PUBLIC_URL}/latest.yml`)
+  console.log('')
+  console.log('📋 electron-builder publish.url and ORQUESTRA_RELEASES_URL must match this feed.')
   console.log('')
 }
 
 main().catch((err) => {
   console.error('')
-  console.error('❌ Failed:', err.message)
+  console.error('❌ Failed:', err?.message || err)
   process.exit(1)
 })

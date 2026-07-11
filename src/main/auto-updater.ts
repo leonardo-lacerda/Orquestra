@@ -46,9 +46,10 @@ import {
   DEFAULT_UPDATE_RECORD,
   type UpdateRecord,
 } from './updateState'
+import { ORQUESTRA_RELEASES_FEED_URL } from '../shared/releasesFeed'
 
-const SUPABASE_BUCKET = 'https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases'
-const RELEASES_URL = SUPABASE_BUCKET
+/** Public Cloudflare R2 (or CDN) base — same as electron-builder publish.url */
+const RELEASES_URL = ORQUESTRA_RELEASES_FEED_URL
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 
 /** Persisted "what did we last stage, and how often has it failed to apply"
@@ -139,17 +140,18 @@ export function isRemoteVersionNewer(remote: string, local: string): boolean {
 }
 
 /**
- * Soft check against Supabase Storage latest.yml (generic provider feed).
+ * Soft check against R2 latest.yml (generic provider feed).
  * Used in unpackaged/dev builds where electron-updater won't run.
  */
 async function checkLatestFromSupabaseFeed(): Promise<void> {
   pushStatus({ state: 'checking', version: null })
   try {
     // electron-builder generic provider: latest.yml (or latest-mac.yml) at feed root
+    const base = RELEASES_URL.replace(/\/+$/, '')
     const candidates = [
-      `${SUPABASE_BUCKET}/latest.yml`,
-      `${SUPABASE_BUCKET}/latest-mac.yml`,
-      `${SUPABASE_BUCKET}/latest-linux.yml`,
+      `${base}/latest.yml`,
+      `${base}/latest-mac.yml`,
+      `${base}/latest-linux.yml`,
     ]
     let remoteVersion: string | null = null
     for (const url of candidates) {
@@ -426,7 +428,7 @@ export function checkForUpdatesManually(): void {
     return
   }
   // Packaged (or ORQUESTRA_DEV_UPDATE harness): full electron-updater path.
-  // Unpacked/dev: soft-check latest.yml on Supabase Storage so the sidebar
+  // Unpacked/dev: soft-check latest.yml on Cloudflare R2 so the sidebar
   // button still works without a full installer feed.
   const devUpdate = !app.isPackaged && process.env.ORQUESTRA_DEV_UPDATE === '1'
   if (!app.isPackaged && !devUpdate) {

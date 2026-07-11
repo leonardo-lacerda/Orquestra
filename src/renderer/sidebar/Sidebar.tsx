@@ -24,16 +24,17 @@ import { Tooltip } from '../ui/Tooltip'
 import { useTranslation } from '../i18n/useTranslation'
 import orquestraLogo from '../assets/orquestra.logo.png'
 import type { UpdateStatus } from '../../shared/electron-api'
+import { ORQUESTRA_RELEASES_FEED_URL } from '../../shared/releasesFeed'
 
 // ---------------------------------------------------------------------------
-// Version footer — check for updates (Supabase Storage release feed)
+// Version footer — check for updates (Cloudflare R2 release feed)
 // ---------------------------------------------------------------------------
 
 /**
  * Footer under workspaces: logo + version, or a check/update action button.
- * Uses electron-updater against the Supabase public bucket
- * (`orquestra-releases`). When an update is available/downloaded the control
- * becomes an install/update action.
+ * Uses electron-updater against the public Cloudflare R2 feed
+ * (see src/shared/releasesFeed.ts). When an update is available/downloaded the
+ * control becomes an install/update action.
  */
 function SidebarUpdateFooter() {
   const { t } = useTranslation()
@@ -66,10 +67,9 @@ function SidebarUpdateFooter() {
   }, [])
 
   const onInstall = useCallback(async () => {
-    const feed =
-      'https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases/'
+    const feed = `${ORQUESTRA_RELEASES_FEED_URL.replace(/\/+$/, '')}/`
     // Downloaded → install & relaunch. Available → re-check (starts download when
-    // packaged/eligible) and open the Supabase feed for manual install fallback.
+    // packaged/eligible) and open the R2 feed for manual install fallback.
     if (status.state === 'downloaded') {
       try {
         const ok = await window.electronAPI.quitAndInstallUpdate()

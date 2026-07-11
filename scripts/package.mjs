@@ -59,6 +59,19 @@ function stageHostRuntimeTarball() {
   console.log(`[package] staged ${path.relative(repoRoot, src)} → ${path.relative(repoRoot, dest)}`)
 }
 
+// electron-builder publish.url uses ${env.ORQUESTRA_RELEASES_URL} — ensure set
+// so empty env does not produce a broken generic feed URL.
+if (!process.env.ORQUESTRA_RELEASES_URL) {
+  // Keep in sync with src/shared/releasesFeed.ts default (override before package
+  // with the real public R2 URL once the bucket exists).
+  process.env.ORQUESTRA_RELEASES_URL =
+    'https://pub-PLACEHOLDER.r2.dev/orquestra-releases'
+  console.warn(
+    '[package] ORQUESTRA_RELEASES_URL not set — using placeholder. ' +
+      'Set it to your public Cloudflare R2 URL before shipping auto-update.',
+  )
+}
+
 await run(node, ['scripts/generate-icons.js'])
 await run(node, ['node_modules/electron-vite/bin/electron-vite.js', 'build'])
 stageHostRuntimeTarball()

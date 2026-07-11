@@ -93,9 +93,12 @@ extraResources:
 toolsets:
   winCodeSign: "1.1.0"
 npmRebuild: false
+# Auto-update feed on Cloudflare R2 (public read). Override at package time:
+#   set ORQUESTRA_RELEASES_URL=https://pub-xxxx.r2.dev/orquestra-releases
+# electron-builder expands ${env.VAR}; fallback matches src/shared/releasesFeed.ts
 publish:
   provider: generic
-  url: https://yktidzsrldsksvaubagt.supabase.co/storage/v1/object/public/orquestra-releases/
+  url: ${env.ORQUESTRA_RELEASES_URL}
   channel: latest
 mac:
   icon: build/icon.icns
