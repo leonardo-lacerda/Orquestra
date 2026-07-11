@@ -14,12 +14,21 @@ export function CanvasSettings() {
 
   const bgImagePath = store.canvasBackgroundImagePath
   const activeBuiltin = getBuiltinWallpaper(bgImagePath)
-  const isCustomImage = !!bgImagePath && !activeBuiltin
-  const customImageName = isCustomImage ? bgImagePath.split(/[\\/]/).pop() : ''
+  // Treat removed built-ins (e.g. old hillside) as "no image" so settings UI
+  // shows None selected instead of a broken Custom tile.
+  const effectivePath = activeBuiltin || (bgImagePath && !bgImagePath.startsWith('builtin:'))
+    ? bgImagePath
+    : ''
+  const isCustomImage = !!effectivePath && !activeBuiltin
+  const customImageName = isCustomImage ? effectivePath.split(/[\\/]/).pop() : ''
 
   const chooseBackgroundImage = async () => {
     const picked = await window.electronAPI.openImageDialog()
     if (picked) store.setSetting('canvasBackgroundImagePath', picked)
+  }
+
+  const clearBackgroundImage = () => {
+    store.setSetting('canvasBackgroundImagePath', '')
   }
 
   return (
@@ -82,8 +91,8 @@ export function CanvasSettings() {
       >
         <div className="flex flex-wrap items-center justify-end gap-2">
           <WallpaperSwatch
-            selected={!bgImagePath}
-            onClick={() => store.setSetting('canvasBackgroundImagePath', '')}
+            selected={!effectivePath}
+            onClick={clearBackgroundImage}
             label="None"
           />
           {BUILTIN_WALLPAPERS.map((wp) => (
@@ -102,7 +111,7 @@ export function CanvasSettings() {
           />
         </div>
       </SettingRow>
-      {bgImagePath && (
+      {effectivePath && (
         <SettingRow
           label={t('canvas.backgroundImageOpacity')}
           description={`${Math.round(store.canvasBackgroundImageOpacity * 100)}%`}

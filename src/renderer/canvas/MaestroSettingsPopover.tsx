@@ -130,6 +130,7 @@ export function MaestroSettingsPopover({
 
   const mode = useSettingsStore((s) => s.orchestrationMode)
   const maxWorkers = useSettingsStore((s) => s.orchestrationMaxWorkers)
+  const maxWorkerRoleChars = useSettingsStore((s) => s.orchestrationMaxWorkerRoleChars) ?? 1000
   const workerKind = useSettingsStore((s) => s.orchestrationDefaultWorkerKind)
   const workerAgent = useSettingsStore((s) => s.orchestrationDefaultWorkerAgent) ?? 'verboo'
   const agentCommand = useSettingsStore((s) => s.orchestrationDefaultAgentCommand)
@@ -292,6 +293,24 @@ export function MaestroSettingsPopover({
               onChange={(e) => {
                 const n = Math.max(1, Math.min(16, Math.floor(Number(e.target.value) || 1)))
                 setSetting('orchestrationMaxWorkers', n)
+              }}
+              style={inputStyle}
+            />
+          </Row>
+          <Row
+            label={t('orchestration.maxWorkerRoleChars')}
+            hint={t('orchestration.maxWorkerRoleChars.desc')}
+          >
+            <input
+              data-maestro-max-role-chars
+              type="number"
+              min={80}
+              max={4000}
+              step={20}
+              value={maxWorkerRoleChars}
+              onChange={(e) => {
+                const n = Math.max(80, Math.min(4000, Math.floor(Number(e.target.value) || 1000)))
+                setSetting('orchestrationMaxWorkerRoleChars', n)
               }}
               style={inputStyle}
             />

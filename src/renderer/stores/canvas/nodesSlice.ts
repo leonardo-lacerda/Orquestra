@@ -98,7 +98,11 @@ export function createNodesSlice(set: CanvasSet, get: CanvasGet): NodesActions {
     },
 
     removeNode(id) {
-      if (get().nodes[id]) get().pushHistory()
+      if (!get().nodes[id]) return
+      get().pushHistory()
+      // Drop pipe/context/orchestration arrows immediately so dismiss /
+      // close-on-success never leave orange lines into empty "Panel" husks.
+      get().removeConnectionsForNode(id)
       set((state) => {
         const node = state.nodes[id]
         if (!node) return state
@@ -118,6 +122,8 @@ export function createNodesSlice(set: CanvasSet, get: CanvasGet): NodesActions {
     },
 
     finalizeRemoveNode(nodeId) {
+      // Belt-and-suspenders: arrows should already be gone from removeNode.
+      get().removeConnectionsForNode(nodeId)
       const { [nodeId]: _, ...rest } = get().nodes
       set((state) => ({
         nodes: rest,
@@ -249,7 +255,11 @@ export function createNodesSlice(set: CanvasSet, get: CanvasGet): NodesActions {
 
     nodeForPanel(panelId) {
       const { nodes } = get()
-      const found = Object.values(nodes).find((n) => n.panelId === panelId)
+      // Skip exiting nodes so headless close / dismiss don't re-resolve a husk
+      // still mid-exit animation as a live placement for the closed panelId.
+      const found = Object.values(nodes).find(
+        (n) => n.panelId === panelId && n.animationState !== 'exiting',
+      )
       return found?.id ?? null
     },
 

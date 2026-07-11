@@ -874,7 +874,7 @@ section('22. Windows Wrapper (.cmd)')
   assert(fs.existsSync(cmdPath), 'orquestra.cmd should exist')
   const content = fs.readFileSync(cmdPath, 'utf-8')
   assert(content.includes('node'), '.cmd should invoke node')
-  assert(content.includes('orquestra.js'), '.cmd should reference orquestra.js')
+  assert(content.includes('orquestra.cjs'), '.cmd should reference orquestra.cjs (type:module safe)')
   assert(content.includes('%*'), '.cmd should pass through all args with %*')
 })()
 

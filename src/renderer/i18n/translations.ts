@@ -112,6 +112,8 @@ export interface Translations {
   'orchestration.mode.auto': string
   'orchestration.maxWorkers': string
   'orchestration.maxWorkers.desc': string
+  'orchestration.maxWorkerRoleChars': string
+  'orchestration.maxWorkerRoleChars.desc': string
   'orchestration.defaultWorkerKind': string
   'orchestration.defaultWorkerKind.desc': string
   'orchestration.workerKind.terminal': string
@@ -698,8 +700,12 @@ export const translations: Record<Language, Translations> = {
     'orchestration.mode.manual': 'Manual',
     'orchestration.mode.assisted': 'Assisted',
     'orchestration.mode.auto': 'Auto',
-    'orchestration.maxWorkers': 'Max workers',
-    'orchestration.maxWorkers.desc': 'Maximum workers a single orchestrator should create.',
+    'orchestration.maxWorkers': 'Max workers (pool size)',
+    'orchestration.maxWorkers.desc':
+      'Hard ceiling on how many worker terminals one Maestro may keep open at once (the pool). Extra tasks queue or reassign — they do not open a new panel beyond this.',
+    'orchestration.maxWorkerRoleChars': 'Max worker role length',
+    'orchestration.maxWorkerRoleChars.desc':
+      'Maximum characters for each worker’s task prompt (--role): the short job description Maestro sends to that worker only — not your full request and not the whole product brief. Slightly longer roles are truncated; extremely long pastes are rejected so every worker does not receive the same giant instructions. Default 1000. Raise for complex steps; lower to force tighter roles.',
     'orchestration.defaultWorkerKind': 'Default worker type',
     'orchestration.defaultWorkerKind.desc': 'Panel type used when a recruit request asks for auto.',
     'orchestration.workerKind.terminal': 'Terminal',
@@ -1285,8 +1291,12 @@ export const translations: Record<Language, Translations> = {
     'orchestration.mode.manual': 'Manual',
     'orchestration.mode.assisted': 'Assistido',
     'orchestration.mode.auto': 'Autom\u00E1tico',
-    'orchestration.maxWorkers': 'M\u00E1ximo de workers',
-    'orchestration.maxWorkers.desc': 'M\u00E1ximo de workers que um orquestrador deve criar.',
+    'orchestration.maxWorkers': 'M\u00E1ximo de workers (tamanho do pool)',
+    'orchestration.maxWorkers.desc':
+      'Teto r\u00EDgido de quantos terminais worker um Maestro pode manter abertos ao mesmo tempo (o pool). Tarefas extras entram na fila ou usam reassign \u2014 n\u00E3o abrem um painel al\u00E9m deste n\u00FAmero.',
+    'orchestration.maxWorkerRoleChars': 'Tamanho m\u00E1ximo do role do worker',
+    'orchestration.maxWorkerRoleChars.desc':
+      'M\u00E1ximo de caracteres do prompt de tarefa de cada worker (--role): a descri\u00E7\u00E3o curta do trabalho que o Maestro envia s\u00F3 para aquele worker \u2014 n\u00E3o o seu pedido completo nem o brief inteiro do produto. Roles um pouco maiores s\u00E3o truncados; colas enormes s\u00E3o rejeitadas para que cada worker n\u00E3o receba as mesmas instru\u00E7\u00F5es gigantes. Padr\u00E3o 1000. Aumente para passos complexos; diminua para for\u00E7ar roles mais enxutos.',
     'orchestration.defaultWorkerKind': 'Tipo de worker padr\u00E3o',
     'orchestration.defaultWorkerKind.desc': 'Tipo de painel usado quando um recruit pede auto.',
     'orchestration.workerKind.terminal': 'Terminal',

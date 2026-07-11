@@ -83,6 +83,28 @@ export type SlotDecision =
   | { action: 'dismiss_then_recruit'; dismissPanelId: string; functionName: string }
 
 export const DEFAULT_COMPLETION_TOKEN = 'ORQUESTRA_WORKER_DONE'
-export const MAX_TASK_ROLE_CHARS = 220
+/** Align with renderer MAX_WORKER_ROLE_CHARS soft cap (pool/queue roles). */
+export const MAX_TASK_ROLE_CHARS = 1000
 export const ORQUESTRA_RUNS_DIR = '.orquestra/runs'
 export const ORQUESTRA_LATEST_RUN_FILE = 'latest.json'
+/** Active Maestro runs registry under `.orquestra/registry.json`. */
+export const ORQUESTRA_REGISTRY_FILE = 'registry.json'
+/** Legacy flat results dir (pre multi-run). Still dual-written in single-maestro mode. */
+export const ORQUESTRA_LEGACY_RESULTS_DIR = '.orquestra-results'
+/** Legacy flat commands dir (pre multi-run). */
+export const ORQUESTRA_LEGACY_COMMANDS_DIR = '.orquestra-commands'
+
+/** One active Maestro crown / orchestration run. */
+export interface MaestroRegistryEntry {
+  runId: string
+  maestroPtyId: string
+  panelId?: string
+  workspacePath: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface MaestroRegistryFile {
+  version: 1
+  runs: MaestroRegistryEntry[]
+}

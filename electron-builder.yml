@@ -2,6 +2,13 @@ appId: com.orquestra.app
 productName: Orquestra
 directories:
   output: release
+# Development-only Maestro harness. Keep it out of app.asar/installers; the
+# packaged app receives only the runtime CLI assets explicitly listed below.
+files:
+  - "!scripts/maestro/maestro-test-runner.mjs"
+  - "!scripts/maestro/maestro-test-runner.test.mjs"
+  - "!scripts/maestro/test-maestro.sh"
+  - "!docs/maestro-headless-test.md"
 # The orquestra-runtime daemon is NOT bundled in the app. One self-contained
 # tarball per target is built in CI and uploaded to the GitHub release
 # `v<version>`; on connect the remote pulls its own tarball (with a client-side

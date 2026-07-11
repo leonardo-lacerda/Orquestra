@@ -8,7 +8,7 @@ import type { StoreApi } from 'zustand'
 import type { CanvasStore } from '../../stores/canvasStore'
 import type { PanelType, Point, Size, CanvasNodeId, CanvasNodeState } from '../../../shared/types'
 import { findNodeDockStore } from '../../panels/nodeDockRegistry'
-import { collectPanelIds } from '../../../shared/collectPanelIds'
+import { collectPanelIds, removePanelFromDockLayout } from '../../../shared/collectPanelIds'
 
 // -----------------------------------------------------------------------------
 // Canvas operations callback — the contract createCanvasOps implements, letting
@@ -60,20 +60,63 @@ export function createCanvasOps(storeApi: StoreApi<CanvasStore>): CanvasOperatio
 
     removeNodeForPanel(panelId: string) {
       const state = storeApi.getState()
-      const nodeId = state.nodeForPanel(panelId)
+      // Prefer seed match; also find multi-tab nodes where panelId is only in dockLayout.
+      let nodeId = state.nodeForPanel(panelId)
+      if (!nodeId) {
+        for (const n of Object.values(state.nodes)) {
+          if (n.animationState === 'exiting') continue
+          const layout = findNodeDockStore(n.id)?.getState().zones.center.layout ?? n.dockLayout
+          if (layout && collectPanelIds(layout).includes(panelId)) {
+            nodeId = n.id
+            break
+          }
+        }
+      }
       if (!nodeId) return
       const node = state.nodes[nodeId]
-      if (!node) return
-      // The live per-node DockStore is the runtime authority now; node.dockLayout
-      // is only a save-time projection. Read the live layout (this runs when a
-      // panel is interactively closed, so the node's mini-dock is mounted) and
-      // fall back to the projection if the store isn't registered.
+      if (!node || node.animationState === 'exiting') return
+
+      // Headless close (Maestro dismiss, close-on-success, petTools, shortcuts)
+      // calls closePanel WITHOUT first undocking the mini-dock tab. The old path
+      // early-returned whenever layout still listed the panel, leaving a ghost
+      // canvas shell titled "Panel" with orphan orchestration arrows. Always
+      // strip the panel from live + projected layout, then drop the node if empty.
       const liveStore = findNodeDockStore(nodeId)
-      const layout = liveStore
+      if (liveStore) {
+        try {
+          liveStore.getState().undockPanel(panelId)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const layoutAfter = liveStore
         ? liveStore.getState().zones.center.layout
-        : node.dockLayout
-      if (layout && collectPanelIds(layout).length > 0) return
-      state.removeNode(nodeId)
+        : removePanelFromDockLayout(node.dockLayout, panelId)
+
+      const remaining = collectPanelIds(layoutAfter)
+      if (remaining.length === 0) {
+        // removeNode also drops connections (arrows into the husk).
+        state.setNodeDockLayout(nodeId, null)
+        state.removeNode(nodeId)
+        return
+      }
+
+      // Multi-tab node: keep the shell, project the stripped layout. If the seed
+      // panelId was the one closed, re-point it so orphan-sweep / titles resolve.
+      state.setNodeDockLayout(nodeId, layoutAfter)
+      if (node.panelId === panelId) {
+        storeApi.setState((s) => {
+          const cur = s.nodes[nodeId]
+          if (!cur || cur.panelId !== panelId) return s
+          return {
+            nodes: {
+              ...s.nodes,
+              [nodeId]: { ...cur, panelId: remaining[0], dockLayout: layoutAfter },
+            },
+          }
+        })
+      }
     },
 
     loadWorkspaceCanvas(

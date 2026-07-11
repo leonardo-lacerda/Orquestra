@@ -20,8 +20,16 @@ vi.mock('../../agent/main/extensionInstall', () => ({
   }),
 }))
 
-import { checkMaestroAssets, resolveMaestroCliDir, resolveMaestroExtensionDir } from './maestroAssets'
+import {
+  checkMaestroAssets,
+  installOrquestraCliToWorkspace,
+  resolveMaestroCliDir,
+  resolveMaestroExtensionDir,
+  workspacePackageIsModule,
+  ORQUESTRA_JS_BOOTSTRAP_ESM,
+} from './maestroAssets'
 import { app } from 'electron'
+import { spawnSync } from 'node:child_process'
 
 function seedCliDir(root: string): string {
   const dir = path.join(root, 'scripts', 'maestro')
@@ -93,5 +101,52 @@ describe('maestroAssets', () => {
     const check = checkMaestroAssets()
     expect(check.ok).toBe(false)
     expect(check.missing).toContain('cli:orquestra-worker-skill.md')
+  })
+
+  it('installOrquestraCliToWorkspace: type module still runs node orquestra.js via cjs', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-cli-esm-'))
+    tempRoots.push(root)
+    const cliSrc = seedCliDir(root)
+    // Real-ish CLI body that prints ok (overwrite seed stub)
+    fs.writeFileSync(
+      path.join(cliSrc, 'orquestra.js'),
+      "#!/usr/bin/env node\nconsole.log('cli-ok', process.argv[2] || '')\n",
+    )
+    fs.writeFileSync(
+      path.join(root, 'package.json'),
+      JSON.stringify({ name: 'demo', type: 'module' }, null, 2),
+    )
+    expect(workspacePackageIsModule(root)).toBe(true)
+
+    const { cjsPath, jsPath } = installOrquestraCliToWorkspace(root, cliSrc)
+    expect(fs.existsSync(cjsPath)).toBe(true)
+    expect(fs.readFileSync(jsPath, 'utf-8')).toContain('import.meta.url')
+    expect(fs.readFileSync(jsPath, 'utf-8')).toContain(ORQUESTRA_JS_BOOTSTRAP_ESM.slice(0, 40))
+
+    const r = spawnSync(process.execPath, [jsPath, 'wait'], {
+      encoding: 'utf-8',
+      cwd: root,
+    })
+    expect(r.status).toBe(0)
+    expect(String(r.stdout || '')).toMatch(/cli-ok/)
+  })
+
+  it('installOrquestraCliToWorkspace: commonjs package uses require bootstrap', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-cli-cjs-'))
+    tempRoots.push(root)
+    const cliSrc = seedCliDir(root)
+    fs.writeFileSync(
+      path.join(cliSrc, 'orquestra.js'),
+      "#!/usr/bin/env node\nconsole.log('cli-ok')\n",
+    )
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'demo' }))
+    expect(workspacePackageIsModule(root)).toBe(false)
+
+    const { jsPath } = installOrquestraCliToWorkspace(root, cliSrc)
+    expect(fs.readFileSync(jsPath, 'utf-8')).toContain("require('child_process')")
+
+    const r = spawnSync(process.execPath, [jsPath], { encoding: 'utf-8', cwd: root })
+    expect(r.status).toBe(0)
+    expect(String(r.stdout || '')).toMatch(/cli-ok/)
   })
 })

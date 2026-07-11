@@ -190,6 +190,16 @@ describe('terminal font settings', () => {
   })
 })
 
+describe('looksLikeTuiFullRedraw', () => {
+  it('detects CSI clear / alt-screen / large frames', async () => {
+    const { looksLikeTuiFullRedraw } = await import('./terminalDom')
+    expect(looksLikeTuiFullRedraw('\x1b[2J\x1b[H')).toBe(true)
+    expect(looksLikeTuiFullRedraw('\x1b[?1049h')).toBe(true)
+    expect(looksLikeTuiFullRedraw('x'.repeat(2000))).toBe(true)
+    expect(looksLikeTuiFullRedraw('hello')).toBe(false)
+  })
+})
+
 describe('forceWebglRepaint / scheduleZoomWebglRepaint', () => {
   // Canvas zoom used to only call terminal.refresh(), leaving the shared WebGL
   // glyph atlas and per-terminal models desynced → scrambled letters until a

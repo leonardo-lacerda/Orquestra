@@ -22,7 +22,6 @@ import { collectPanelIds } from '../../lib/canvas/collectPanelIds'
 import { getOrCreateWorkspaceDockStore } from '../../lib/workspace/dockRegistry'
 import {
   ensureCanvasOpsForPanel,
-  getCanvasOpsById,
   getNodeDockLayout,
   resolvePanelLocation,
 } from '../../lib/workspace/canvasAccess'
@@ -233,7 +232,9 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
         if (location?.kind === 'dock') {
           dockStore.getState().undockPanel(panelId)
         } else if (location?.kind === 'canvas') {
-          getCanvasOpsById(location.canvasPanelId)?.removeNodeForPanel(panelId)
+          // ensureCanvasOps so headless close still strips the canvas node when
+          // the canvas panel was never mounted this session (ops not registered).
+          ensureCanvasOpsForPanel(location.canvasPanelId).removeNodeForPanel(panelId)
         }
       } catch (error) {
         log.error('Failed to remove panel from dock/canvas during close:', error)

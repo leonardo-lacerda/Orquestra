@@ -22,6 +22,47 @@ export function collectPanelIds(
   return out
 }
 
+/**
+ * Remove one panelId from a dock layout tree. Returns the updated tree, or
+ * null when the tree becomes empty (last tab / last child collapsed away).
+ * Shared by the workspace dock store and canvas-bridge headless close so a
+ * seed tab is never left pointing at a deleted panel record ("Panel" husk).
+ */
+export function removePanelFromDockLayout(
+  node: DockLayoutNode | null | undefined,
+  panelId: string,
+): DockLayoutNode | null {
+  if (!node) return null
+  if (node.type === 'tabs') {
+    const idx = node.panelIds.indexOf(panelId)
+    if (idx === -1) return node
+    const newPanelIds = node.panelIds.filter((id) => id !== panelId)
+    if (newPanelIds.length === 0) return null
+    return {
+      ...node,
+      panelIds: newPanelIds,
+      activeIndex: Math.min(node.activeIndex, newPanelIds.length - 1),
+    }
+  }
+  const newChildren: DockLayoutNode[] = []
+  const newRatios: number[] = []
+  for (let i = 0; i < node.children.length; i++) {
+    const updated = removePanelFromDockLayout(node.children[i], panelId)
+    if (updated) {
+      newChildren.push(updated)
+      newRatios.push(node.ratios[i])
+    }
+  }
+  if (newChildren.length === 0) return null
+  if (newChildren.length === 1) return newChildren[0]
+  const total = newRatios.reduce((a, b) => a + b, 0)
+  return {
+    ...node,
+    children: newChildren,
+    ratios: newRatios.map((r) => r / total),
+  }
+}
+
 function walk(
   layout: DockLayoutNode | null | undefined,
   out: string[],

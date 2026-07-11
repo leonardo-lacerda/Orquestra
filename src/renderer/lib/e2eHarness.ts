@@ -88,6 +88,14 @@ declare global {
       terminalPtyId(nodeId: string): string | null
       /** Write raw data to a terminal node's PTY (e.g. a flooding command). */
       writeTerminal(nodeId: string, data: string): boolean
+      /** Read the current xterm scrollback for a node or panel id. */
+      terminalOutput(nodeOrPanelId: string): string
+      /** Paste through xterm's real input path and focus its hidden textarea. */
+      pasteTerminal(nodeOrPanelId: string, text: string): boolean
+      /** Type through xterm.onData in small user-input chunks, avoiding TUI paste mode. */
+      typeTerminal(nodeOrPanelId: string, text: string, delayMs?: number): Promise<boolean>
+      /** Submit Enter through xterm.onData as user input (works in hidden windows). */
+      submitTerminal(nodeOrPanelId: string): boolean
       addConnection(sourceNodeId: string, targetNodeId: string, type: CanvasConnectionType): string | null
       connections(): Array<{ id: string; sourceNodeId: string; targetNodeId: string; type: string }>
       setEditorContent(nodeId: string, content: string): boolean
@@ -352,6 +360,49 @@ export function installE2EHarness(): void {
     return true
   }
 
+  const terminalOutput = (nodeOrPanelId: string): string => {
+    const cs = activeCanvasStore()
+    const panelId = cs?.getState().nodes[nodeOrPanelId]?.panelId ?? nodeOrPanelId
+    const entry = terminalRegistry.getEntry(panelId)
+    return entry ? terminalRegistry.serializeTerminalState(entry) ?? '' : ''
+  }
+
+  const pasteTerminal = (nodeOrPanelId: string, text: string): boolean => {
+    const cs = activeCanvasStore()
+    const panelId = cs?.getState().nodes[nodeOrPanelId]?.panelId ?? nodeOrPanelId
+    const entry = terminalRegistry.getEntry(panelId)
+    if (!entry) return false
+    entry.terminal.focus()
+    entry.terminal.paste(text)
+    return true
+  }
+
+  const submitTerminal = (nodeOrPanelId: string): boolean => {
+    const cs = activeCanvasStore()
+    const panelId = cs?.getState().nodes[nodeOrPanelId]?.panelId ?? nodeOrPanelId
+    const entry = terminalRegistry.getEntry(panelId)
+    if (!entry) return false
+    entry.terminal.input('\r', true)
+    return true
+  }
+
+  const typeTerminal = async (
+    nodeOrPanelId: string,
+    text: string,
+    delayMs = 2,
+  ): Promise<boolean> => {
+    const cs = activeCanvasStore()
+    const panelId = cs?.getState().nodes[nodeOrPanelId]?.panelId ?? nodeOrPanelId
+    const entry = terminalRegistry.getEntry(panelId)
+    if (!entry) return false
+    entry.terminal.focus()
+    for (const char of text) {
+      entry.terminal.input(char, true)
+      if (delayMs > 0) await new Promise((resolve) => window.setTimeout(resolve, delayMs))
+    }
+    return true
+  }
+
   const addConnection = (
     sourceNodeId: string,
     targetNodeId: string,
@@ -525,6 +576,10 @@ export function installE2EHarness(): void {
     worktreeDebug,
     terminalPtyId,
     writeTerminal,
+    terminalOutput,
+    pasteTerminal,
+    typeTerminal,
+    submitTerminal,
     addConnection,
     connections,
     setEditorContent,

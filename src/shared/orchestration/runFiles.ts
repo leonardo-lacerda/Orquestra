@@ -1,8 +1,24 @@
 // =============================================================================
-// Path helpers for .orquestra/runs layout (pure path strings).
+// Path helpers for .orquestra layout (pure path strings — same on main + CLI).
+// Multi-Maestro: each run lives under `.orquestra/runs/{runId}/`.
 // =============================================================================
 
-import { ORQUESTRA_LATEST_RUN_FILE, ORQUESTRA_RUNS_DIR } from './types'
+import {
+  ORQUESTRA_LATEST_RUN_FILE,
+  ORQUESTRA_LEGACY_COMMANDS_DIR,
+  ORQUESTRA_LEGACY_RESULTS_DIR,
+  ORQUESTRA_REGISTRY_FILE,
+  ORQUESTRA_RUNS_DIR,
+} from './types'
+
+/** Sanitize run/worker id segments for path safety. */
+export function safeOrquestraSegment(id: string): string {
+  return String(id || 'unknown')
+    .replace(/[/\\]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/[^\w.@+-]+/g, '_')
+    .slice(0, 120) || 'unknown'
+}
 
 export function runsRootRelative(): string {
   return ORQUESTRA_RUNS_DIR
@@ -12,9 +28,30 @@ export function latestRunSnapshotRelative(): string {
   return `${ORQUESTRA_RUNS_DIR}/${ORQUESTRA_LATEST_RUN_FILE}`
 }
 
+/** `.orquestra/registry.json` — list of active Maestro runs. */
+export function registryPathRelative(): string {
+  return `.orquestra/${ORQUESTRA_REGISTRY_FILE}`
+}
+
 export function runDirRelative(runId: string): string {
-  const safe = runId.replace(/[/\\]/g, '_').replace(/\.\./g, '_')
-  return `${ORQUESTRA_RUNS_DIR}/${safe}`
+  return `${ORQUESTRA_RUNS_DIR}/${safeOrquestraSegment(runId)}`
+}
+
+export function runCrownPathRelative(runId: string): string {
+  return `${runDirRelative(runId)}/crown.json`
+}
+
+export function runCommandsDirRelative(runId: string): string {
+  return `${runDirRelative(runId)}/commands`
+}
+
+export function runResultsDirRelative(runId: string): string {
+  return `${runDirRelative(runId)}/results`
+}
+
+export function runWorkerResultPathRelative(runId: string, workerName: string): string {
+  const safe = safeOrquestraSegment(pathBasename(workerName))
+  return `${runResultsDirRelative(runId)}/worker-${safe}.json`
 }
 
 export function planPathRelative(runId: string): string {
@@ -30,12 +67,36 @@ export function contractsPathRelative(runId: string): string {
 }
 
 export function workerRolePathRelative(runId: string, workerName: string): string {
-  const safe = workerName.replace(/[/\\]/g, '_').replace(/\.\./g, '_')
+  const safe = safeOrquestraSegment(workerName)
   return `${runDirRelative(runId)}/workers/${safe}/ROLE.md`
+}
+
+/** Per-run task backlog for pool/queue dispatch. */
+export function runQueuePathRelative(runId: string): string {
+  return `${runDirRelative(runId)}/queue.json`
+}
+
+export function legacyResultsDirRelative(): string {
+  return ORQUESTRA_LEGACY_RESULTS_DIR
+}
+
+export function legacyCommandsDirRelative(): string {
+  return ORQUESTRA_LEGACY_COMMANDS_DIR
+}
+
+export function legacyWorkerResultPathRelative(workerName: string): string {
+  const safe = safeOrquestraSegment(pathBasename(workerName))
+  return `${ORQUESTRA_LEGACY_RESULTS_DIR}/worker-${safe}.json`
 }
 
 export function absFromWorkspace(workspaceRoot: string, rel: string): string {
   const root = workspaceRoot.replace(/[/\\]+$/, '')
   const r = rel.replace(/^[/\\]+/, '').replace(/\\/g, '/')
   return `${root}/${r}`
+}
+
+function pathBasename(name: string): string {
+  const n = String(name || '').replace(/\\/g, '/')
+  const i = n.lastIndexOf('/')
+  return i >= 0 ? n.slice(i + 1) : n
 }

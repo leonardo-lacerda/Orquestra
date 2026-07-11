@@ -30,12 +30,30 @@ export interface AppAuthState {
 }
 /** Result of crown Maestro enable/disable (fail-closed packaging path). */
 export type TerminalSetMaestroResult =
-  | { ok: true; tookOverFrom?: string }
+  | { ok: true; runId?: string; tookOverFrom?: string; reboundFrom?: string }
   | {
       ok: false
       error: string
-      code?: 'ASSETS_MISSING' | 'INVALID_PATH' | 'COPY_FAILED' | 'NO_WORKSPACE' | 'PTY_GONE'
+      code?:
+        | 'ASSETS_MISSING'
+        | 'INVALID_PATH'
+        | 'COPY_FAILED'
+        | 'NO_WORKSPACE'
+        | 'PTY_GONE'
+        /** Single-maestro mode: another live Maestro owns the workspace. */
+        | 'MAESTRO_BUSY'
     }
+
+export interface TerminalSetMaestroOptions {
+  /**
+   * Single-maestro mode only: steal the crown from another live Maestro
+   * (cascades its workers). Ignored when orchestrationMultiMaestro is on.
+   */
+  forceTakeover?: boolean
+  /** Resume an existing run id (same panel re-arm); otherwise a new run is created. */
+  runId?: string
+  panelId?: string
+}
 
 export interface UpdateStatus {
   state: UpdateState
@@ -119,8 +137,16 @@ export interface ElectronAPI {
     terminalId: string,
     enabled: boolean,
     workspacePath?: string,
+    options?: TerminalSetMaestroOptions,
   ): Promise<TerminalSetMaestroResult>
-  orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
+  orquestraTrackWorker(
+    workerId: string,
+    orchestratorId: string,
+    name: string,
+    role: string,
+    workspacePath?: string,
+    runId?: string,
+  ): Promise<void>
   orquestraListWorkers(orchestratorId?: string): Promise<OrquestraWorkerSummary[]>
   /** Tell main inject + optional ROLE.md text so idle ignores their echo. */
   orquestraNoteRoleInject(workerId: string, injectText: string, roleFileText?: string): Promise<void>
@@ -1116,12 +1142,20 @@ export interface ElectronAPI {
     terminalId: string,
     enabled: boolean,
     workspacePath?: string,
+    options?: TerminalSetMaestroOptions,
   ): Promise<TerminalSetMaestroResult>
-  orquestraTrackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void>
+  orquestraTrackWorker(
+    workerId: string,
+    orchestratorId: string,
+    name: string,
+    role: string,
+    workspacePath?: string,
+    runId?: string,
+  ): Promise<void>
   orquestraListWorkers(orchestratorId?: string): Promise<OrquestraWorkerSummary[]>
   /** Tell main inject + optional ROLE.md text so idle ignores their echo. */
   orquestraNoteRoleInject(workerId: string, injectText: string, roleFileText?: string): Promise<void>
-  onMaestroRecruit(callback: (maestroId: string, args: { role: string; agent?: string; name?: string }) => void): () => void
+  onMaestroRecruit(callback: (maestroId: string, args: { role: string; agent?: string; name?: string; runId?: string }) => void): () => void
   onMaestroDismiss(callback: (maestroId: string, args: { target: string }) => void): () => void
   onMaestroConnect(callback: (maestroId: string, args: { target: string; path: string }) => void): () => void
   onMaestroList(callback: (maestroId: string, args: Record<string, never>) => void): () => void

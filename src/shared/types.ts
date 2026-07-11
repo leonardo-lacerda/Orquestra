@@ -118,6 +118,11 @@ export interface PanelState {
    *  The agent gains access to Orquestra CLI commands (recruit, dismiss, connect)
    *  that manipulate the canvas from inside the terminal. */
   maestro?: boolean
+  /**
+   * Terminal panels only: orchestration run id while Maestro is armed.
+   * Scopes commands/results/workers so multiple crowns do not interfere.
+   */
+  orchestrationRunId?: string
 }
 
 // -----------------------------------------------------------------------------
@@ -1124,6 +1129,8 @@ export interface LayoutSnapshot {
 export type TerminalLinkOpenTarget = 'ask' | 'canvas' | 'external'
 export type OrchestrationMode = 'manual' | 'assisted' | 'auto'
 export type OrchestrationWorkerKind = 'terminal' | 'agent'
+/** Worker allocation: reusable pool + queue vs legacy one-panel-per-function bias. */
+export type OrchestrationDispatchMode = 'pool_queue' | 'legacy_function_panels'
 export type OrchestrationTaskSplitStrategy = 'auto' | 'by-task' | 'by-file' | 'by-stage'
 export type OrchestrationContextPolicy = 'summary' | 'relevant-files' | 'full'
 export type OrchestrationReviewPolicy = 'never' | 'on-changes' | 'always'
@@ -1302,6 +1309,12 @@ export interface AppSettings {
   orchestrationMode: OrchestrationMode
   /** Maximum number of workers a single orchestrator should create. */
   orchestrationMaxWorkers: number
+  /**
+   * Soft max length (characters) for each worker's `--role` / task prompt.
+   * Mild overage is truncated; absurd pastes (full user brief) hard-reject
+   * around ~2.25× this value. Default 400.
+   */
+  orchestrationMaxWorkerRoleChars: number
   /** Default panel type for workers when a recruit request asks for "auto". */
   orchestrationDefaultWorkerKind: OrchestrationWorkerKind
   /**
@@ -1336,6 +1349,23 @@ export interface AppSettings {
   orchestrationAllowCommands: boolean
   orchestrationAllowNetwork: boolean
   orchestrationAllowNestedWorkers: boolean
+  /**
+   * When true, multiple Maestro crowns may be armed in the same workspace.
+   * Control plane is isolated by runId (commands/results/cascade/inject).
+   * When false, second crown is refused unless forceTakeover (legacy).
+   */
+  orchestrationMultiMaestro: boolean
+  /**
+   * How workers are allocated for a Maestro run.
+   * - pool_queue (default): fixed pool ≤ maxWorkers; reassign-first; overflow queues.
+   * - legacy_function_panels: older one-name-one-panel bias; still hard-caps maxWorkers.
+   */
+  orchestrationDispatchMode: OrchestrationDispatchMode
+  /**
+   * When true (default under pool_queue), a free worker automatically receives
+   * the next queued task via reassign.
+   */
+  orchestrationAutoDrainQueue: boolean
 
   // Linked context
   linkedContextDefaultMode: LinkedContextDefaultMode
@@ -1459,6 +1489,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // Orchestration
   orchestrationMode: 'assisted',
   orchestrationMaxWorkers: 4,
+  orchestrationMaxWorkerRoleChars: 1000,
   orchestrationDefaultWorkerKind: 'terminal',
   orchestrationDefaultWorkerAgent: 'verboo',
   orchestrationDefaultAgentCommand: 'verboo',
@@ -1473,6 +1504,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   orchestrationAllowCommands: true,
   orchestrationAllowNetwork: false,
   orchestrationAllowNestedWorkers: false,
+  // Default on: multi-crown control-plane isolation (same working tree OK).
+  orchestrationMultiMaestro: true,
+  // Fixed worker pool + task queue (reassign-first). Prevents N panels per subtask.
+  orchestrationDispatchMode: 'pool_queue',
+  orchestrationAutoDrainQueue: true,
 
   // Linked context
   linkedContextDefaultMode: 'summary',

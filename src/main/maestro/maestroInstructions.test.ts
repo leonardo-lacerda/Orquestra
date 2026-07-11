@@ -13,34 +13,62 @@ describe('maestroInstructions', () => {
     })
 
     expect(instructions).toContain('Mode: auto')
-    expect(instructions).toContain('Maximum workers (HARD CEILING, not a target): 3')
+    expect(instructions).toMatch(/Maximum worker POOL size.*HARD CEILING/)
+    expect(instructions).toContain('3')
     expect(instructions).toContain('Workers may use network tools: NO')
     expect(instructions).toContain('Workers may recruit nested workers: NO')
     expect(instructions).toContain('Never exceed 3 open worker panels')
-    expect(instructions).toContain('PLAN FUNCTIONS BEFORE ANY RECRUIT')
+    expect(instructions).toContain('PLAN TASKS')
     expect(instructions).toContain('HARD CEILING')
-    expect(instructions).toContain('Create only index.html')
+    expect(instructions).toMatch(/Plan ONLY from the user|derived from THIS user/i)
+    // Must not bake a calculator/landing default plan into the system prompt.
+    expect(instructions).not.toMatch(/calculator landing|calc demo|pricing, footer/i)
+    expect(instructions).not.toContain('Create only index.html: hero, features')
   })
 
-  it('forces plan-first function table, unique short roles, and no self-implement', () => {
+  it('describes pool + reassign + queue, not one terminal per function forever', () => {
     const instructions = buildMaestroInstructions({
       ...DEFAULT_SETTINGS,
       orchestrationMode: 'assisted',
+      orchestrationDispatchMode: 'pool_queue',
+      orchestrationAutoDrainQueue: true,
     })
     expect(instructions).toContain('Mode: assisted')
-    expect(instructions).toContain('You are the ORCHESTRATOR')
-    expect(instructions).toContain('PLAN FUNCTIONS BEFORE ANY RECRUIT')
-    expect(instructions).toMatch(/function/i)
-    expect(instructions).toContain('--name is REQUIRED')
-    expect(instructions).toContain('--name html')
-    expect(instructions).toMatch(/UNIQUE|unique/)
-    expect(instructions).toMatch(/Self-implement is FORBIDDEN|do NOT write those files yourself/i)
+    expect(instructions).toMatch(/You are (the ORCHESTRATOR|A Maestro)/)
+    expect(instructions).toContain('PLAN TASKS')
+    expect(instructions).toMatch(/REUSABLE POOL|worker POOL|pool \+ queue/i)
+    expect(instructions).toMatch(/QUEUE of tasks|task queue|Queued/i)
     expect(instructions).toMatch(/reassign/i)
-    expect(instructions).toMatch(/REUSE WORKERS|REUSES the panel/i)
+    expect(instructions).toMatch(/Reassign is the DEFAULT|reassign-first/i)
+    // Old hard model must not remain the primary rule
+    expect(instructions).not.toContain('One worker = one FUNCTION (file/ownership boundary)')
+    expect(instructions).not.toContain('PLAN FUNCTIONS BEFORE ANY RECRUIT')
+    expect(instructions).toContain('--name and --role REQUIRED')
+    expect(instructions).toMatch(/Self-implement is FORBIDDEN|do NOT write those files yourself/i)
+    expect(instructions).toMatch(/POOL \+ QUEUE \+ REUSE|REUSES the panel/i)
     expect(instructions).toMatch(/COMPLETION/i)
     expect(instructions).toMatch(/DISMISS|dismiss/i)
     expect(instructions).toContain('node orquestra.js dismiss')
-    expect(instructions).toMatch(/do not leave dead terminals|CLEANUP|canvas clean/i)
+    expect(instructions).toMatch(/Preferred pool loop|recruit --name w1/i)
+    expect(instructions).toMatch(/do not invent new names to bypass|do not bypass with a new --name/i)
+    expect(instructions).toMatch(/NEVER default to html\/css\/js|canned demo plan/i)
+    expect(instructions).toContain('Dispatch mode: pool_queue')
+    expect(instructions).toContain('Auto-drain queue when a worker finishes: yes')
+    expect(instructions).toMatch(/Max worker --role length.*1000/)
+    expect(instructions).toMatch(/short task for THAT worker only|--role is the short task/i)
+    // Multi must NOT embed a concrete runId= (would steal the other Maestro)
+    expect(instructions).not.toMatch(/^runId=run-/m)
+    expect(instructions).toMatch(/ORQUESTRA_RUN_ID/)
+    expect(instructions).toMatch(/SHARED by all Maestros|does NOT contain your run id/i)
+  })
+
+  it('single-maestro may embed concrete runId in instructions', () => {
+    const instructions = buildMaestroInstructions(
+      { ...DEFAULT_SETTINGS, orchestrationMultiMaestro: false },
+      { runId: 'run-only-one', multiMaestro: false },
+    )
+    expect(instructions).toContain('runId=run-only-one')
+    expect(instructions).toContain('--run run-only-one')
   })
 
   it('builds a crown marker settings snapshot', () => {

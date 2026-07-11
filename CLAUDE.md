@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+For a fuller product map — especially **Maestro / orchestration (pool, queue, multi-Maestro)** — read **[`AGENTS.md`](./AGENTS.md)** first.
+
 ## Before You Code
 
 Read and follow the **karpathy-guidelines** skill (`.claude/skills/karpathy-guidelines`) when writing, reviewing, or refactoring code here — surface assumptions, make surgical changes, keep it simple, and define verifiable success criteria.

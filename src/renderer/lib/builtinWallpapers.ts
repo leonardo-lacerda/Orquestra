@@ -3,13 +3,14 @@
 // one straight from Settings without browsing the filesystem.
 //
 // A built-in selection is stored in the same `canvasBackgroundImagePath` setting
-// as a custom pick, but tagged with the `builtin:` prefix (e.g. `builtin:hillside`)
+// as a custom pick, but tagged with the `builtin:` prefix (e.g. `builtin:foo`)
 // so it's distinguishable from an absolute filesystem path. The images are Vite
 // asset imports, so they resolve to bundled URLs and render directly in the
 // renderer — no main-process round-trip (CANVAS_READ_BACKGROUND_IMAGE) needed.
+//
+// Currently empty: the previous "Hillside" pack was removed. Users pick a custom
+// image via Choose… instead. Keep this module so new built-ins can be added later.
 // =============================================================================
-
-import hillside from '../assets/wallpapers/hillside.webp'
 
 export const BUILTIN_WALLPAPER_PREFIX = 'builtin:'
 
@@ -22,9 +23,8 @@ export interface BuiltinWallpaper {
   url: string
 }
 
-export const BUILTIN_WALLPAPERS: BuiltinWallpaper[] = [
-  { id: 'hillside', name: 'Hillside', url: hillside },
-]
+/** Built-in wallpapers shipped with the app (none at the moment). */
+export const BUILTIN_WALLPAPERS: BuiltinWallpaper[] = []
 
 /** The stored setting value for a given built-in wallpaper. */
 export function builtinWallpaperPath(id: string): string {

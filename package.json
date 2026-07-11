@@ -40,6 +40,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ci": "E2E_SKIP_PERF=1 playwright test",
     "test:smoke:electron": "node scripts/run-electron-smoke.mjs",
+    "test:maestro": "node scripts/maestro/maestro-test-runner.mjs",
+    "test:maestro:unit": "node --test scripts/maestro/maestro-test-runner.test.mjs",
     "icons": "node scripts/generate-icons.js",
     "runtime:tarball": "node scripts/build-runtime-tarball.mjs",
     "pi:tarball": "node scripts/build-pi-tarball.mjs",

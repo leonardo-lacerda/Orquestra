@@ -30,6 +30,7 @@ import {
   forceWebglRepaint,
   rebuildAllWebglRenderers,
   scheduleZoomWebglRepaint,
+  scheduleTuiWebglHeal,
 } from './terminalDom'
 import { findNext, findPrevious, clearSearch } from './terminalSearch'
 import { serializeTerminalState } from './scrollbackCapture'
@@ -66,6 +67,7 @@ export const terminalRegistry = {
   forceWebglRepaint,
   rebuildAllWebglRenderers,
   scheduleZoomWebglRepaint,
+  scheduleTuiWebglHeal,
   setPendingTransfer,
   getEntry,
   has,

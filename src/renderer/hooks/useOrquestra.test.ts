@@ -10,6 +10,8 @@ import {
   findWorkerPanelByName,
   normalizeWorkerFunctionId,
   resolveReusableWorkerPanel,
+  resolveOwnedWorkerPanel,
+  resolveQueueKeyForMaestro,
   flattenRoleForTerminalInject,
   formatWorkerListForTerminal,
   clearWorkerInputField,
@@ -18,6 +20,8 @@ import {
   isWorkerPty,
   maestroLinkedContextRelativePath,
   MAX_WORKER_ROLE_CHARS,
+  clampWorkerRole,
+  resolveWorkerRoleLimits,
   normalizeRoleKey,
   ORQUESTRA_RECRUIT_MSG,
   PTY_CTRL_U,
@@ -147,7 +151,7 @@ describe('useOrquestra helpers', () => {
     expect(inject).not.toContain(WORKER_COMPLETION_TOKEN)
   })
 
-  it('injectWorkerTaskToPty submits with Enter then clears the input field', async () => {
+  it('injectWorkerTaskToPty submits with Enter then clears the input field (no second CR)', async () => {
     const writes: string[] = []
     const api = {
       terminalWrite: (ptyId: string, data: string) => {
@@ -157,22 +161,23 @@ describe('useOrquestra helpers', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(globalThis as any).window = { electronAPI: api }
 
-    injectWorkerTaskToPty('pty-1', 'You are the "html" worker. Do this job now: create index.html')
+    const task = 'You are the "html" worker. Do this job now: create index.html'
+    injectWorkerTaskToPty('pty-1', task)
     expect(writes).toHaveLength(1)
     expect(writes[0]).toContain('create index.html')
     expect(writes[0].endsWith(PTY_CR)).toBe(true)
 
-    await new Promise((r) => setTimeout(r, 200))
-    // Second write is bare CR (force submit)
-    expect(writes.some((w) => w === PTY_CR)).toBe(true)
-
-    await new Promise((r) => setTimeout(r, 600))
-    // At least one clear sequence after submit (Esc/Ctrl-A/K/U) so text does not stay in composer
-    const cleared = writes.some((w) => w.includes(PTY_CTRL_U))
-    expect(cleared).toBe(true)
+    // Wait past several clear delays — must clear, must NOT re-submit with bare CR
+    await new Promise((r) => setTimeout(r, 1000))
+    const cleared = writes.filter((w) => w.includes(PTY_CTRL_U))
+    expect(cleared.length).toBeGreaterThanOrEqual(2)
+    // A lone CR would re-send leftover draft as a second user turn
+    expect(writes.some((w) => w === PTY_CR)).toBe(false)
+    // Backspace fallback for TUIs that ignore Ctrl+U
+    expect(writes.some((w) => w.includes('\b'))).toBe(true)
   })
 
-  it('clearWorkerInputField sends clear-line control bytes', () => {
+  it('clearWorkerInputField sends clear-line control bytes and optional backspaces', () => {
     const writes: string[] = []
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(globalThis as any).window = {
@@ -185,6 +190,12 @@ describe('useOrquestra helpers', () => {
     clearWorkerInputField('pty-x')
     expect(writes).toHaveLength(1)
     expect(writes[0]).toContain(PTY_CTRL_U)
+    expect(writes[0]).not.toContain('\b')
+
+    clearWorkerInputField('pty-x', 40)
+    expect(writes).toHaveLength(2)
+    expect(writes[1]).toContain(PTY_CTRL_U)
+    expect(writes[1].includes('\b')).toBe(true)
   })
 
   it('flattens multi-line role text into one PTY-safe inject line', () => {
@@ -329,25 +340,61 @@ describe('useOrquestra helpers', () => {
     expect(result).toEqual({ allow: false, message: ORQUESTRA_RECRUIT_MSG.missingName })
   })
 
-  it('hard-rejects role longer than max (full brief paste)', () => {
-    const long =
-      'Create index.html only: landing page to sell an online calculator. Sections: hero with headline and CTA, features/benefits, interactive calculator demo area, pricing, testimonials, final CTA, footer. Semantic HTML, link styles.css and app.js. Do not write CSS or JS. Extra fluff to exceed limit.'
-    expect(long.length).toBeGreaterThan(MAX_WORKER_ROLE_CHARS)
+  it('allows role that would have failed old max 220 (incident: 243 chars blocked workers)', () => {
+    // Reconstruct ~243 char role like the job-runner recruit that was hard-rejected.
+    const medium =
+      'Implement job-runner core under job-runner/: TypeScript types, enqueue API with name/payload/priority/delay/maxAttempts, JSONL disk persist, concurrency N, exponential backoff+jitter, job states queued|running|completed|failed|dead. No Redis/Bull.'
+    expect(medium.length).toBeGreaterThan(220)
+    expect(medium.length).toBeLessThanOrEqual(MAX_WORKER_ROLE_CHARS)
     const result = evaluateRecruitGuard({
       allowNestedWorkers: false,
       callerIsWorkerPty: false,
       panelMaestroFlag: true,
       activeWorkerCount: 0,
       maxWorkers: 4,
-      role: long,
+      role: medium,
+      name: 'w1',
+      requireName: true,
+    })
+    expect(result.allow).toBe(true)
+  })
+
+  it('hard-rejects only absurd full-brief pastes (HARD max from setting)', () => {
+    const { hard } = resolveWorkerRoleLimits(1000)
+    const absurd = 'x'.repeat(hard + 10)
+    const result = evaluateRecruitGuard({
+      allowNestedWorkers: false,
+      callerIsWorkerPty: false,
+      panelMaestroFlag: true,
+      activeWorkerCount: 0,
+      maxWorkers: 4,
+      role: absurd,
       name: 'html',
       requireName: true,
+      maxRoleChars: 1000,
     })
     expect(result.allow).toBe(false)
     if (result.allow === false) {
-      expect(result.message).toMatch(/max 220/i)
-      expect(result.message).toMatch(/SHORT function-specific/i)
+      expect(result.message).toMatch(new RegExp(`max ${hard}`, 'i'))
     }
+  })
+
+  it('clampWorkerRole uses user soft limit and truncates mild overage', () => {
+    const soft = 200
+    const over = 'a'.repeat(soft + 40)
+    const r = clampWorkerRole(over, soft)
+    expect(r.ok).toBe(true)
+    expect(r.truncated).toBe(true)
+    expect(r.role.length).toBe(soft)
+    const { hard } = resolveWorkerRoleLimits(soft)
+    expect(clampWorkerRole('b'.repeat(hard + 1), soft).ok).toBe(false)
+  })
+
+  it('resolveWorkerRoleLimits clamps setting into a sane range', () => {
+    expect(resolveWorkerRoleLimits(1000).soft).toBe(1000)
+    expect(resolveWorkerRoleLimits(1000).hard).toBeGreaterThan(1000)
+    expect(resolveWorkerRoleLimits(10).soft).toBe(80) // floor
+    expect(resolveWorkerRoleLimits(99999).soft).toBe(4000) // ceiling
   })
 
   it('hard-rejects duplicate active roles', () => {
@@ -507,5 +554,171 @@ describe('useOrquestra helpers', () => {
         namesMap,
       }),
     ).toBeNull()
+  })
+
+  it('resolveReusableWorkerPanel does NOT reuse another Maestro run panel by title (same function name)', () => {
+    // Maestro A owns panel-a titled "logger". Maestro B's namesMap is empty
+    // (first recruit of "logger" for B). Must NOT steal panel-a by title.
+    const panels = {
+      'panel-a': { id: 'panel-a', title: 'logger' },
+      'panel-maestro-b': { id: 'panel-maestro-b', title: 'Codex' },
+    }
+    const namesMapB = new Map<string, string>() // B has no workers yet
+
+    expect(
+      resolveReusableWorkerPanel({
+        requestedName: 'logger',
+        panels,
+        namesMap: namesMapB,
+        runEntries: [], // B's run store empty
+      }),
+    ).toBeNull()
+
+    // Even if runEntries wrongly list A's panel, empty ownership + no namesMap hit → null
+    // (when namesMap is empty, runEntries alone could match — require namesMap ownership:
+    // with empty namesMap, step 2 allows runEntries; so pass only empty runEntries)
+
+    // After B owns its own logger panel, reuse works for B only
+    const namesMapB2 = new Map([['panel-b-logger', 'logger']])
+    const panels2 = {
+      ...panels,
+      'panel-b-logger': { id: 'panel-b-logger', title: 'logger' },
+    }
+    expect(
+      resolveReusableWorkerPanel({
+        requestedName: 'logger',
+        panels: panels2,
+        namesMap: namesMapB2,
+      }),
+    ).toEqual({ panelId: 'panel-b-logger', functionName: 'logger' })
+
+    // A's namesMap still resolves to panel-a, not B's
+    const namesMapA = new Map([['panel-a', 'logger']])
+    expect(
+      resolveReusableWorkerPanel({
+        requestedName: 'logger',
+        panels: panels2,
+        namesMap: namesMapA,
+      }),
+    ).toEqual({ panelId: 'panel-a', functionName: 'logger' })
+  })
+
+  it('workerRoleFileRelativePath is run-scoped when runId provided', () => {
+    expect(workerRoleFileRelativePath('logger')).toBe('.orquestra/workers/logger/ROLE.md')
+    expect(workerRoleFileRelativePath('logger', 'run-abc')).toBe(
+      '.orquestra/runs/run-abc/workers/logger/ROLE.md',
+    )
+    expect(workerRoleFileRelativePath('logger', 'run-aaa')).not.toBe(
+      workerRoleFileRelativePath('logger', 'run-bbb'),
+    )
+  })
+
+  /**
+   * Dismiss/reassign path: handlers call resolveOwnedWorkerPanel.
+   * Empty namesMap + foreign panel titled "logger" must NOT resolve
+   * (would close/inject Maestro A's worker when B dismisses/reassigns "logger").
+   */
+  it('resolveOwnedWorkerPanel: dismiss/reassign does NOT hit foreign run panel by title', () => {
+    const panels = {
+      'panel-a-logger': { id: 'panel-a-logger', title: 'logger' },
+      'panel-maestro-b': { id: 'panel-maestro-b', title: 'Codex' },
+    }
+    const namesMapB = new Map<string, string>() // B owns nothing yet
+
+    // B dismiss/reassign "logger" → must not resolve A's panel (global title was the bug)
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'logger',
+        panels,
+        namesMap: namesMapB,
+        runEntries: [],
+      }),
+    ).toBeNull()
+
+    // Foreign panel id is not owned by B
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'panel-a-logger',
+        panels,
+        namesMap: namesMapB,
+        runEntries: [],
+      }),
+    ).toBeNull()
+
+    // Stale runEntry for A's panel alone must not grant ownership when B's namesMap is empty
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'logger',
+        panels,
+        namesMap: namesMapB,
+        runEntries: [{ panelId: 'panel-a-logger', name: 'logger' }],
+      }),
+    ).toBeNull()
+
+    // After B owns its own logger, resolve B's panel only
+    const namesMapB2 = new Map([['panel-b-logger', 'logger']])
+    const panels2 = {
+      ...panels,
+      'panel-b-logger': { id: 'panel-b-logger', title: 'logger' },
+    }
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'logger',
+        panels: panels2,
+        namesMap: namesMapB2,
+      }),
+    ).toEqual({ panelId: 'panel-b-logger', functionName: 'logger' })
+
+    // A still resolves only panel-a
+    const namesMapA = new Map([['panel-a-logger', 'logger']])
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'logger',
+        panels: panels2,
+        namesMap: namesMapA,
+      }),
+    ).toEqual({ panelId: 'panel-a-logger', functionName: 'logger' })
+
+    // Owned panel id works for A
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'panel-a-logger',
+        panels: panels2,
+        namesMap: namesMapA,
+      }),
+    ).toEqual({ panelId: 'panel-a-logger', functionName: 'logger' })
+  })
+
+  it('resolveQueueKeyForMaestro never sinks to unknown; enqueue and drain share key', () => {
+    // No panel runId → maestro-scoped key (still drainable)
+    const a = resolveQueueKeyForMaestro('rpty-6', undefined, () => undefined)
+    expect(a.key).toBe('maestro:rpty-6')
+    expect(a.runId).toBeUndefined()
+    expect(a.key).not.toContain('unknown')
+
+    const b = resolveQueueKeyForMaestro('rpty-6', 'run-abc', () => 'run-other')
+    expect(b.key).toBe('run:run-abc')
+    expect(b.runId).toBe('run-abc')
+
+    // Same maestro + same resolve → same key for drain
+    const drainKey = resolveQueueKeyForMaestro('rpty-6', undefined, () => undefined)
+    expect(drainKey.key).toBe(a.key)
+  })
+
+  it('resolveOwnedWorkerPanel: owned title match still works after OSC rename', () => {
+    const panels = {
+      p1: { id: 'p1', title: 'Fix landing logger mar…' },
+    }
+    const namesMap = new Map([['p1', 'logger']])
+    expect(
+      resolveOwnedWorkerPanel({ target: 'logger', panels, namesMap }),
+    ).toEqual({ panelId: 'p1', functionName: 'logger' })
+    expect(
+      resolveOwnedWorkerPanel({
+        target: 'Fix landing logger mar…',
+        panels,
+        namesMap,
+      }),
+    ).toEqual({ panelId: 'p1', functionName: 'logger' })
   })
 })

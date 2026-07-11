@@ -23,6 +23,7 @@ import {
   workspaceIdForPty,
   type RegistryEntry,
 } from './registryState'
+import { scheduleTuiWebglHeal, looksLikeTuiFullRedraw } from './terminalDom'
 import {
   getTerminalFontFamily,
   getTerminalBaseFontSize,
@@ -212,6 +213,15 @@ export function wireTerminalListeners(args: {
       sawOutput = true
       terminal.write(data)
       if (outputShowsBodySpinner(data)) noteAgentSpinnerByte(ptyId)
+      // TUI full-frame redraws (Grok/Claude/Verboo) scramble the shared WebGL
+      // atlas until a real resize. Self-heal without SIGWINCH — soft clear on
+      // any chunk, hard rebuild when the payload looks like a full paint.
+      try {
+        scheduleTuiWebglHeal({
+          hard: looksLikeTuiFullRedraw(data),
+          reason: 'output',
+        })
+      } catch { /* ignore mid-dispose */ }
     }
   })
   cleanupListeners.push(removeDataListener)

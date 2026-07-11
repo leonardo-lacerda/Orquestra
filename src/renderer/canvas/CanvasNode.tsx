@@ -283,7 +283,15 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         canvasApi.getState().finalizeRemoveNode(nodeId)
       }, exitDelay)
       animationTimerRef.current = timer
-      return () => clearTimeout(timer)
+      // If this node unmounts mid-exit (viewport cull), still finalize so it
+      // cannot linger forever as an invisible canvas owner in the sidebar tree.
+      return () => {
+        clearTimeout(timer)
+        const cur = canvasApi.getState().nodes[nodeId]
+        if (cur?.animationState === 'exiting') {
+          canvasApi.getState().finalizeRemoveNode(nodeId)
+        }
+      }
     }
   }, [node?.animationState, nodeId])
 
@@ -570,12 +578,32 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
     }
 
     const { ensureMaestroArmed } = await import('../lib/maestro/ensureMaestroArmed')
-    const result = await ensureMaestroArmed({
+    let result = await ensureMaestroArmed({
       workspaceId: currentWorkspace.id,
       panelId,
       ptyId,
       rootPath: wsPath,
     })
+    // Single-maestro mode only: another live crown → confirm takeover.
+    // Multi-maestro mode never returns MAESTRO_BUSY for a second crown.
+    if (!result.ok && result.code === 'MAESTRO_BUSY') {
+      const ok = window.confirm(
+        'Another Maestro is already active (single-Maestro mode).\n\n'
+        + 'Take over? Workers of the other Maestro will be cancelled.\n'
+        + 'Tip: enable “Allow multiple Maestros” in Settings to run both.',
+      )
+      if (!ok) {
+        setMaestroError('Maestro not enabled — another orchestrator is active')
+        return
+      }
+      result = await ensureMaestroArmed({
+        workspaceId: currentWorkspace.id,
+        panelId,
+        ptyId,
+        rootPath: wsPath,
+        forceTakeover: true,
+      })
+    }
     if (!result.ok) {
       setMaestroError(result.error)
       return

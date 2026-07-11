@@ -128,9 +128,13 @@ describe('settingsFile', () => {
 
     expect(m.isSettingsKey('orchestrationMode')).toBe(true)
     expect(m.isSettingsKey('orchestrationMaxWorkers')).toBe(true)
+    expect(m.isSettingsKey('orchestrationMaxWorkerRoleChars')).toBe(true)
     expect(m.isSettingsKey('orchestrationAllowNetwork')).toBe(true)
     expect(m.getSetting('orchestrationMode')).toBe(DEFAULT_SETTINGS.orchestrationMode)
     expect(m.getSetting('orchestrationMaxWorkers')).toBe(DEFAULT_SETTINGS.orchestrationMaxWorkers)
+    expect(m.getSetting('orchestrationMaxWorkerRoleChars')).toBe(
+      DEFAULT_SETTINGS.orchestrationMaxWorkerRoleChars,
+    )
     expect(m.getSetting('orchestrationOnWorkerDone')).toBe(DEFAULT_SETTINGS.orchestrationOnWorkerDone)
   })
 
@@ -138,6 +142,7 @@ describe('settingsFile', () => {
     fs.writeFileSync(settingsPath(), JSON.stringify({
       orchestrationMode: 'auto',
       orchestrationMaxWorkers: 'many',
+      orchestrationMaxWorkerRoleChars: 'lots',
       orchestrationAllowNetwork: 'yes',
     }))
 
@@ -146,6 +151,9 @@ describe('settingsFile', () => {
 
     expect(m.getSetting('orchestrationMode')).toBe('auto')
     expect(m.getSetting('orchestrationMaxWorkers')).toBe(DEFAULT_SETTINGS.orchestrationMaxWorkers)
+    expect(m.getSetting('orchestrationMaxWorkerRoleChars')).toBe(
+      DEFAULT_SETTINGS.orchestrationMaxWorkerRoleChars,
+    )
     expect(m.getSetting('orchestrationAllowNetwork')).toBe(DEFAULT_SETTINGS.orchestrationAllowNetwork)
   })
 })

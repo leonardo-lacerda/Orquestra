@@ -145,6 +145,86 @@ export function cancelScheduledZoomWebglRepaint(): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// TUI self-heal — Grok / Claude / Verboo full-frame redraws scramble WebGL
+// until the user resizes. We mimic that recovery WITHOUT a PTY SIGWINCH.
+// ---------------------------------------------------------------------------
+
+const TUI_SOFT_HEAL_MS = 180
+const TUI_HARD_HEAL_MS = 520
+let tuiSoftTimer: ReturnType<typeof setTimeout> | null = null
+let tuiHardTimer: ReturnType<typeof setTimeout> | null = null
+let tuiHardArmed = false
+
+/**
+ * True when PTY payload looks like an Ink/TUI full redraw (alt screen, clear,
+ * home cursor, or a large frame). Those frames are what desync the shared
+ * glyph atlas mid-paint.
+ */
+export function looksLikeTuiFullRedraw(data: string): boolean {
+  if (!data) return false
+  if (data.length >= 1500) return true
+  // CSI clears / home / alt-screen / erase — common full-frame TUI paints
+  return (
+    data.includes('\x1b[2J')
+    || data.includes('\x1b[3J')
+    || data.includes('\x1b[H')
+    || data.includes('\x1b[?1049h')
+    || data.includes('\x1b[?1049l')
+    || data.includes('\x1b[?47h')
+  )
+}
+
+/**
+ * Debounced WebGL recovery after TUI output / focus. Soft clear first; if the
+ * chunk looked like a full redraw (or caller asked hard), rebuild every
+ * WebGL addon — same end state as "I resized and it fixed itself".
+ */
+export function scheduleTuiWebglHeal(
+  opts?: { hard?: boolean; reason?: 'output' | 'focus' | 'title' | 'attach' },
+): void {
+  const wantHard = opts?.hard === true
+
+  if (tuiSoftTimer !== null) clearTimeout(tuiSoftTimer)
+  tuiSoftTimer = setTimeout(() => {
+    tuiSoftTimer = null
+    if (typeof document !== 'undefined' && document.body.classList.contains('canvas-interacting')) {
+      // Gesture still holding will-change — piggyback on zoom path.
+      scheduleZoomWebglRepaint()
+      return
+    }
+    forceWebglRepaint()
+  }, TUI_SOFT_HEAL_MS)
+
+  if (wantHard) tuiHardArmed = true
+  if (!tuiHardArmed) return
+
+  if (tuiHardTimer !== null) clearTimeout(tuiHardTimer)
+  tuiHardTimer = setTimeout(() => {
+    tuiHardTimer = null
+    tuiHardArmed = false
+    if (typeof document !== 'undefined' && document.body.classList.contains('canvas-interacting')) {
+      scheduleZoomWebglRepaint()
+      return
+    }
+    // Hard path: dispose+recreate WebGL canvases (matches resize recovery).
+    rebuildAllWebglRenderers()
+  }, TUI_HARD_HEAL_MS)
+}
+
+/** Test helper — cancel pending TUI heals. */
+export function cancelScheduledTuiWebglHeal(): void {
+  if (tuiSoftTimer !== null) {
+    clearTimeout(tuiSoftTimer)
+    tuiSoftTimer = null
+  }
+  if (tuiHardTimer !== null) {
+    clearTimeout(tuiHardTimer)
+    tuiHardTimer = null
+  }
+  tuiHardArmed = false
+}
+
 /**
  * Calls fitAddon.fit() and corrects for sub-pixel overflow.
  *

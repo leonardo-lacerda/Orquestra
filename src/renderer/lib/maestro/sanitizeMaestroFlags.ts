@@ -1,14 +1,25 @@
 // =============================================================================
-// sanitizeMaestroFlags — keep at most one panel.maestro per workspace.
+// sanitizeMaestroFlags — multi-Maestro aware crown flag hygiene.
 // =============================================================================
 
 import { useAppStore } from '../../stores/appStore'
 import { clearMaestroArmed } from './ensureMaestroArmed'
 
+function multiMaestroEnabled(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useSettingsStore } = require('../../stores/settingsStore') as typeof import('../../stores/settingsStore')
+    return useSettingsStore.getState().orchestrationMultiMaestro !== false
+  } catch {
+    return true
+  }
+}
+
 /**
- * On hydrate: if multiple maestro flags exist, keep focused terminal or
- * stable panelId sort winner; clear the rest.
- * @returns kept panelId or null
+ * On hydrate:
+ * - Multi-Maestro ON: keep all maestro flags (N crowns OK). Only clear non-terminal flags.
+ * - Multi-Maestro OFF: keep at most one (focused or stable panelId sort).
+ * @returns kept panelId (single mode) or first maestro id (multi) or null
  */
 export function sanitizeMaestroFlags(
   workspaceId: string,
@@ -22,6 +33,12 @@ export function sanitizeMaestroFlags(
     (p) => p.type === 'terminal' && p.maestro === true,
   )
   if (maestros.length === 0) return null
+
+  if (multiMaestroEnabled()) {
+    // Allow multiple crowns — no forced collapse to one.
+    return maestros[0].id
+  }
+
   if (maestros.length === 1) return maestros[0].id
 
   let keep = maestros[0].id

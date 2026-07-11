@@ -41,7 +41,7 @@ describe('orchestration plan DAG', () => {
     })
     expect(dup.ok).toBe(false)
 
-    const longRole = 'x'.repeat(300)
+    const longRole = 'x'.repeat(1200) // over MAX_TASK_ROLE_CHARS (1000)
     const long = validatePlan({
       version: 1,
       tasks: [{ id: 'a', role: longRole, deps: [] }],

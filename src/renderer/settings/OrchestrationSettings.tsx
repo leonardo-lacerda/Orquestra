@@ -126,6 +126,21 @@ export function OrchestrationSettings() {
         />
       </SettingRow>
       <SettingRow
+        label={t('orchestration.maxWorkerRoleChars')}
+        description={t('orchestration.maxWorkerRoleChars.desc')}
+      >
+        <NumberInput
+          value={store.orchestrationMaxWorkerRoleChars ?? 1000}
+          onChange={(v) => {
+            const n = Math.max(80, Math.min(4000, Math.floor(Number(v) || 1000)))
+            store.setSetting('orchestrationMaxWorkerRoleChars', n)
+          }}
+          min={80}
+          max={4000}
+          step={20}
+        />
+      </SettingRow>
+      <SettingRow
         label={t('orchestration.defaultWorkerKind')}
         description={t('orchestration.defaultWorkerKind.desc')}
       >

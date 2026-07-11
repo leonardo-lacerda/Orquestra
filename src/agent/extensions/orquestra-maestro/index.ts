@@ -21,34 +21,59 @@ import { hasMultipleTasks, isPureQuestion } from './multiTask'
 const CROWN_MARKER = '.orquestra/crown.json'
 const COMMANDS_DIR = '.orquestra-commands'
 
-const MAESTRO_SYSTEM = `
-# MAESTRO MODE — PLAN FIRST, ORCHESTRATE ONLY (crown active)
+/**
+ * True when a *new* function name would exceed maxWorkers in the extension's
+ * local counters. The recruit command is STILL sent so the app can queue /
+ * reassign_idle — never hard-block overflow here.
+ */
+export function isExtensionAtPoolCeiling(
+  recruitedNames: ReadonlySet<string>,
+  nameKey: string,
+  maxWorkers: number,
+): boolean {
+  const max = Math.max(1, Math.floor(maxWorkers || 1))
+  const key = String(nameKey || '').trim().toLowerCase()
+  if (!key) return false
+  return !recruitedNames.has(key) && recruitedNames.size >= max
+}
 
-You are the Maestro. You do NOT implement the user's requested work.
+/** Extension always forwards recruit to the app (renderer enforces pool/queue). */
+export function shouldSendExtensionRecruitCommand(): true {
+  return true
+}
+
+const MAESTRO_SYSTEM = `
+# MAESTRO MODE — POOL + QUEUE, ORCHESTRATE ONLY (crown active)
+
+You are A Maestro for YOUR run only. You do NOT implement the user's requested work.
+Other Maestros may run in parallel in this repo — never dismiss/reassign their workers.
+
+Workers are a small REUSABLE POOL (hard maxWorkers ceiling). Work is a QUEUE of tasks.
+Reassign is the default next step; recruit only opens a free pool slot.
 
 ## Absolute
-- NEVER create/edit the deliverables the user asked for (no HTML/CSS/JS/code files from you).
-- NEVER recruit before you write a PLAN of workers (name + unique role each).
-- NEVER use maxWorkers as a target. It is a CEILING. Typical plans have 2–4 workers.
+- NEVER create/edit the deliverables the user asked for (workers own implementation files).
+- NEVER recruit before you write a PLAN of TASKS (backlog) from THIS user request.
+- NEVER open one terminal per subtask. Prefer 1–2 slots; reassign through the backlog.
+- maxWorkers is a HARD pool size, not a target. Extra recruits are queued — do not invent new names to bypass.
 - NEVER give every worker the same role / same full user prompt.
-- ALWAYS wait after recruiting, then only consolidate.
+- NEVER default to a canned plan (calculator, landing page, html+css+js) unless the user asked for that.
+- ALWAYS pass --run <runId> (or rely on ORQUESTRA_RUN_ID) on orquestra CLI commands.
+- ALWAYS wait after recruiting/reassigning, then only consolidate.
 - If wait finishes quickly or workers look stuck: reassign — do NOT do their job yourself.
 - Write/Edit tools are blocked. Bash is limited to orquestra CLI and read-only inspection.
 
 ## Workflow (mandatory order)
-0. PLAN — function table: --name (function id) + --role (short unique prompt)
-1. RECRUIT — one recruit per plan line (both --name and --role required)
-2. WAIT — orquestra_wait / node orquestra.js wait for those names (be patient)
-3. CONSOLIDATE — short summary of worker results only
+0. PLAN TASKS — ordered backlog + choose pool size K (usually 1–2)
+1. RECRUIT only K stable slots (e.g. w1) with --name + --role
+2. WAIT — node orquestra.js wait --run <runId> --workers w1 --timeout 300
+3. REASSIGN free slots to the next tasks (or let auto-drain pull the queue)
+4. CONSOLIDATE — short summary of YOUR worker results only
+5. DISMISS pool slots when done
 
 ## Bad vs good
-- BAD: open 10 workers with the same role text; or implement styles.css yourself after wait
-- GOOD: calculator → 3 workers: html | css | js with different short roles → wait → summarize
-
-## Example
-User: "Cria HTML, CSS e JS de uma calculadora"
-PLAN: html / css / js (3 only)
-→ recruit each with a DISTINCT short role → wait → summarize
+- BAD: open 6–10 workers for one feature; implement files yourself after wait; control another Maestro's workers
+- GOOD: one or two slots, reassign through tasks, wait, summarize
 `.trim()
 
 function readMaxWorkers(cwd: string): number {
@@ -63,21 +88,83 @@ function readMaxWorkers(cwd: string): number {
   }
 }
 
-function sendCommand(cwd: string, cmd: string, args: Record<string, unknown>): void {
-  const dir = path.join(cwd, COMMANDS_DIR)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+/**
+ * Resolve this Maestro's run + PTY from env and per-run crown.
+ * Prefer ORQUESTRA_RUN_ID + `.orquestra/runs/{runId}/crown.json` so after B
+ * arms, A's extension still stamps A's maestroId (legacy crown.json is last-armed only).
+ */
+export function resolveMaestroIdentity(cwd: string): { maestroId?: string; runId?: string } {
+  let runId = process.env.ORQUESTRA_RUN_ID?.trim() || undefined
   let maestroId: string | undefined
+
+  // 1. Per-run crown when runId known
+  if (runId) {
+    try {
+      const safeRun = runId.replace(/[/\\]/g, '_')
+      const runCrownPath = path.join(cwd, '.orquestra', 'runs', safeRun, 'crown.json')
+      if (fs.existsSync(runCrownPath)) {
+        const crown = JSON.parse(fs.readFileSync(runCrownPath, 'utf-8')) as {
+          terminalPtyId?: string
+          runId?: string
+        }
+        if (crown.terminalPtyId) maestroId = crown.terminalPtyId
+        if (crown.runId) runId = String(crown.runId)
+        return { maestroId, runId }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // 2. Registry: if only one run, use it; if ORQUESTRA_RUN_ID set, match entry
+  let multiRun = false
   try {
-    const crown = JSON.parse(fs.readFileSync(path.join(cwd, CROWN_MARKER), 'utf-8')) as {
-      terminalPtyId?: string
+    const regPath = path.join(cwd, '.orquestra', 'registry.json')
+    if (fs.existsSync(regPath)) {
+      const reg = JSON.parse(fs.readFileSync(regPath, 'utf-8')) as {
+        runs?: Array<{ runId: string; maestroPtyId: string }>
+      }
+      const runs = Array.isArray(reg.runs) ? reg.runs : []
+      multiRun = runs.length > 1
+      if (runId) {
+        const hit = runs.find((r) => r.runId === runId)
+        if (hit?.maestroPtyId) return { maestroId: hit.maestroPtyId, runId: hit.runId }
+      }
+      if (runs.length === 1 && runs[0].maestroPtyId) {
+        return { maestroId: runs[0].maestroPtyId, runId: runs[0].runId }
+      }
     }
-    maestroId = crown.terminalPtyId
-  } catch { /* optional */ }
+  } catch { /* fall through */ }
+
+  // 3. Legacy crown.json (last-armed) — ONLY when a single run is active.
+  // With multi-Maestro, last-armed crown would steal the other Maestro's identity
+  // (second crown's recruits routed to first run / dropped as stale).
+  if (!multiRun) {
+    try {
+      const crown = JSON.parse(fs.readFileSync(path.join(cwd, CROWN_MARKER), 'utf-8')) as {
+        terminalPtyId?: string
+        runId?: string
+      }
+      maestroId = crown.terminalPtyId
+      if (!runId && crown.runId) runId = String(crown.runId)
+    } catch { /* optional */ }
+  }
+  return { maestroId, runId }
+}
+
+function sendCommand(cwd: string, cmd: string, args: Record<string, unknown>): void {
+  const { maestroId, runId } = resolveMaestroIdentity(cwd)
+  // Prefer per-run commands dir when runId known (multi-Maestro isolation)
+  const dir = runId
+    ? path.join(cwd, '.orquestra', 'runs', runId.replace(/[/\\]/g, '_'), 'commands')
+    : path.join(cwd, COMMANDS_DIR)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  // Multi-run without identity: still write, but stamp nothing wrong — demux
+  // will drop_missing. Prefer ORQUESTRA_RUN_ID set at crown arm.
   const payload = JSON.stringify({
     cmd,
-    args,
+    args: { ...args, ...(runId ? { runId } : {}) },
     timestamp: Date.now(),
     ...(maestroId ? { maestroId } : {}),
+    ...(runId ? { runId } : {}),
   })
   const filename = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`
   fs.writeFileSync(path.join(dir, filename), payload)
@@ -85,6 +172,15 @@ function sendCommand(cwd: string, cmd: string, args: Record<string, unknown>): v
 
 function crownActive(cwd: string): boolean {
   try {
+    if (process.env.ORQUESTRA_RUN_ID?.trim()) {
+      const safeRun = process.env.ORQUESTRA_RUN_ID.trim().replace(/[/\\]/g, '_')
+      if (fs.existsSync(path.join(cwd, '.orquestra', 'runs', safeRun, 'crown.json'))) return true
+    }
+    const regPath = path.join(cwd, '.orquestra', 'registry.json')
+    if (fs.existsSync(regPath)) {
+      const reg = JSON.parse(fs.readFileSync(regPath, 'utf-8')) as { runs?: unknown[] }
+      if (Array.isArray(reg.runs) && reg.runs.length > 0) return true
+    }
     return fs.existsSync(path.join(cwd, CROWN_MARKER))
   } catch {
     return false
@@ -132,32 +228,34 @@ export default function (pi: ExtensionAPI) {
   // Tools
   // -------------------------------------------------------------------------
 
-  const MAX_ROLE = 220
+  // Soft guidance ~1000; hard block only absurd pastes. App also clamps.
+  const MAX_ROLE = 1000
+  const MAX_ROLE_HARD = 2250
 
   pi.registerTool({
     name: 'orquestra_recruit',
     label: 'Recruit Worker',
     description:
-      'Recruit ONE worker for ONE named function after PLAN. name=function id (html/css/js), role=short unique prompt for that function only (max ~220 chars). Never paste the full user brief to every worker.',
-    promptSnippet: 'orquestra_recruit — name=function, role=short unique task (after PLAN)',
+      'Recruit ONE worker slot after PLAN. Prefer pool (w1) + reassign. role=task for THIS step (~1000 chars soft). Never paste the full user brief.',
+    promptSnippet: 'orquestra_recruit — name=slot/label, role=short unique task (after PLAN)',
     promptGuidelines: [
-      'PLAN first as a function table: name (id) + short unique role, then recruit only those.',
-      'name is the function id (html, css, js). role is ONLY that function\'s job — short, unique.',
-      'Never paste the full product brief into every role. Max ~220 chars per role.',
-      'Recruit the smallest number of functions (usually 2–4), not maxWorkers.',
-      'After recruits, orquestra_wait, then consolidate only.',
+      'PLAN tasks first; recruit a small pool (usually 1–2 slots), reassign for next tasks.',
+      'name is the slot or function id (w1, core, tests). role is ONLY this step — not the full user prompt.',
+      'Keep roles under ~1000 chars. App truncates mild overage; do not paste the entire product brief.',
+      'Recruit the smallest pool (usually 1–2), not maxWorkers.',
+      'After recruits, orquestra_wait, then reassign or consolidate only.',
     ],
     parameters: {
       type: 'object',
       properties: {
         name: {
           type: 'string',
-          description: 'Function id for this worker (required). e.g. html, css, js, api, tests',
+          description: 'Slot or function id (required). e.g. w1, core, api, tests',
         },
         role: {
           type: 'string',
           description:
-            'Short unique task for THIS function only (max ~220 chars). Not the full user prompt.',
+            'Task for THIS step only (prefer ≤1000 chars). Not the full user prompt.',
         },
       },
       required: ['role', 'name'],
@@ -170,10 +268,10 @@ export default function (pi: ExtensionAPI) {
       _ctx: ExtensionContext,
     ): Promise<AgentToolResult<unknown>> => {
       const name = String(params.name || '').trim()
-      const role = String(params.role || '').trim()
+      let role = String(params.role || '').trim()
       if (!name) {
         return ok(
-          'ERROR: name (function id) is required. Example: name="html" role="Create only index.html structure".',
+          'ERROR: name (function id) is required. Example: name="api" role="Add POST /items handler only".',
         )
       }
       if (!role) {
@@ -181,13 +279,34 @@ export default function (pi: ExtensionAPI) {
       }
       if (role.length < 20) {
         return ok(
-          'ERROR: role is too vague. Write a specific unique job for this function (min ~20 chars), e.g. "Create only index.html structure and buttons".',
+          'ERROR: role is too vague. Write a specific unique job for this function (min ~20 chars), e.g. "Add POST /items validation and error responses".',
         )
       }
-      if (role.length > MAX_ROLE) {
+      if (role.length > MAX_ROLE_HARD) {
         return ok(
-          `ERROR: role is ${role.length} chars (max ${MAX_ROLE}). Write a SHORT function-specific prompt only — not the full product brief. Example: "Create only styles.css for calculator UI. Responsive. No HTML/JS."`,
+          `ERROR: role is ${role.length} chars (max ${MAX_ROLE_HARD}). Write a SHORT function-specific prompt only — not the full product brief.`,
         )
+      }
+      // Soft truncate — still send recruit so workers open (app also clamps).
+      if (role.length > MAX_ROLE) {
+        role = role.slice(0, MAX_ROLE - 1) + '…'
+      }
+      // Multi-Maestro: without run identity, recruits land in the wrong run or are dropped.
+      const identity = resolveMaestroIdentity(cwd)
+      if (!identity.runId || !identity.maestroId) {
+        try {
+          const regPath = path.join(cwd, '.orquestra', 'registry.json')
+          if (fs.existsSync(regPath)) {
+            const reg = JSON.parse(fs.readFileSync(regPath, 'utf-8')) as { runs?: unknown[] }
+            if (Array.isArray(reg.runs) && reg.runs.length > 1) {
+              return ok(
+                'ERROR: multiple Maestro runs active but ORQUESTRA_RUN_ID is not set in this shell. '
+                  + 'Re-enable the crown on this terminal (or run: set ORQUESTRA_RUN_ID=<your-run-id> / export). '
+                  + 'Without it, recruit would steal or drop against the other Maestro.',
+              )
+            }
+          }
+        } catch { /* continue */ }
       }
       const nameKey = name.toLowerCase()
       const roleKey = role.toLowerCase().replace(/\s+/g, ' ')
@@ -196,20 +315,29 @@ export default function (pi: ExtensionAPI) {
           'ERROR: this role text was already used for another function. Each function needs a DISTINCT short prompt.',
         )
       }
-      // Same name already recruited earlier: reuse via recruit (app reassigns) — do not block.
-      if (!recruitedNames.has(nameKey) && recruitedNames.size >= maxWorkers) {
+      // Always send recruit to the app — at pool capacity the renderer enqueues
+      // (or reassign_idle). Do NOT hard-block here or overflow tasks are lost.
+      const atPoolCeiling = isExtensionAtPoolCeiling(recruitedNames, nameKey, maxWorkers)
+      if (shouldSendExtensionRecruitCommand()) {
+        sendCommand(cwd, 'recruit', { role, name, agent: 'verboo' })
+      }
+      if (!atPoolCeiling) {
+        recruitedNames.add(nameKey)
+        recruitedRoles.add(roleKey)
+      }
+      const unique = recruitedNames.size
+      const left = Math.max(0, maxWorkers - unique)
+      if (atPoolCeiling) {
         return ok(
-          `ERROR: already at maxWorkers=${maxWorkers}. Reassign an existing worker (orquestra_reassign) instead of opening a new panel.`,
+          `Function "${name}" recruit requested — pool at maxWorkers=${maxWorkers}. `
+            + `App will QUEUE this task or reuse an idle slot (not open a ${maxWorkers + 1}th panel).\n`
+            + `Role: ${role}\nDo not invent a new --name to bypass the pool. Prefer orquestra_reassign on a free worker, or wait for auto-drain.`,
         )
       }
-
-      // Same name again → app reuses panel; still send recruit (renderer reassigns).
-      sendCommand(cwd, 'recruit', { role, name, agent: 'verboo' })
-      recruitedNames.add(nameKey)
-      recruitedRoles.add(roleKey)
-      const left = maxWorkers - recruitedNames.size
       return ok(
-        `Function "${name}" recruit requested (${recruitedNames.size} unique names, ceiling ${maxWorkers}, ${left} left).\nRole: ${role}\nIf that name already exists, the app REUSES the panel (no second window).\nFor follow-ups prefer orquestra_reassign. Then orquestra_wait and READ completion summaries.`,
+        `Function "${name}" recruit requested (${unique} unique names, ceiling ${maxWorkers}, ${left} left).\n`
+          + `Role: ${role}\nIf that name already exists, the app REUSES the panel (no second window).\n`
+          + `For follow-ups prefer orquestra_reassign. Then orquestra_wait and READ completion summaries.`,
       )
     },
   })

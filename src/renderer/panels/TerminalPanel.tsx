@@ -390,6 +390,9 @@ export default function TerminalPanel({
           scrollRestored = true
           terminalRegistry.restoreScroll(panelId)
           requestAnimationFrame(() => terminalRegistry.restoreScroll(panelId))
+          // Focus often follows a garbled TUI frame (user clicks the panel to
+          // "fix" it). Heal WebGL the same way a manual resize would.
+          terminalRegistry.scheduleTuiWebglHeal({ hard: true, reason: 'focus' })
         }
         // Re-check for ~500ms after first success to survive a detach/reattach
         // race from the IntersectionObserver right after mount.

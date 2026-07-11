@@ -44,6 +44,10 @@ export async function ensureMaestroArmed(opts: {
   panelId: string
   ptyId: string
   rootPath: string
+  /** Explicit crown click that should steal an active Maestro (after user confirm). Single-mode only. */
+  forceTakeover?: boolean
+  /** Resume this run id (same panel re-arm). */
+  runId?: string
 }): Promise<TerminalSetMaestroResult> {
   if (
     armedPtyByPanel.get(opts.panelId) === opts.ptyId
@@ -58,19 +62,46 @@ export async function ensureMaestroArmed(opts: {
   if (!window.electronAPI?.terminalSetMaestro) {
     return { ok: false, error: 'Maestro API unavailable', code: 'COPY_FAILED' }
   }
+  const panel = useAppStore.getState().workspaces
+    .find((w) => w.id === opts.workspaceId)
+    ?.panels[opts.panelId]
+  const resumeRunId = opts.runId || panel?.orchestrationRunId
   const result = await window.electronAPI.terminalSetMaestro(
     opts.ptyId,
     true,
     opts.rootPath,
+    {
+      ...(opts.forceTakeover ? { forceTakeover: true } : {}),
+      ...(resumeRunId ? { runId: resumeRunId } : {}),
+      panelId: opts.panelId,
+    },
   )
   if (result.ok) {
     armedPtyByPanel.set(opts.panelId, opts.ptyId)
-    // setPanelMaestro is a no-op when already true (avoids update-depth loops).
-    useAppStore.getState().setPanelMaestro(opts.workspaceId, opts.panelId, true)
-    if (result.tookOverFrom) {
+    const store = useAppStore.getState()
+    store.setPanelMaestro(opts.workspaceId, opts.panelId, true)
+    // Persist run id on the panel for re-arm / multi-Maestro maps
+    if (result.runId) {
+      useAppStore.setState((s) => ({
+        workspaces: s.workspaces.map((w) => {
+          if (w.id !== opts.workspaceId) return w
+          const panel = w.panels[opts.panelId]
+          if (!panel || panel.orchestrationRunId === result.runId) return w
+          return {
+            ...w,
+            panels: {
+              ...w.panels,
+              [opts.panelId]: { ...panel, orchestrationRunId: result.runId },
+            },
+          }
+        }),
+      }))
+    }
+    // Multi-Maestro: do NOT clear other crowns. Single-mode force takeover: clear others.
+    const multi = readMultiMaestroSetting()
+    if (!multi && result.tookOverFrom) {
       clearOtherMaestroFlags(opts.workspaceId, opts.panelId)
       useOrchestrationRunStore.getState().clearMaestro(result.tookOverFrom)
-      // No terminalWrite notice — stdin inject is executed by the shell as a command.
     }
   } else {
     armedPtyByPanel.delete(opts.panelId)
@@ -79,6 +110,16 @@ export async function ensureMaestroArmed(opts: {
     }
   }
   return result
+}
+
+function readMultiMaestroSetting(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useSettingsStore } = require('../../stores/settingsStore') as typeof import('../../stores/settingsStore')
+    return useSettingsStore.getState().orchestrationMultiMaestro !== false
+  } catch {
+    return true
+  }
 }
 
 /** Registry marked this panel's PTY dead while maestro intent remains. */

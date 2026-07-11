@@ -83,6 +83,23 @@ describe('ensureMaestroArmed', () => {
     expect(window.electronAPI.terminalSetMaestro).toHaveBeenCalledTimes(1)
   })
 
+  it('passes forceTakeover through to terminalSetMaestro', async () => {
+    getEntry.mockReturnValue({ ptyId: 'pty-2', alive: true })
+    await ensureMaestroArmed({
+      workspaceId: 'ws1',
+      panelId: 'panel-2',
+      ptyId: 'pty-2',
+      rootPath: '/repo',
+      forceTakeover: true,
+    })
+    expect(window.electronAPI.terminalSetMaestro).toHaveBeenCalledWith(
+      'pty-2',
+      true,
+      '/repo',
+      expect.objectContaining({ forceTakeover: true, panelId: 'panel-2' }),
+    )
+  })
+
   it('onMaestroRegistryExit clears armed map so dead id is not short-circuited', async () => {
     getEntry.mockReturnValue({ ptyId: 'pty-1', alive: true })
     await ensureMaestroArmed({

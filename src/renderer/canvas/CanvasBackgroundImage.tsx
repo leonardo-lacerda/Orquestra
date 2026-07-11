@@ -18,7 +18,7 @@
 import React, { useEffect, useState } from 'react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { getActiveTheme, subscribeTheme } from '../lib/themeManager'
-import { getBuiltinWallpaper } from '../lib/builtinWallpapers'
+import { getBuiltinWallpaper, isBuiltinWallpaperPath } from '../lib/builtinWallpapers'
 
 const READABILITY = {
   dark: { filter: 'brightness(0.6) saturate(0.9)', scrim: 'rgba(0, 0, 0, 0.35)' },
@@ -45,6 +45,12 @@ const CanvasBackgroundImage: React.FC = () => {
     const builtin = getBuiltinWallpaper(path)
     if (builtin) {
       setDataUrl(builtin.url)
+      return
+    }
+    // Removed built-in (e.g. old "Hillside") — clear the stale setting.
+    if (isBuiltinWallpaperPath(path)) {
+      setDataUrl(null)
+      useSettingsStore.getState().setSetting('canvasBackgroundImagePath', '')
       return
     }
     let cancelled = false

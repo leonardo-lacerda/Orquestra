@@ -163,14 +163,21 @@ const CanvasNodeWrapper = React.memo(({ nodeId, canvasPanelId, renderPanelConten
     if (!workspacePanels) return
     const layout = dockStoreApi.getState().zones.center.layout
     if (!layout) return
-    // Never treat this canvas-node's seed panel as an orphan. A race after
-    // createTerminal can run this effect against a briefly-stale panels map;
-    // undocking the seed panel sets layout=null and the subscribe effect
-    // removeNode's the whole node — e2e seedTerminal and fast creates break.
+    // Read LIVE panels (not only the effect snapshot) so a createTerminal race
+    // doesn't undock against a briefly-stale React subscription map.
+    const s = useAppStore.getState()
+    const livePanels =
+      s.workspaces.find((w) => w.id === s.selectedWorkspaceId)?.panels ?? workspacePanels
+    // HARD: never orphan-sweep the seed panelId. Undocking it sets layout=null
+    // and the subscribe effect removeNode's the whole canvas shell — terminals
+    // stay in the sidebar (ws.panels) but vanish from the canvas. That race is
+    // exactly what broke "new terminal never appears" after we briefly treated
+    // seed as orphanable for husk cleanup. Husk cleanup is owned by
+    // closePanel → removeNodeForPanel (strips seed + removes empty nodes).
     const seedPanelId = node?.panelId
     const collectOrphans = (n: DockLayoutNode): string[] => {
       if (n.type === 'tabs') {
-        return n.panelIds.filter((id) => id !== seedPanelId && !workspacePanels[id])
+        return n.panelIds.filter((id) => id !== seedPanelId && !livePanels[id])
       }
       const out: string[] = []
       for (const c of n.children) out.push(...collectOrphans(c))

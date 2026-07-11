@@ -47,6 +47,24 @@ import {
   formatAcceptResults,
   inferAcceptFromRole,
 } from '../../shared/orchestration/accept'
+import {
+  dispositionOrquestraCommand,
+  isMaestroBusy,
+  shouldCascadeWorker,
+  shouldInjectToMaestro,
+} from '../../shared/orchestration/multiMaestroPolicy'
+import {
+  absFromWorkspace,
+  legacyCommandsDirRelative,
+  legacyResultsDirRelative,
+  registryPathRelative,
+  runCommandsDirRelative,
+  runCrownPathRelative,
+  runResultsDirRelative,
+  runWorkerResultPathRelative,
+  safeOrquestraSegment,
+} from '../../shared/orchestration/runFiles'
+import type { MaestroRegistryEntry, MaestroRegistryFile } from '../../shared/orchestration/types'
 import { getOrCreateLogger, removeLogger, flushAll as flushAllLoggers, disposeAll as disposeAllLoggers } from './terminalLogger'
 import log from '../logger'
 import { sendToWindow, windowFromEvent, onWindowClosed } from '../windowRegistry'
@@ -58,7 +76,12 @@ import { createStringDispatcher } from './batchedDispatcher'
 import { validatePathStrict } from './pathValidation'
 import { getAllSettings } from '../settingsFile'
 import { buildMaestroInstructions, buildMaestroSettingsSnapshot } from '../maestro/maestroInstructions'
-import { checkMaestroAssets, resolveMaestroCliDir } from '../maestro/maestroAssets'
+import {
+  checkMaestroAssets,
+  installOrquestraCliToWorkspace,
+  resolveMaestroCliDir,
+} from '../maestro/maestroAssets'
+import { buildOrquestraRunIdExport } from '../maestro/shellEnvStamp'
 import {
   mergeMaestroIntoClaudeLocal,
   removeMaestroFromClaudeLocal,
@@ -96,25 +119,70 @@ const watcherByWorkspace = new Map<string, {
   ownerWindowId: number
 }>()
 
-export function setOrquestraTerminal(terminalId: string, enabled: boolean): void {
+/** Serialize Maestro enable/disable per workspace so two crowns cannot race. */
+const maestroEnableChain = new Map<string, Promise<unknown>>()
+
+function withMaestroWorkspaceLock<T>(workspacePath: string, fn: () => Promise<T>): Promise<T> {
+  const key = workspacePath.replace(/[/\\]+$/, '')
+  const prev = maestroEnableChain.get(key) ?? Promise.resolve()
+  const run = prev.catch(() => {}).then(fn)
+  maestroEnableChain.set(
+    key,
+    run.then(
+      () => undefined,
+      () => undefined,
+    ),
+  )
+  return run
+}
+
+/** ptyId → runId for live Maestros (control-plane isolation). */
+const maestroRunByPty = new Map<string, string>()
+/** ptyId → resolved shell path (for ORQUESTRA_RUN_ID export dialect). */
+const terminalShellById = new Map<string, string>()
+
+export function getMaestroRunId(ptyId: string): string | undefined {
+  return maestroRunByPty.get(ptyId)
+}
+
+export function generateOrchestrationRunId(): string {
+  return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+export function setOrquestraTerminal(terminalId: string, enabled: boolean, runId?: string): void {
   if (enabled) {
     orquestraTerminals.add(terminalId)
+    if (runId) maestroRunByPty.set(terminalId, runId)
   } else {
     orquestraTerminals.delete(terminalId)
-    cascadeOrchestratorWorkers(terminalId, 'disabled')
+    const rid = maestroRunByPty.get(terminalId)
+    maestroRunByPty.delete(terminalId)
+    cascadeOrchestratorWorkers(terminalId, 'disabled', rid)
   }
 }
 
 /**
  * Abort workers for an orchestrator: write failed results (unblocks wait),
  * notify renderer, then kill PTYs. Used by disable, takeover, and maestro exit.
+ * Only workers matching orchestratorId AND (when set) the same runId.
  */
 export function cascadeOrchestratorWorkers(
   orchestratorId: string,
   reason: 'disabled' | 'takeover' | 'maestro-exit',
+  runId?: string,
 ): void {
+  const targetRunId = runId ?? maestroRunByPty.get(orchestratorId)
   for (const [workerId, tracking] of [...workerTracking.entries()]) {
-    if (tracking.orchestratorId !== orchestratorId) continue
+    if (
+      !shouldCascadeWorker({
+        workerRunId: tracking.runId,
+        workerOrchestratorId: tracking.orchestratorId,
+        targetRunId: targetRunId,
+        targetOrchestratorId: orchestratorId,
+      })
+    ) {
+      continue
+    }
     const summary =
       reason === 'takeover'
         ? 'Orchestrator taken over by another Maestro terminal.'
@@ -129,6 +197,7 @@ export function cascadeOrchestratorWorkers(
         summary,
         timestamp: Date.now(),
         exitCode: 1,
+        runId: tracking.runId,
       })
     }
     notifyWorkerStatus({
@@ -142,7 +211,7 @@ export function cascadeOrchestratorWorkers(
     const runtime = getRuntimeForTerminal(workerId)
     try { runtime?.process.kill?.(workerId) } catch { /* already dead */ }
     workerTracking.delete(workerId)
-    log.debug('[worker] cascade %s: closed "%s"', reason, tracking.name)
+    log.debug('[worker] cascade %s: closed "%s" run=%s', reason, tracking.name, tracking.runId || '-')
   }
 }
 
@@ -152,12 +221,41 @@ function closeWorkersForOrchestrator(orchestratorId: string): void {
 }
 
 /**
+ * Move open worker tracking + response queues from one maestro PTY id to another
+ * (same workspace, previous PTY died / restarted). Does not kill workers.
+ */
+export function rebindOrchestratorWorkers(fromId: string, toId: string, runId?: string): void {
+  if (!fromId || !toId || fromId === toId) return
+  let n = 0
+  for (const tracking of workerTracking.values()) {
+    if (tracking.orchestratorId !== fromId) continue
+    if (runId && tracking.runId && tracking.runId !== runId) continue
+    tracking.orchestratorId = toId
+    n++
+  }
+  const fromRun = runId ?? maestroRunByPty.get(fromId)
+  if (fromRun) maestroRunByPty.set(toId, fromRun)
+  maestroRunByPty.delete(fromId)
+  const pending = responseQueues.get(fromId)
+  if (pending && pending.length > 0) {
+    const dest = responseQueues.get(toId) ?? []
+    responseQueues.set(toId, [...dest, ...pending])
+    responseQueues.delete(fromId)
+  } else {
+    responseQueues.delete(fromId)
+  }
+  if (n > 0) log.info('[terminal] rebind %d worker(s) %s → %s run=%s', n, fromId, toId, fromRun || '-')
+}
+
+/**
  * Maestro PTY gone (kill or exit): cascade workers, drop orquestra membership,
  * stop watcher if this id was the active maestro for a workspace.
  */
 export function onMaestroPtyGone(terminalId: string): void {
+  const runId = maestroRunByPty.get(terminalId)
   orquestraTerminals.delete(terminalId)
-  cascadeOrchestratorWorkers(terminalId, 'maestro-exit')
+  cascadeOrchestratorWorkers(terminalId, 'maestro-exit', runId)
+  maestroRunByPty.delete(terminalId)
   for (const [wsPath, entry] of [...watcherByWorkspace.entries()]) {
     if (entry.terminalId === terminalId) {
       // Delete crown markers for this workspace (best-effort)
@@ -221,71 +319,161 @@ const COMMANDS_POLL_MS = 500
 const PROCESSED_CLEANUP_MS = 5 * 60 * 1000 // clear dedup set every 5 min
 
 /**
- * Start or rebind the single watcher per workspace.
- * Rebind updates terminalId/owner without restarting the poller (takeover).
+ * Start or keep a workspace-level command demux poller.
+ * Scans each run's commands folder (and legacy .orquestra-commands) and routes
+ * each command to the Maestro PTY registered for that run (multi-Maestro safe).
  */
-export function startOrquestraWatcher(workspacePath: string, ownerWindowId: number, terminalId: string): void {
+export function startOrquestraWatcher(
+  workspacePath: string,
+  ownerWindowId: number,
+  terminalId: string,
+  runId?: string,
+): void {
+  if (runId) maestroRunByPty.set(terminalId, runId)
   const existing = watcherByWorkspace.get(workspacePath)
   if (existing) {
+    // Keep demux running; remember last owner window for IPC delivery.
     existing.terminalId = terminalId
     existing.ownerWindowId = ownerWindowId
     return
   }
 
-  const commandsDir = path.join(workspacePath, '.orquestra-commands')
-  if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
+  const legacyCommandsDir = path.join(workspacePath, legacyCommandsDirRelative())
+  if (!fs.existsSync(legacyCommandsDir)) fs.mkdirSync(legacyCommandsDir, { recursive: true })
 
-  // Clean up stale commands from previous crashes
-  try {
-    const stale = fs.readdirSync(commandsDir).filter(f => f.endsWith('.json'))
-    for (const f of stale) {
-      fs.unlinkSync(path.join(commandsDir, f))
-    }
-  } catch { /* dir may not exist yet */ }
-
-  // Polling is more reliable than fs.watch — avoids duplicate events (Windows)
-  // and missed events (macOS). Dedup via Set of filenames prevents processing
-  // the same file twice.
   const processedFiles = new Set<string>()
+
+  const processCommandFile = (
+    filePath: string,
+    filename: string,
+    activeMaestroId: string,
+    activeRunId: string | undefined,
+    winId: number,
+    /** When true, file already lives under runs/{runId}/commands — trust folder if stamp incomplete. */
+    trustFolderIdentity = false,
+  ): void => {
+    if (processedFiles.has(filename + '|' + filePath)) return
+    processedFiles.add(filename + '|' + filePath)
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8')
+      const payload = JSON.parse(content)
+      let disp = dispositionOrquestraCommand({
+        payloadMaestroId: payload.maestroId,
+        payloadRunId: payload.runId,
+        activeMaestroId,
+        activeRunId,
+      })
+      // Folder is authoritative for multi-Maestro when the agent shell never got
+      // ORQUESTRA_RUN_ID (stamp failed / agent started before crown). Missing stamps
+      // under the correct runs/{id}/commands dir should still route to that Maestro.
+      if (
+        disp === 'drop_missing'
+        && trustFolderIdentity
+        && activeRunId
+        && activeMaestroId
+      ) {
+        const stampedM = String(payload.maestroId ?? '').trim()
+        const stampedR = String(payload.runId ?? '').trim()
+        const contradicts =
+          (stampedM && stampedM !== activeMaestroId)
+          || (stampedR && stampedR !== activeRunId)
+        if (!contradicts) {
+          disp = 'accept'
+          payload.maestroId = activeMaestroId
+          payload.runId = activeRunId
+        }
+      }
+      if (disp !== 'accept') {
+        log.warn(
+          '[orquestra] drop cmd %s (%s) active=%s run=%s stampedM=%s stampedR=%s',
+          payload.cmd,
+          disp,
+          activeMaestroId,
+          activeRunId ?? '-',
+          payload.maestroId ?? '(none)',
+          payload.runId ?? '(none)',
+        )
+        fs.unlinkSync(filePath)
+        return
+      }
+      const { cmd, args } = payload
+      const argsWithRun = {
+        ...args,
+        ...(activeRunId ? { runId: activeRunId } : {}),
+      }
+      if (cmd === 'recruit' || cmd === 'dismiss' || cmd === 'reassign') {
+        const label = args?.name || args?.target || args?.role || ''
+        log.info('[orquestra] cmd %s %s run=%s', cmd, label, activeRunId || '-')
+      }
+      switch (cmd) {
+        case 'recruit':  sendToWindow(winId, MAESTRO_RECRUIT, activeMaestroId, argsWithRun); break
+        case 'dismiss':  sendToWindow(winId, MAESTRO_DISMISS, activeMaestroId, argsWithRun); break
+        case 'connect':  sendToWindow(winId, MAESTRO_CONNECT, activeMaestroId, argsWithRun); break
+        case 'list':     sendToWindow(winId, MAESTRO_LIST, activeMaestroId, argsWithRun); break
+        case 'reassign': sendToWindow(winId, MAESTRO_REASSIGN, activeMaestroId, argsWithRun); break
+      }
+      fs.unlinkSync(filePath)
+    } catch (err) {
+      log.error('[worker] command error %s: %s', filename, err)
+    }
+  }
 
   const poll = (): void => {
     const entry = watcherByWorkspace.get(workspacePath)
     if (!entry) return
-    const maestroId = entry.terminalId
     const winId = entry.ownerWindowId
+    const reg = readMaestroRegistry(workspacePath)
 
-    let files: string[]
-    try { files = fs.readdirSync(commandsDir).filter(f => f.endsWith('.json')) }
-    catch { return }
-
-    for (const filename of files) {
-      if (processedFiles.has(filename)) continue
-      processedFiles.add(filename)
-
-      const filePath = path.join(commandsDir, filename)
+    // Multi-run: each run's commands/ folder → that run's maestro PTY
+    for (const run of reg.runs) {
+      if (!run.runId || !run.maestroPtyId) continue
+      if (!orquestraTerminals.has(run.maestroPtyId)) continue
+      // Skip stale registry rows (same PTY, older runId after re-arm)
+      const liveRun = maestroRunByPty.get(run.maestroPtyId)
+      if (liveRun && liveRun !== run.runId) continue
+      const cmdDir = absFromWorkspace(workspacePath, runCommandsDirRelative(run.runId)).replace(/\//g, path.sep)
+      let files: string[]
       try {
-        const content = fs.readFileSync(filePath, 'utf-8')
-        const payload = JSON.parse(content)
-        // Optional maestroId on command — drop mismatch (stale CLI from other crown)
-        if (payload.maestroId && payload.maestroId !== maestroId) {
-          fs.unlinkSync(filePath)
-          continue
-        }
-        const { cmd, args } = payload
-        // Log only worker lifecycle commands (not list/connect noise)
-        if (cmd === 'recruit' || cmd === 'dismiss' || cmd === 'reassign') {
-          const label = args?.name || args?.target || args?.role || ''
-          log.info('[orquestra] cmd %s %s', cmd, label)
-        }
-        switch (cmd) {
-          case 'recruit':  sendToWindow(winId, MAESTRO_RECRUIT, maestroId, args); break
-          case 'dismiss':  sendToWindow(winId, MAESTRO_DISMISS, maestroId, args); break
-          case 'connect':  sendToWindow(winId, MAESTRO_CONNECT, maestroId, args); break
-          case 'list':     sendToWindow(winId, MAESTRO_LIST, maestroId, args); break
-          case 'reassign': sendToWindow(winId, MAESTRO_REASSIGN, maestroId, args); break
-        }
-        fs.unlinkSync(filePath)
-      } catch (err) { log.error('[worker] command error %s: %s', filename, err) }
+        if (!fs.existsSync(cmdDir)) continue
+        files = fs.readdirSync(cmdDir).filter((f) => f.endsWith('.json'))
+      } catch {
+        continue
+      }
+      for (const filename of files) {
+        processCommandFile(
+          path.join(cmdDir, filename),
+          filename,
+          run.maestroPtyId,
+          run.runId,
+          winId,
+          true, // trust folder identity
+        )
+      }
+    }
+
+    // Legacy flat commands dir: only when a single live Maestro (avoid last-armed steal)
+    const liveMaestros = [...orquestraTerminals]
+    if (liveMaestros.length !== 1) {
+      // Multi: ignore legacy dir — unstamped cmds would always go to last-armed.
+      return
+    }
+    let legacyFiles: string[]
+    try {
+      legacyFiles = fs.readdirSync(legacyCommandsDir).filter((f) => f.endsWith('.json'))
+    } catch {
+      return
+    }
+    const fallbackMaestro = liveMaestros[0]
+    const fallbackRun = maestroRunByPty.get(fallbackMaestro)
+    for (const filename of legacyFiles) {
+      processCommandFile(
+        path.join(legacyCommandsDir, filename),
+        filename,
+        fallbackMaestro,
+        fallbackRun,
+        winId,
+        false,
+      )
     }
   }
 
@@ -349,6 +537,8 @@ const responseQueues: Map<string, WorkerResponse[]> = new Map()
 // Map: worker ptyId → tracking for idle/exit result files
 const workerTracking: Map<string, {
   orchestratorId: string
+  /** Control-plane run; scopes results/cascade so multi-Maestro does not cross. */
+  runId: string
   name: string
   role: string
   outputBuffer: string[]
@@ -376,7 +566,6 @@ const WORKER_MARKER_IDLE_MS = 10_000
 /** Min ms after role inject before a marker can count (avoids inject-echo DONE). */
 const WORKER_POST_INJECT_MARKER_GRACE_MS = 5_000
 const RESPONSE_QUEUE_MAX = 100   // max pending responses per orchestrator
-const ORQUESTRA_RESULTS_DIR = '.orquestra-results'
 
 /** Canonical completion token — must match accept DEFAULT_COMPLETION_TOKEN. */
 const STRICT_DONE_MARKERS = [
@@ -588,14 +777,10 @@ export function writeWorkerResultFile(workspacePath: string, result: {
   timestamp: number
   exitCode?: number | null
   accept?: Array<{ type: string; ok: boolean; detail: string; path?: string }>
+  /** When set, primary path is runs/{runId}/results/ (multi-Maestro isolation). */
+  runId?: string
 }): void {
   try {
-    const resultsDir = path.join(workspacePath, ORQUESTRA_RESULTS_DIR)
-    if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true })
-    // Sanitize worker name: strip path separators to prevent traversal
-    // outside .orquestra-results/
-    const safeName = path.basename(result.workerName).replace(/[/\\]/g, '_')
-    const filePath = path.join(resultsDir, `worker-${safeName}.json`)
     const status = normalizeWorkerResultStatus(result.status)
     const success = status === 'done'
     const payload = {
@@ -608,12 +793,74 @@ export function writeWorkerResultFile(workspacePath: string, result: {
       summary: result.summary ?? '',
       timestamp: result.timestamp,
       updatedAt: result.timestamp,
+      ...(result.runId ? { runId: result.runId } : {}),
       ...(result.accept ? { accept: result.accept } : {}),
     }
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2))
+    const json = JSON.stringify(payload, null, 2)
+    const multi = getAllSettings().orchestrationMultiMaestro !== false
+    const runId = (result.runId || '').trim()
+
+    if (runId) {
+      const rel = runWorkerResultPathRelative(runId, result.workerName)
+      const filePath = absFromWorkspace(workspacePath, rel).replace(/\//g, path.sep)
+      fs.mkdirSync(path.dirname(filePath), { recursive: true })
+      fs.writeFileSync(filePath, json)
+    }
+
+    // Single-maestro / legacy CLI: also write flat .orquestra-results/
+    // Multi with runId: skip flat write so same-name workers in two runs never collide.
+    if (!multi || !runId) {
+      const resultsDir = path.join(workspacePath, legacyResultsDirRelative())
+      if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true })
+      const safeName = path.basename(result.workerName).replace(/[/\\]/g, '_')
+      fs.writeFileSync(path.join(resultsDir, `worker-${safeName}.json`), json)
+    }
   } catch (err) {
     log.error('[worker] failed to write result file: %s', err)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Maestro registry (.orquestra/registry.json) — multi-run control plane
+// ---------------------------------------------------------------------------
+
+export function readMaestroRegistry(workspacePath: string): MaestroRegistryFile {
+  const p = absFromWorkspace(workspacePath, registryPathRelative()).replace(/\//g, path.sep)
+  try {
+    if (!fs.existsSync(p)) return { version: 1, runs: [] }
+    const raw = JSON.parse(fs.readFileSync(p, 'utf-8')) as MaestroRegistryFile
+    if (!raw || !Array.isArray(raw.runs)) return { version: 1, runs: [] }
+    return { version: 1, runs: raw.runs }
+  } catch {
+    return { version: 1, runs: [] }
+  }
+}
+
+export function writeMaestroRegistry(workspacePath: string, reg: MaestroRegistryFile): void {
+  const p = absFromWorkspace(workspacePath, registryPathRelative()).replace(/\//g, path.sep)
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, JSON.stringify({ version: 1, runs: reg.runs }, null, 2))
+}
+
+export function upsertMaestroRegistryEntry(workspacePath: string, entry: MaestroRegistryEntry): void {
+  const reg = readMaestroRegistry(workspacePath)
+  // One live run per Maestro PTY and per panel. Re-arming used to APPEND a new
+  // runId while keeping the old entry → demux polled stale command dirs and
+  // recruits/results for Maestro A landed under Maestro B's run (or nowhere).
+  reg.runs = reg.runs.filter((r) => {
+    if (r.runId === entry.runId) return false // replace below
+    if (entry.maestroPtyId && r.maestroPtyId === entry.maestroPtyId) return false
+    if (entry.panelId && r.panelId && r.panelId === entry.panelId) return false
+    return true
+  })
+  reg.runs.push(entry)
+  writeMaestroRegistry(workspacePath, reg)
+}
+
+export function removeMaestroRegistryRun(workspacePath: string, runId: string): void {
+  const reg = readMaestroRegistry(workspacePath)
+  reg.runs = reg.runs.filter((r) => r.runId !== runId)
+  writeMaestroRegistry(workspacePath, reg)
 }
 
 /** Notify the owner window so the crown run tracker can leave `running`. */
@@ -637,9 +884,21 @@ function stripAnsi(s: string): string {
 }
 
 /** Register a worker to be tracked for its orchestrator. */
-export function trackWorker(workerId: string, orchestratorId: string, name: string, role: string, workspacePath: string = ''): void {
+export function trackWorker(
+  workerId: string,
+  orchestratorId: string,
+  name: string,
+  role: string,
+  workspacePath: string = '',
+  runId: string = '',
+): void {
+  const resolvedRun =
+    (runId || '').trim()
+    || maestroRunByPty.get(orchestratorId)
+    || ''
   workerTracking.set(workerId, {
     orchestratorId,
+    runId: resolvedRun,
     name,
     role,
     outputBuffer: [] as string[],
@@ -659,9 +918,16 @@ export function trackWorker(workerId: string, orchestratorId: string, name: stri
       summary: 'Worker recruited — waiting for completion.',
       timestamp: Date.now(),
       exitCode: null,
+      runId: resolvedRun || undefined,
     })
   }
-  log.debug('[worker] tracking %s (%s) → maestro %s', name, workerId, orchestratorId)
+  log.debug(
+    '[worker] tracking %s (%s) → maestro %s run=%s',
+    name,
+    workerId,
+    orchestratorId,
+    resolvedRun || '-',
+  )
 }
 
 /**
@@ -826,6 +1092,20 @@ export function finalizeWorkerCompletion(
     tracking.injectText,
     tracking.roleFileText,
   )
+  // Node fs + directory walk so file_exists can resolve notes-api/foo.js when
+  // the role only mentioned foo.js (false FAILED was confusing Maestro wait).
+  const acceptFs = {
+    existsSync: (p: string) => fs.existsSync(p),
+    readFileSync: (p: string, enc: 'utf-8') => fs.readFileSync(p, enc),
+    readdirSync: (p: string) => fs.readdirSync(p),
+    isDirectory: (p: string) => {
+      try {
+        return fs.statSync(p).isDirectory()
+      } catch {
+        return false
+      }
+    },
+  }
   const acceptEval = tracking.workspacePath
     ? evaluateAcceptCriteria(
       {
@@ -833,7 +1113,7 @@ export function finalizeWorkerCompletion(
         criteria,
         outputLines: meaningful,
       },
-      fs,
+      acceptFs,
     )
     : { ok: true, results: [] as Array<{ type: string; ok: boolean; detail: string; path?: string }> }
 
@@ -887,6 +1167,7 @@ export function onWorkerExit(workerId: string, exitCode: number = 0): void {
     timestamp: Date.now(),
     exitCode: finalized.exitCode,
     accept: finalized.accept,
+    runId: tracking.runId || undefined,
   }
   if (tracking.workspacePath) writeWorkerResultFile(tracking.workspacePath, result)
   enqueueResponse(tracking.orchestratorId, {
@@ -952,6 +1233,7 @@ export function onWorkerIdle(workerId: string): void {
     timestamp: Date.now(),
     exitCode: finalized.exitCode,
     accept: finalized.accept,
+    runId: tracking.runId || undefined,
   }
   if (tracking.workspacePath) writeWorkerResultFile(tracking.workspacePath, result)
   enqueueResponse(tracking.orchestratorId, {
@@ -996,6 +1278,16 @@ function processNextResponse(orchestratorId: string): void {
   if (!queue || queue.length === 0) return
 
   const response = queue.shift()!
+  // Never inject worker status into a PTY that is no longer the live Maestro
+  // (e.g. after crown moved — avoids "Codex ran orchestration" without a prompt).
+  if (!shouldInjectToMaestro(orchestratorId, orquestraTerminals)) {
+    log.debug('[worker] drop inject — %s is not live maestro', orchestratorId)
+    if (queue.length > 0) {
+      setTimeout(() => processNextResponse(orchestratorId), 3000)
+    }
+    return
+  }
+
   const cr = String.fromCharCode(13)
   // Short one-liner only — full summary stays in .orquestra-results JSON.
   const message = formatMaestroWorkerInject({
@@ -1180,6 +1472,7 @@ export function reassignTerminalWindow(terminalId: string, newWindowId: number):
 function cleanupTerminal(id: string): void {
   terminalOwners.delete(id)
   terminalRuntime.delete(id)
+  terminalShellById.delete(id)
   // Clean up pipe routes
   terminalPipes.delete(id)
   for (const targets of terminalPipes.values()) {
@@ -1279,10 +1572,11 @@ async function spawnTerminal(
   // [requested, $SHELL, bash, sh]) — so a path that only exists on the client is
   // handled there, not branched on here.
   const handle = await runtime.process.create({ cols: options.cols, rows: options.rows, cwd, shell: options.shell }, onData, onExit)
-  resolvedShell = handle.shell ?? ''
+  resolvedShell = handle.shell ?? options.shell ?? ''
 
   terminalRuntime.set(handle.id, runtimeId)
   terminalOwners.set(handle.id, ownerWindowId)
+  if (resolvedShell) terminalShellById.set(handle.id, resolvedShell)
   if (handle.notice) {
     try { sendToWindow(ownerWindowId, TERMINAL_DATA, handle.id, handle.notice) } catch { /* window gone */ }
   }
@@ -1413,8 +1707,16 @@ export function registerHandlers(): void {
   })
 
   // Maestro mode toggle
-  ipcMain.handle(ORQUESTRA_TRACK_WORKER, async (_event, workerId: string, orchestratorId: string, name: string, role: string, workspacePath?: string): Promise<void> => {
-    trackWorker(workerId, orchestratorId, name, role, workspacePath || '')
+  ipcMain.handle(ORQUESTRA_TRACK_WORKER, async (
+    _event,
+    workerId: string,
+    orchestratorId: string,
+    name: string,
+    role: string,
+    workspacePath?: string,
+    runId?: string,
+  ): Promise<void> => {
+    trackWorker(workerId, orchestratorId, name, role, workspacePath || '', runId || '')
   })
 
   ipcMain.handle(
@@ -1447,16 +1749,27 @@ export function registerHandlers(): void {
       terminalId: string,
       enabled: boolean,
       workspacePath?: string,
+      options?: { forceTakeover?: boolean; runId?: string; panelId?: string },
     ): Promise<TerminalSetMaestroResult> => {
       // ----- DISABLE -----
       if (!enabled) {
-        setOrquestraTerminal(terminalId, false)
+        const runId = maestroRunByPty.get(terminalId)
+        setOrquestraTerminal(terminalId, false, runId)
         if (workspacePath) {
           try {
-            const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
-            if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
+            if (runId) {
+              removeMaestroRegistryRun(workspacePath, runId)
+              const runCrown = absFromWorkspace(workspacePath, runCrownPathRelative(runId)).replace(/\//g, path.sep)
+              try { if (fs.existsSync(runCrown)) fs.unlinkSync(runCrown) } catch { /* best-effort */ }
+            }
+            const reg = readMaestroRegistry(workspacePath)
+            // Legacy single crown file only when no runs remain
+            if (reg.runs.length === 0) {
+              const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
+              if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
+            }
             const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-            if (fs.existsSync(claudeLocalPath)) {
+            if (fs.existsSync(claudeLocalPath) && reg.runs.length === 0) {
               const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
               const next = removeMaestroFromClaudeLocal(prev)
               if (next == null) fs.unlinkSync(claudeLocalPath)
@@ -1465,18 +1778,21 @@ export function registerHandlers(): void {
           } catch (err) {
             log.error('[terminal] failed to remove crown markers: %s', err)
           }
-          const entry = watcherByWorkspace.get(workspacePath)
-          if (entry?.terminalId === terminalId) {
-            stopOrquestraWatcher(workspacePath)
+          // Keep workspace demux watcher if other runs still live
+          const still = readMaestroRegistry(workspacePath).runs.some(
+            (r) => orquestraTerminals.has(r.maestroPtyId),
+          )
+          if (!still) {
+            const entry = watcherByWorkspace.get(workspacePath)
+            if (entry) stopOrquestraWatcher(workspacePath)
           }
         } else {
-          // Still stop watcher if this terminal is the active maestro for any ws
           for (const [wsPath, entry] of [...watcherByWorkspace.entries()]) {
             if (entry.terminalId === terminalId) stopOrquestraWatcher(wsPath)
           }
         }
-        log.info('[terminal] Orquestra disabled for %s', terminalId)
-        return { ok: true }
+        log.info('[terminal] Orquestra disabled for %s run=%s', terminalId, runId || '-')
+        return { ok: true, runId }
       }
 
       // ----- ENABLE (transactional — no early orquestraTerminals.add) -----
@@ -1500,23 +1816,58 @@ export function registerHandlers(): void {
         return { ok: false, error: 'No workspace path for Maestro', code: 'NO_WORKSPACE' }
       }
 
+      // Serialize enable per workspace (two crowns cannot race past busy check).
+      return withMaestroWorkspaceLock(workspacePath, async () => {
+      const multiMaestro = getAllSettings().orchestrationMultiMaestro !== false
+      const regEarly = readMaestroRegistry(workspacePath!)
+      // Other live maestros (different PTYs) in this workspace
+      const otherLive = regEarly.runs.find(
+        (r) =>
+          r.maestroPtyId
+          && r.maestroPtyId !== terminalId
+          && orquestraTerminals.has(r.maestroPtyId)
+          && terminalRuntime.has(r.maestroPtyId),
+      )
+      if (
+        isMaestroBusy({
+          multiMaestro,
+          previousPtyId: otherLive?.maestroPtyId,
+          requestingPtyId: terminalId,
+          previousStillLive: !!otherLive,
+          forceTakeover: !!options?.forceTakeover,
+          sameRun: false,
+        })
+      ) {
+        log.warn(
+          '[terminal] Maestro enable refused: %s still owns workspace (busy). Requested by %s',
+          otherLive?.maestroPtyId,
+          terminalId,
+        )
+        return {
+          ok: false as const,
+          error:
+            'Another Maestro is already active in this workspace. Disable its crown first, or confirm takeover (workers of the other Maestro will be cancelled).',
+          code: 'MAESTRO_BUSY' as const,
+        }
+      }
+
       // 3. Assets
       const assets = checkMaestroAssets()
       if (!assets.ok || !assets.cliDir || !assets.extensionDir) {
         log.error('[terminal] Maestro assets missing: %s', assets.missing.join(', '))
         return {
-          ok: false,
+          ok: false as const,
           error: `Maestro assets missing: ${assets.missing.join(', ')}`,
-          code: 'ASSETS_MISSING',
+          code: 'ASSETS_MISSING' as const,
         }
       }
 
       // 4. Path validation
       try {
-        await validatePathStrict(workspacePath)
+        await validatePathStrict(workspacePath!)
       } catch {
         log.warn('[terminal] invalid workspace path for maestro: %s', workspacePath)
-        return { ok: false, error: 'Invalid workspace path', code: 'INVALID_PATH' }
+        return { ok: false as const, error: 'Invalid workspace path', code: 'INVALID_PATH' as const }
       }
 
       const orchestrationSettings = getAllSettings()
@@ -1525,23 +1876,24 @@ export function registerHandlers(): void {
       const partial: string[] = []
 
       try {
-        // 5. Copy required files (fail if any missing — no silent skip)
-        const cliJsSrc = path.join(cliPath, 'orquestra.js')
-        const cliJsDst = path.join(workspacePath, 'orquestra.js')
-        fs.copyFileSync(cliJsSrc, cliJsDst)
-        partial.push(cliJsDst)
+        // 5. Copy CLI as orquestra.cjs (+ adaptive orquestra.js bootstrap).
+        // Workers often set package.json "type":"module", which breaks a plain
+        // CommonJS orquestra.js — wait/recruit then fail and Maestro self-edits the CLI.
+        const installed = installOrquestraCliToWorkspace(workspacePath!, cliPath)
+        partial.push(installed.cjsPath, installed.jsPath)
+        if (installed.cmdPath) partial.push(installed.cmdPath)
 
-        const commandsDir = path.join(workspacePath, '.claude', 'commands')
+        const commandsDir = path.join(workspacePath!, '.claude', 'commands')
         if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
         const workerSkillSrc = path.join(cliPath, 'orquestra-worker-skill.md')
         const workerSkillDst = path.join(commandsDir, 'worker.md')
         fs.copyFileSync(workerSkillSrc, workerSkillDst)
         partial.push(workerSkillDst)
 
-        const cliCmdDir = path.join(workspacePath, '.orquestra-commands')
+        const cliCmdDir = path.join(workspacePath!, '.orquestra-commands')
         if (!fs.existsSync(cliCmdDir)) fs.mkdirSync(cliCmdDir, { recursive: true })
 
-        const orquestraDir = path.join(workspacePath, '.orquestra')
+        const orquestraDir = path.join(workspacePath!, '.orquestra')
         if (!fs.existsSync(orquestraDir)) fs.mkdirSync(orquestraDir, { recursive: true })
 
         const piAgentDir = path.join(orquestraDir, 'pi-agent')
@@ -1564,35 +1916,97 @@ export function registerHandlers(): void {
           const skillCmdDst = path.join(commandsDir, 'orquestra.md')
           fs.copyFileSync(skillSrc, skillCmdDst)
           partial.push(skillCmdDst)
-          const skillDir = path.join(workspacePath, '.claude', 'skills', 'orquestra')
+          const skillDir = path.join(workspacePath!, '.claude', 'skills', 'orquestra')
           if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true })
           const skillMd = path.join(skillDir, 'SKILL.md')
           fs.copyFileSync(skillSrc, skillMd)
           partial.push(skillMd)
         }
 
-        // 6. Takeover: cascade previous maestro workers + rebind (full KD4)
-        const existing = watcherByWorkspace.get(workspacePath)
-        const previousPty =
-          existing && existing.terminalId !== terminalId ? existing.terminalId : null
-        if (previousPty) {
-          cascadeOrchestratorWorkers(previousPty, 'takeover')
+        // 6. Run identity + optional single-mode force takeover of *other* run
+        const runId =
+          (options?.runId && String(options.runId).trim())
+          || maestroRunByPty.get(terminalId)
+          || generateOrchestrationRunId()
+        let tookOverFrom: string | undefined
+        let reboundFrom: string | undefined
+
+        if (!multiMaestro && options?.forceTakeover && otherLive?.maestroPtyId) {
+          const previousPty = otherLive.maestroPtyId
+          cascadeOrchestratorWorkers(previousPty, 'takeover', otherLive.runId)
           orquestraTerminals.delete(previousPty)
-          log.info('[terminal] Maestro takeover: %s → %s', previousPty, terminalId)
+          maestroRunByPty.delete(previousPty)
+          if (otherLive.runId) removeMaestroRegistryRun(workspacePath!, otherLive.runId)
+          tookOverFrom = previousPty
+          log.info('[terminal] Maestro takeover (forced single-mode): %s → %s', previousPty, terminalId)
+          try {
+            writeTerminal(
+              previousPty,
+              '\r\n[orquestra] Maestro moved to another terminal. This session is no longer the orchestrator.\r\n',
+            )
+          } catch { /* previous may be mid-exit */ }
         }
 
-        // 7. crown.json + CLAUDE.local.md
+        // Same run, previous PTY dead → rebind workers of this run only
+        const priorSameRun = regEarly.runs.find((r) => r.runId === runId && r.maestroPtyId !== terminalId)
+        if (priorSameRun?.maestroPtyId && !orquestraTerminals.has(priorSameRun.maestroPtyId)) {
+          rebindOrchestratorWorkers(priorSameRun.maestroPtyId, terminalId, runId)
+          reboundFrom = priorSameRun.maestroPtyId
+        }
+
+        const now = Date.now()
+        const registryEntry: MaestroRegistryEntry = {
+          runId,
+          maestroPtyId: terminalId,
+          panelId: options?.panelId,
+          workspacePath: workspacePath!,
+          createdAt: priorSameRun?.createdAt ?? now,
+          updatedAt: now,
+        }
+        upsertMaestroRegistryEntry(workspacePath!, registryEntry)
+
+        // Per-run crown (commands/results live under this run)
+        const runCrownAbs = absFromWorkspace(workspacePath!, runCrownPathRelative(runId)).replace(/\//g, path.sep)
+        fs.mkdirSync(path.dirname(runCrownAbs), { recursive: true })
+        const runCrownBody = {
+          runId,
+          terminalPtyId: terminalId,
+          panelId: options?.panelId,
+          activatedAt: now,
+          workspacePath: workspacePath!,
+          settings: buildMaestroSettingsSnapshot(orchestrationSettings),
+        }
+        fs.writeFileSync(runCrownAbs, JSON.stringify(runCrownBody, null, 2))
+        partial.push(runCrownAbs)
+        fs.mkdirSync(
+          absFromWorkspace(workspacePath!, runCommandsDirRelative(runId)).replace(/\//g, path.sep),
+          { recursive: true },
+        )
+        fs.mkdirSync(
+          absFromWorkspace(workspacePath!, runResultsDirRelative(runId)).replace(/\//g, path.sep),
+          { recursive: true },
+        )
+
+        // 7. Legacy crown.json (last-armed) for older tools + CLAUDE.local
         const crownMarker = path.join(orquestraDir, 'crown.json')
         fs.writeFileSync(crownMarker, JSON.stringify({
+          runId,
           terminalPtyId: terminalId,
-          activatedAt: Date.now(),
+          activatedAt: now,
           workspacePath,
           settings: buildMaestroSettingsSnapshot(orchestrationSettings),
         }, null, 2))
         partial.push(crownMarker)
 
-        const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-        const maestroInstructions = buildMaestroInstructions(orchestrationSettings)
+        const claudeLocalPath = path.join(workspacePath!, 'CLAUDE.local.md')
+        // Multi-Maestro: NEVER put a specific runId into workspace CLAUDE.local.md.
+        // That file is global — last crown to arm would overwrite runId and the other
+        // Maestro's agent would recruit/wait into the wrong run (log: all cmds on B's run).
+        // Per-terminal run id stays in shell ORQUESTRA_RUN_ID + runs/{runId}/crown.json.
+        const maestroInstructions = buildMaestroInstructions(orchestrationSettings, {
+          runId: multiMaestro ? undefined : runId,
+          multiMaestro,
+        })
         let prevClaude = ''
         try {
           if (fs.existsSync(claudeLocalPath)) {
@@ -1601,35 +2015,55 @@ export function registerHandlers(): void {
         } catch { /* empty */ }
         const mergedClaude = mergeMaestroIntoClaudeLocal(prevClaude, maestroInstructions)
         fs.writeFileSync(claudeLocalPath, mergedClaude, 'utf-8')
-        // Only roll back CLAUDE.local if we created it from empty (avoid wiping user text)
         if (!prevClaude.trim()) partial.push(claudeLocalPath)
         void import('./linkedContext')
           .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
           .catch(() => { /* non-fatal */ })
 
-        // 8. Start or rebind watcher
+        // Stamp ORQUESTRA_RUN_ID into THIS Maestro's shell (correct cmd/ps/bash dialect).
+        // Repeat after short delays so agents already mid-session still pick it up when
+        // the shell processes the line (and first stamp is not lost in banner noise).
+        try {
+          const shellPath = terminalShellById.get(terminalId) || process.env.COMSPEC || process.env.SHELL
+          const exportLine = buildOrquestraRunIdExport(runId, shellPath)
+          writeTerminal(terminalId, exportLine)
+          setTimeout(() => {
+            try { writeTerminal(terminalId, exportLine) } catch { /* gone */ }
+          }, 800)
+          setTimeout(() => {
+            try { writeTerminal(terminalId, exportLine) } catch { /* gone */ }
+          }, 2500)
+        } catch { /* non-fatal */ }
+
+        // 8. Start or rebind workspace demux watcher
         const winId = terminalOwners.get(terminalId)
         if (winId != null) {
-          startOrquestraWatcher(workspacePath, winId, terminalId)
+          startOrquestraWatcher(workspacePath!, winId, terminalId, runId)
         } else {
           log.warn('[terminal] Maestro enable: no owner window for %s — watcher deferred', terminalId)
         }
 
         // 9. Only now mark maestro-enabled
-        setOrquestraTerminal(terminalId, true)
-        log.info('[terminal] Orquestra enabled for %s', terminalId)
-        return { ok: true, tookOverFrom: previousPty ?? undefined }
+        setOrquestraTerminal(terminalId, true, runId)
+        log.info('[terminal] Orquestra enabled for %s run=%s multi=%s', terminalId, runId, multiMaestro)
+        return {
+          ok: true as const,
+          runId,
+          tookOverFrom,
+          reboundFrom,
+        }
       } catch (err) {
         log.error('[terminal] Maestro enable copy/setup failed: %s', err)
         for (const p of partial) {
           try { if (fs.existsSync(p)) fs.unlinkSync(p) } catch { /* best effort */ }
         }
         return {
-          ok: false,
+          ok: false as const,
           error: err instanceof Error ? err.message : String(err),
-          code: 'COPY_FAILED',
+          code: 'COPY_FAILED' as const,
         }
       }
+      }) // withMaestroWorkspaceLock
     },
   )
 

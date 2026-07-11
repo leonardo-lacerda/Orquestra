@@ -12,12 +12,21 @@ import { useOrchestrationRunStore } from '../stores/orchestrationRunStore'
 import {
   applyAgentPermissionFlags,
   canDispatchTask,
+  createRunQueueCoordinator,
   detectWorkerAgentFromCommand,
+  disposeRecruit,
+  formatRecruitDisposition,
   latestRunSnapshotRelative,
+  makeRecruitDedupeKey,
+  makeRunQueueKey,
   parseRunSnapshot,
-  resolveSlot,
+  rememberRecruit,
   resolveWorkerAgentBaseCommand,
+  runIdForQueueDisk,
+  runQueuePathRelative,
+  absFromWorkspace,
   type OrchestrationPlan,
+  type RunQueueFile,
 } from '../../shared/orchestration'
 import { DEFAULT_SETTINGS, type AppSettings, type OrquestraWorkerSummary, type PanelType, type Point } from '../../shared/types'
 import { orq, orqError, orqWarn } from '../lib/orquestraLog'
@@ -182,16 +191,19 @@ export function findWorkerPanelByName(
 /**
  * Resolve a reusable worker panel for recruit/reassign.
  *
- * CRITICAL: agent CLIs often overwrite the panel title via OSC (e.g. "Fix
- * calculator HTML…"), so title-only lookup fails and Orquestra used to spawn
- * html-2 while html was still open. Prefer the stable namesMap (panelId→function
- * id) set at recruit time.
+ * CRITICAL multi-Maestro: only reuse panels already owned by THIS Maestro
+ * (namesMap / runEntries). Never match by title across the whole workspace —
+ * another run's worker titled "logger" must not be reassigned when this run
+ * recruits "logger".
+ *
+ * Prefer stable namesMap (panelId→function id); OSC title changes are ignored.
  */
 export function resolveReusableWorkerPanel(opts: {
   requestedName: string
   panels: Record<string, { id: string; title?: string }>
-  /** panelId → stable function id (html, css, …) */
+  /** panelId → stable function id (html, css, …) — THIS maestro/run only */
   namesMap: Map<string, string> | Iterable<[string, string]>
+  /** Optional run-store entries for THIS maestro only */
   runEntries?: Iterable<{ panelId: string; name: string; status?: string }>
 }): { panelId: string; functionName: string } | null {
   const want = opts.requestedName.trim().toLowerCase()
@@ -209,12 +221,11 @@ export function resolveReusableWorkerPanel(opts: {
     if (!f) return false
     if (f === want || f === wantBase) return true
     if (normalizeWorkerFunctionId(f) === wantBase) return true
-    // requested html-2 while map has html, or vice versa
     if (normalizeWorkerFunctionId(want) === normalizeWorkerFunctionId(f)) return true
     return false
   }
 
-  // 1. Stable function ids (survives OSC title changes) — prefer exact, then base
+  // 1. Stable function ids owned by this Maestro (survives OSC title changes)
   let baseHit: { panelId: string; functionName: string } | null = null
   for (const [panelId, fname] of names) {
     if (!panelStillOpen(panelId)) continue
@@ -226,23 +237,80 @@ export function resolveReusableWorkerPanel(opts: {
   }
   if (baseHit) return baseHit
 
-  // 2. Run-store entries (same session)
+  // 2. Run-store entries for this Maestro only (caller must pass scoped list)
   if (opts.runEntries) {
     for (const e of opts.runEntries) {
       if (!panelStillOpen(e.panelId)) continue
+      // Never adopt a panel that another Maestro already owns in their namesMap —
+      // runEntries can lag; namesMap is the hard ownership set for reuse.
+      if (!names.has(e.panelId) && names.size > 0) continue
       if (nameMatches(e.name)) {
         return { panelId: e.panelId, functionName: e.name }
       }
     }
   }
 
-  // 3. Current panel title (only works before agent renames the tab)
-  const byTitle = findWorkerPanelByName(opts.panels, opts.requestedName)
-  if (byTitle) return { panelId: byTitle.id, functionName: opts.requestedName }
+  // Do NOT search all workspace panels by title — that reuses another run's
+  // worker when both Maestros recruit the same function name (logger/api/…).
+  return null
+}
 
-  // 4. Title equals base function id
-  const byBaseTitle = findWorkerPanelByName(opts.panels, wantBase)
-  if (byBaseTitle) return { panelId: byBaseTitle.id, functionName: wantBase }
+/**
+ * Resolve dismiss/reassign target to a panel owned by THIS Maestro only.
+ * Accepts function name or panel id. Never closes/injects another run's
+ * worker just because titles collide (e.g. both have "logger").
+ */
+export function resolveOwnedWorkerPanel(opts: {
+  target: string
+  panels: Record<string, { id: string; title?: string }>
+  /** panelId → stable function id — THIS maestro/run only */
+  namesMap: Map<string, string> | Iterable<[string, string]>
+  /** Optional run-store entries for THIS maestro only */
+  runEntries?: Iterable<{ panelId: string; name: string; status?: string }>
+}): { panelId: string; functionName: string } | null {
+  const target = (opts.target || '').trim()
+  if (!target) return null
+  const names =
+    opts.namesMap instanceof Map
+      ? opts.namesMap
+      : new Map(opts.namesMap)
+
+  // Hard ownership: dismiss/reassign require namesMap membership.
+  // Empty namesMap → never touch workspace panels (even if titled like the target).
+  if (names.size === 0) return null
+
+  // Panel id only if this Maestro owns it in namesMap
+  if (opts.panels[target] && names.has(target)) {
+    return { panelId: target, functionName: names.get(target)! }
+  }
+
+  // runEntries only as a name hint for panels already in namesMap (never adopt foreign ids)
+  const scopedEntries = opts.runEntries
+    ? [...opts.runEntries].filter((e) => names.has(e.panelId))
+    : undefined
+
+  // Stable function name within ownership (no global title search)
+  const byName = resolveReusableWorkerPanel({
+    requestedName: target,
+    panels: opts.panels,
+    namesMap: names,
+    runEntries: scopedEntries,
+  })
+  if (byName) return byName
+
+  // Among owned panels only: match display title (OSC may rename tab)
+  const want = target.toLowerCase()
+  const wantClean = target.replace(/\s•\s*$/, '').toLowerCase()
+  for (const [panelId, fname] of names) {
+    const panel = opts.panels[panelId]
+    if (!panel) continue
+    const title = (panel.title || '').trim()
+    const titleLow = title.toLowerCase()
+    const titleClean = title.replace(/\s•\s*$/, '').toLowerCase()
+    if (titleLow === want || titleClean === want || titleClean === wantClean) {
+      return { panelId, functionName: fname }
+    }
+  }
 
   return null
 }
@@ -256,10 +324,85 @@ export function activeWorkerSlotCount(
 }
 
 /**
- * Max chars for --role. Forces Maestro to write a short function-specific
- * prompt instead of pasting the full product brief into every worker.
+ * Default soft max for --role when settings are unavailable (tests / legacy).
+ * Prefer settings.orchestrationMaxWorkerRoleChars at runtime.
  */
-export const MAX_WORKER_ROLE_CHARS = 220
+export const MAX_WORKER_ROLE_CHARS = 1000
+/** Default hard max when settings unavailable (~2.25× soft default). */
+export const MAX_WORKER_ROLE_CHARS_HARD = 2250
+
+/**
+ * Resolve soft/hard role length limits from the user setting.
+ * Soft: preferred max for each worker task prompt (--role).
+ * Hard: absurd full-brief paste; hard-reject above this (≈2.25× soft, capped).
+ */
+export function resolveWorkerRoleLimits(softFromSettings?: number | null): {
+  soft: number
+  hard: number
+} {
+  const soft = Math.max(
+    80,
+    Math.min(4000, Math.floor(Number(softFromSettings) || MAX_WORKER_ROLE_CHARS) || MAX_WORKER_ROLE_CHARS),
+  )
+  const hard = Math.min(8000, Math.max(soft + 100, Math.floor(soft * 2.25)))
+  return { soft, hard }
+}
+
+/**
+ * Normalize recruit --role: empty reject, absurd hard-reject, mild overage truncate.
+ * Callers should use the returned role for inject / ROLE.md / uniqueness.
+ */
+export function clampWorkerRole(
+  role: string,
+  limits?: { soft?: number; hard?: number } | number,
+): {
+  ok: boolean
+  role: string
+  truncated: boolean
+  originalLen: number
+  message?: string
+} {
+  const resolved =
+    typeof limits === 'number'
+      ? resolveWorkerRoleLimits(limits)
+      : resolveWorkerRoleLimits(limits?.soft)
+  const soft = limits && typeof limits === 'object' && limits.soft != null
+    ? resolveWorkerRoleLimits(limits.soft).soft
+    : resolved.soft
+  const hard = limits && typeof limits === 'object' && limits.hard != null
+    ? Math.max(soft + 1, Math.floor(limits.hard))
+    : resolveWorkerRoleLimits(soft).hard
+
+  const r = String(role ?? '').trim()
+  const originalLen = r.length
+  if (!r) {
+    return {
+      ok: false,
+      role: '',
+      truncated: false,
+      originalLen: 0,
+      message: ORQUESTRA_RECRUIT_MSG.emptyRole,
+    }
+  }
+  if (r.length > hard) {
+    return {
+      ok: false,
+      role: '',
+      truncated: false,
+      originalLen,
+      message: ORQUESTRA_RECRUIT_MSG.roleTooLong(originalLen, hard),
+    }
+  }
+  if (r.length > soft) {
+    return {
+      ok: true,
+      role: r.slice(0, soft - 1) + '…',
+      truncated: true,
+      originalLen,
+    }
+  }
+  return { ok: true, role: r, truncated: false, originalLen }
+}
 
 /** Terminal-facing messages for hard recruit rejects (single source of truth). */
 export const ORQUESTRA_RECRUIT_MSG = {
@@ -272,13 +415,15 @@ export const ORQUESTRA_RECRUIT_MSG = {
   emptyRole:
     '[orquestra] Recruit rejected: --role is required. Each worker needs a unique, specific task for its function.',
   missingName:
-    '[orquestra] Recruit rejected: --name is required (function id). Example: --name html --role "Create only index.html structure".',
+    '[orquestra] Recruit rejected: --name is required (function id). Example: --name api --role "Add POST /items handler only".',
   roleTooLong: (len: number, max: number) =>
-    `[orquestra] Recruit rejected: --role is ${len} chars (max ${max}). Write a SHORT function-specific prompt only — not the full product brief. Example: --name css --role "Create only styles.css for the calculator UI".`,
+    `[orquestra] Recruit rejected: --role is ${len} chars (max ${max}). Write a SHORT function-specific prompt only — not the full product brief. Example: --name tests --role "Add unit tests for POST /items".`,
+  roleTruncated: (originalLen: number, max: number) =>
+    `[orquestra] Role was ${originalLen} chars; truncated to ${max} for the worker. Prefer shorter --role next time.`,
   duplicateRole: (rolePreview: string) =>
     `[orquestra] Recruit rejected: role is not unique ("${rolePreview}"). Each function needs its own distinct prompt.`,
   duplicateName: (name: string) =>
-    `[orquestra] Recruit rejected: --name "${name}" is already an active worker. Each function needs a unique name (html, css, js, …).`,
+    `[orquestra] Recruit rejected: --name "${name}" is already an active worker. Each function needs a unique name from your plan (api, auth, ui, tests, …).`,
   similarRole: (otherPreview: string) =>
     `[orquestra] Recruit rejected: role is too similar to an active worker ("${otherPreview}"). Give each function a clearly different prompt (different file/ownership).`,
 } as const
@@ -362,6 +507,8 @@ export function evaluateRecruitGuard(input: {
   existingRoles?: Iterable<string>
   /** Active worker names under this maestro. */
   existingNames?: Iterable<string>
+  /** Soft max for --role (from settings). Hard reject uses ~2.25×. */
+  maxRoleChars?: number
 }): { allow: true } | { allow: false; message: string } {
   if (!input.allowNestedWorkers && input.callerIsWorkerPty) {
     return { allow: false, message: ORQUESTRA_RECRUIT_MSG.nestedDisabled }
@@ -389,16 +536,22 @@ export function evaluateRecruitGuard(input: {
     }
   }
 
-  const role = (input.role ?? '').trim()
-  if (input.role !== undefined && !role) {
+  const rawRole = (input.role ?? '').trim()
+  if (input.role !== undefined && !rawRole) {
     return { allow: false, message: ORQUESTRA_RECRUIT_MSG.emptyRole }
   }
-  if (role.length > MAX_WORKER_ROLE_CHARS) {
+  const { soft, hard } = resolveWorkerRoleLimits(input.maxRoleChars)
+  // Soft-cap is clamped by callers; only absurd full-brief pastes hard-fail here.
+  if (rawRole.length > hard) {
     return {
       allow: false,
-      message: ORQUESTRA_RECRUIT_MSG.roleTooLong(role.length, MAX_WORKER_ROLE_CHARS),
+      message: ORQUESTRA_RECRUIT_MSG.roleTooLong(rawRole.length, hard),
     }
   }
+  const role =
+    rawRole.length > soft
+      ? rawRole.slice(0, soft - 1) + '…'
+      : rawRole
   if (role && input.existingRoles) {
     if (isDuplicateRole(role, input.existingRoles)) {
       const preview = role.length > 80 ? role.slice(0, 77) + '…' : role
@@ -440,9 +593,18 @@ export function allocateUniqueWorkerName(
  */
 export const WORKER_COMPLETION_TOKEN = 'ORQUESTRA_WORKER_DONE'
 
-/** Workspace-relative path for a worker's ROLE.md (Maestri-style role at rest). */
-export function workerRoleFileRelativePath(workerName: string): string {
+/**
+ * Workspace-relative path for a worker's ROLE.md.
+ * Prefer run-scoped path so two Maestros with the same worker name do not
+ * overwrite each other's role file.
+ */
+export function workerRoleFileRelativePath(workerName: string, runId?: string): string {
   const safe = (workerName.trim() || 'worker').replace(/[/\\]/g, '_').replace(/\.\./g, '_')
+  const rid = (runId || '').trim()
+  if (rid) {
+    const safeRun = rid.replace(/[/\\]/g, '_').replace(/\.\./g, '_')
+    return `.orquestra/runs/${safeRun}/workers/${safe}/ROLE.md`
+  }
   return `.orquestra/workers/${safe}/ROLE.md`
 }
 
@@ -516,19 +678,33 @@ export const PTY_CR = String.fromCharCode(13) // Enter — submit
 export const PTY_CTRL_U = String.fromCharCode(21) // clear line (readline / most agent TUIs)
 export const PTY_CTRL_A = String.fromCharCode(1) // start of line
 export const PTY_CTRL_K = String.fromCharCode(11) // kill to end of line
+export const PTY_CTRL_C = String.fromCharCode(3) // not used for clear (would interrupt agent)
 export const PTY_ESC = String.fromCharCode(27) // leave multi-line / cancel partial
+export const PTY_BS = String.fromCharCode(8) // backspace
+export const PTY_DEL = String.fromCharCode(127) // delete
+
+/** Delays (ms) to re-attempt clearing the composer after inject. Verboo/Claude
+ *  TUIs often repaint the draft after submit; a single early clear is not enough. */
+export const WORKER_COMPOSER_CLEAR_DELAYS_MS = [80, 200, 450, 900, 1600, 2800] as const
 
 /**
  * Clear residual text left in an agent CLI input field after submit.
  * Without this, verboo/etc. often keep the inject visible in the composer
  * so it looks like the prompt can be sent again.
+ *
+ * @param approxLen When > 0, also emit backspaces/DELs as a fallback for TUIs
+ *   that ignore Ctrl+U / Ctrl+K (common with Ink/React agents).
  */
-export function clearWorkerInputField(ptyId: string): void {
-  // Esc exits multi-line compose; Ctrl+A+K and Ctrl+U wipe leftover buffer.
-  window.electronAPI?.terminalWrite?.(
-    ptyId,
-    PTY_ESC + PTY_CTRL_A + PTY_CTRL_K + PTY_CTRL_U + PTY_CTRL_U,
-  )
+export function clearWorkerInputField(ptyId: string, approxLen = 0): void {
+  // Ctrl+A+K and Ctrl+U wipe readline-style buffers. Avoid bare Esc alone as a
+  // leading key — on some agents it cancels the just-submitted turn or opens UI.
+  let seq = PTY_CTRL_A + PTY_CTRL_K + PTY_CTRL_U + PTY_CTRL_U
+  // Fallback: eat leftover draft character-by-character (capped).
+  if (approxLen > 0) {
+    const n = Math.min(Math.max(approxLen + 32, 64), 2500)
+    seq += PTY_BS.repeat(n) + PTY_DEL.repeat(Math.min(n, 200))
+  }
+  window.electronAPI?.terminalWrite?.(ptyId, seq)
 }
 
 /**
@@ -544,7 +720,9 @@ export function injectWorkerTaskToPty(
   const line = flattenRoleForTerminalInject(taskLine)
   if (!line) return
 
-  // Type task + Enter in one write (submit as a single user message).
+  // Type task + Enter once (submit as a single user message).
+  // Do NOT send a delayed second Enter: if the TUI left the draft in the
+  // composer, another CR re-sends the full inject (duplicate user turns).
   window.electronAPI?.terminalWrite?.(ptyId, line + PTY_CR)
 
   // Fingerprints for idle: ignore inject + ROLE.md if they echo into the buffer.
@@ -554,20 +732,15 @@ export function injectWorkerTaskToPty(
     roleFileText?.trim() ? roleFileText : undefined,
   )
 
-  // Second Enter shortly after — some CLIs only submit on a clean trailing CR.
-  setTimeout(() => {
-    window.electronAPI?.terminalWrite?.(ptyId, PTY_CR)
-  }, 150)
-
-  // Clear the input composer so the task is not left as re-sendable draft text.
-  setTimeout(() => {
-    clearWorkerInputField(ptyId)
-  }, 350)
-
-  // One more clear after the TUI has painted the submitted turn.
-  setTimeout(() => {
-    clearWorkerInputField(ptyId)
-  }, 700)
+  // Clear the composer repeatedly — Verboo often keeps/repaints the draft after
+  // submit; one early clear is not enough and left the full role visible.
+  // Backspace fallback only on early attempts (while focus is still the draft).
+  // Later only Ctrl+U/K so we do not backspace into a tool/editor mid-run.
+  WORKER_COMPOSER_CLEAR_DELAYS_MS.forEach((ms, i) => {
+    setTimeout(() => {
+      clearWorkerInputField(ptyId, i < 3 ? line.length : 0)
+    }, ms)
+  })
 }
 
 /**
@@ -606,9 +779,127 @@ export function buildRecruitRoleText(
   return flattenRoleForTerminalInject(text)
 }
 
+/** Per-maestro in-flight recruit accepts (sync anti-burst). */
+const recruitPendingByMaestro = new Map<string, number>()
+/** Recent recruit name|role stamps for dedupe window. */
+const recruitRecentByMaestro = new Map<string, Map<string, number>>()
+
+function getRecruitRecentMap(maestroId: string): Map<string, number> {
+  let m = recruitRecentByMaestro.get(maestroId)
+  if (!m) {
+    m = new Map()
+    recruitRecentByMaestro.set(maestroId, m)
+  }
+  return m
+}
+
+function bumpRecruitPending(maestroId: string, delta: number): void {
+  const next = Math.max(0, (recruitPendingByMaestro.get(maestroId) ?? 0) + delta)
+  if (next === 0) recruitPendingByMaestro.delete(maestroId)
+  else recruitPendingByMaestro.set(maestroId, next)
+}
+
+/** @internal test/helper — current pending reserve count for a maestro */
+export function getRecruitPendingCount(maestroId: string): number {
+  return recruitPendingByMaestro.get(maestroId) ?? 0
+}
+
+/** @internal test helper — reset pool reserves/dedupe maps */
+export function resetRecruitPoolStateForTests(): void {
+  recruitPendingByMaestro.clear()
+  recruitRecentByMaestro.clear()
+}
+
+/** Bind workspace FS for queue ops (load/save under per-key lock). */
+function queueCoordForWorkspace(workspaceRoot: string, workspaceId: string) {
+  return createRunQueueCoordinator({
+    load: async (_key, runId) => {
+      if (!workspaceRoot || !runId) return null
+      const abs = absFromWorkspace(workspaceRoot, runQueuePathRelative(runId))
+      try {
+        const raw = await window.electronAPI?.fsReadFile?.(abs, workspaceId)
+        if (!raw || typeof raw !== 'string') return null
+        const parsed = JSON.parse(raw) as RunQueueFile
+        if (!parsed || !Array.isArray(parsed.items)) return null
+        return {
+          version: 1 as const,
+          runId: parsed.runId || runId,
+          updatedAt: parsed.updatedAt || Date.now(),
+          items: parsed.items,
+        }
+      } catch {
+        return null
+      }
+    },
+    save: async (_key, queue) => {
+      const diskId = runIdForQueueDisk(_key) || queue.runId
+      if (!workspaceRoot || !diskId) return
+      const abs = absFromWorkspace(workspaceRoot, runQueuePathRelative(diskId))
+      try {
+        await window.electronAPI?.fsWriteFile?.(
+          abs,
+          JSON.stringify(queue, null, 2),
+          workspaceId,
+        )
+      } catch {
+        /* best-effort */
+      }
+    },
+  })
+}
+
+/**
+ * Process-wide map of workspace-scoped coordinators so concurrent recruits
+ * in the same workspace share one chain (not a new coordinator per call).
+ */
+const workspaceQueueCoords = new Map<string, ReturnType<typeof createRunQueueCoordinator>>()
+
+function getWorkspaceQueueCoord(workspaceRoot: string, workspaceId: string) {
+  const k = `${workspaceId}::${workspaceRoot}`
+  let c = workspaceQueueCoords.get(k)
+  if (!c) {
+    c = queueCoordForWorkspace(workspaceRoot, workspaceId)
+    workspaceQueueCoords.set(k, c)
+  }
+  return c
+}
+
+/** @internal tests may clear coordinators */
+export function resetRunQueueCoordinatorsForTests(): void {
+  workspaceQueueCoords.clear()
+}
+
+/** Same key for enqueue + drain (never literal `unknown` sink). */
+export function resolveQueueKeyForMaestro(
+  maestroId: string,
+  argsRunId?: string | null,
+  resolveRunId: (pty: string) => string | undefined = resolveRunIdForMaestro,
+): { key: string; runId: string | undefined } {
+  const fromArgs = (argsRunId || '').trim() || undefined
+  const fromPanel = resolveRunId(maestroId)
+  const runId = fromArgs || fromPanel
+  return {
+    key: makeRunQueueKey({ runId, maestroId }),
+    runId,
+  }
+}
+
 function writeToMaestro(maestroId: string, message: string): void {
   const cr = String.fromCharCode(13)
   window.electronAPI?.terminalWrite?.(maestroId, message + cr)
+}
+
+/** Resolve orchestration run id for a Maestro PTY from panel state. */
+export function resolveRunIdForMaestro(maestroPtyId: string): string | undefined {
+  const store = useAppStore.getState()
+  for (const ws of store.workspaces) {
+    for (const p of Object.values(ws.panels)) {
+      if (p.type !== 'terminal' || !p.maestro || !p.orchestrationRunId) continue
+      const live = terminalRegistry.ptyIdForPanel(p.id)
+      if (live === maestroPtyId) return p.orchestrationRunId
+    }
+  }
+  return undefined
 }
 
 export function formatWorkerListForTerminal(workers: OrquestraWorkerSummary[]): string {
@@ -637,7 +928,8 @@ export async function reassignExistingWorker(opts: {
   if (!ptyId) return { ok: false, reason: 'Worker terminal PTY not ready' }
   if (!opts.role.trim()) return { ok: false, reason: 'Role is empty' }
 
-  const roleFileRel = workerRoleFileRelativePath(opts.name)
+  const runIdForRole = resolveRunIdForMaestro(opts.maestroId)
+  const roleFileRel = workerRoleFileRelativePath(opts.name, runIdForRole)
   const roleFileBody = buildWorkerRoleFileContent(opts.name, opts.role)
   if (opts.workspaceRoot) {
     const absRole = opts.workspaceRoot.replace(/[/\\]+$/, '')
@@ -657,12 +949,14 @@ export async function reassignExistingWorker(opts: {
     roleFileRel,
   )
   // Re-track as running so wait/idle work again for this task.
+  const runId = resolveRunIdForMaestro(opts.maestroId)
   await window.electronAPI?.orquestraTrackWorker?.(
     ptyId,
     opts.maestroId,
     opts.name,
     opts.role,
     opts.workspaceRoot || '',
+    runId,
   )
   injectWorkerTaskToPty(ptyId, inject, roleFileBody)
   useOrchestrationRunStore.getState().noteRecruit({
@@ -823,8 +1117,26 @@ export function useOrquestra(): void {
         workerNamesByMaestroRef.current.set(maestroId, namesMap)
 
         const maxWorkers = Math.max(1, Math.floor(settings.orchestrationMaxWorkers || 1))
+        const roleLimits = resolveWorkerRoleLimits(settings.orchestrationMaxWorkerRoleChars)
         const requestedName = (args.name || '').trim()
         const allRunEntries = runStore.listForMaestro(maestroId)
+
+        // Soft-clamp --role using user setting (default 400). Mild overage truncates; absurd paste rejects.
+        const roleClamp = clampWorkerRole(args.role || '', roleLimits)
+        if (args.role !== undefined && args.role !== null && !roleClamp.ok) {
+          writeToMaestro(maestroId, roleClamp.message || ORQUESTRA_RECRUIT_MSG.emptyRole)
+          orqWarn(`recruit role: ${roleClamp.message}`)
+          return
+        }
+        const roleText = roleClamp.ok ? roleClamp.role : (args.role || '')
+        if (roleClamp.truncated) {
+          writeToMaestro(
+            maestroId,
+            ORQUESTRA_RECRUIT_MSG.roleTruncated(roleClamp.originalLen, roleLimits.soft),
+          )
+        }
+        // Use clamped role for the rest of this recruit (mutates local view of args).
+        args = { ...args, role: roleText }
 
         // Ready-only dispatch when a plan is installed (criterion 2).
         const activePlan = await loadActivePlan(ws.rootPath || '', ws.id)
@@ -903,8 +1215,6 @@ export function useOrquestra(): void {
 
         const activeEntries = allRunEntries
           .filter((w) => w.status === 'recruiting' || w.status === 'running')
-        // Capacity via slot manager (reuse already handled; may queue / dismiss unused).
-        const openCount = workerPanelIds.size
         const slotPanels = [...namesMap.entries()]
           .filter(([panelId]) => Boolean(ws.panels[panelId]))
           .map(([panelId, functionName]) => {
@@ -915,46 +1225,153 @@ export function useOrquestra(): void {
               status: entry?.status ?? 'done',
             }
           })
-        const slot = resolveSlot({
-          requestedName: requestedName || 'worker',
+        const dispatchMode =
+          settings.orchestrationDispatchMode === 'legacy_function_panels'
+            ? 'legacy_function_panels'
+            : 'pool_queue'
+        const pendingReserves = recruitPendingByMaestro.get(maestroId) ?? 0
+        const recentMap = getRecruitRecentMap(maestroId)
+        const disposition = disposeRecruit({
+          requestedName: requestedName || '',
+          role: args.role || '',
           openPanels: slotPanels,
           maxWorkers,
-          allowDismissUnused: true,
+          pendingReserves,
+          recentKeys: recentMap,
+          dispatchMode,
+          preferReassignIdle: dispatchMode === 'pool_queue',
         })
-        if (slot.action === 'queue' || (slot.action === 'reject')) {
-          const openNames = [...namesMap.values()].join(', ') || '(unknown)'
+        const poolOpen = slotPanels.length + pendingReserves
+
+        // Pool-aware branch: reassign / idle reuse / enqueue / dedupe before create.
+        if (disposition.action === 'drop_duplicate') {
           writeToMaestro(
             maestroId,
-            `[orquestra] Worker limit reached (${openCount}/${maxWorkers}). `
-            + `Reuse an existing panel with the same --name (or reassign/dismiss). Open: ${openNames}.`,
+            formatRecruitDisposition(disposition, { open: Math.min(poolOpen, maxWorkers), max: maxWorkers }),
           )
-          orqWarn(`capacity ${openCount}/${maxWorkers} — open: ${openNames}`)
+          orqWarn(`dedupe ${requestedName}`)
           return
         }
-        if (slot.action === 'dismiss_then_recruit') {
-          // Free an idle/done unused panel so a new function can start.
-          const dismissId = slot.dismissPanelId
+        if (disposition.action === 'reject') {
+          writeToMaestro(maestroId, formatRecruitDisposition(disposition))
+          orqWarn(`recruit rejected: ${disposition.reason}`)
+          return
+        }
+        if (disposition.action === 'enqueue') {
+          const { key, runId } = resolveQueueKeyForMaestro(
+            maestroId,
+            (args as { runId?: string }).runId,
+          )
+          const coord = getWorkspaceQueueCoord(ws.rootPath || '', ws.id)
+          await coord.enqueue(
+            key,
+            {
+              name: disposition.functionName,
+              role: args.role || '',
+              source: 'recruit_overflow',
+            },
+            runId,
+          )
+          writeToMaestro(
+            maestroId,
+            formatRecruitDisposition(disposition, { open: maxWorkers, max: maxWorkers }),
+          )
+          orq(`queue ${disposition.functionName} key=${key}`)
+          return
+        }
+        if (disposition.action === 'reassign' || disposition.action === 'reassign_idle') {
+          const panelId = disposition.panelId
+          const stableName = disposition.functionName
+          if (!args.role) {
+            writeToMaestro(maestroId, '[orquestra] Recruit rejected: --role is required.')
+            return
+          }
+          store.updatePanelTitle(ws.id, panelId, stableName)
+          const reused = await reassignExistingWorker({
+            maestroId,
+            panelId,
+            name: stableName,
+            role: args.role,
+            settings,
+            workspaceRoot: ws.rootPath || '',
+            workspaceId: ws.id,
+          })
+          if (reused.ok) {
+            workerPanelIds.add(panelId)
+            namesMap.set(panelId, stableName)
+            workerPtyToPanelRef.current.set(reused.ptyId, { maestroId, panelId })
+            rememberRecruit(recentMap, makeRecruitDedupeKey(stableName, args.role))
+            writeToMaestro(
+              maestroId,
+              formatRecruitDisposition(disposition, {
+                open: Math.min(slotPanels.length, maxWorkers),
+                max: maxWorkers,
+              }),
+            )
+            orq(`~ ${stableName} ${disposition.action}`)
+            void persistOrchestrationSnapshot(ws.rootPath || '', ws.id, maestroId, namesMap)
+            return
+          }
+          orqWarn(`~ ${stableName} ${disposition.action} failed: ${reused.reason}`)
+          if (disposition.action === 'reassign') {
+            writeToMaestro(maestroId, `[orquestra] Reassign failed: ${reused.reason}`)
+            return
+          }
+          // reassign_idle failed (PTY dead): drop tracking and re-evaluate as recruit/enqueue
           releaseWorkerTracking(
             {
               workerPanelIds: workerPanelIdsRef.current,
               workerNamesByMaestro: workerNamesByMaestroRef.current,
               workerPtyToPanel: workerPtyToPanelRef.current,
             },
-            { maestroId, panelId: dismissId },
+            { maestroId, panelId },
           )
-          runStore.noteDismiss(dismissId)
-          if (ws.panels[dismissId]) {
-            store.closePanel(ws.id, dismissId)
+          const retryPanels = slotPanels.filter((p) => p.panelId !== panelId)
+          const retry = disposeRecruit({
+            requestedName: requestedName || '',
+            role: args.role || '',
+            openPanels: retryPanels,
+            maxWorkers,
+            pendingReserves: recruitPendingByMaestro.get(maestroId) ?? 0,
+            recentKeys: recentMap,
+            dispatchMode,
+            preferReassignIdle: false,
+          })
+          if (retry.action !== 'recruit') {
+            if (retry.action === 'enqueue') {
+              const { key, runId } = resolveQueueKeyForMaestro(
+                maestroId,
+                (args as { runId?: string }).runId,
+              )
+              const coord = getWorkspaceQueueCoord(ws.rootPath || '', ws.id)
+              await coord.enqueue(
+                key,
+                {
+                  name: retry.functionName,
+                  role: args.role || '',
+                  source: 'recruit_overflow',
+                },
+                runId,
+              )
+              writeToMaestro(
+                maestroId,
+                formatRecruitDisposition(retry, { open: maxWorkers, max: maxWorkers }),
+              )
+            } else {
+              writeToMaestro(maestroId, formatRecruitDisposition(retry))
+            }
+            return
           }
-          writeToMaestro(
-            maestroId,
-            `[orquestra] Dismissed idle worker to free a slot for "${requestedName}".`,
-          )
+          // proceed to recruit below
+        } else if (disposition.action !== 'recruit') {
+          return
         }
 
-        // Recompute after possible dismiss — openCount before dismiss would
-        // always trip maxWorkers and block the intended recruit.
-        const openCountAfter = workerPanelIds.size
+        // Sync reserve BEFORE any await so burst cannot all pass empty openCount.
+        bumpRecruitPending(maestroId, 1)
+        rememberRecruit(recentMap, makeRecruitDedupeKey(requestedName, args.role || ''))
+
+        const openCountAfter = workerPanelIds.size + (recruitPendingByMaestro.get(maestroId) ?? 0) - 1
         const guard = evaluateRecruitGuard({
           allowNestedWorkers: settings.orchestrationAllowNestedWorkers,
           callerIsWorkerPty: isWorkerPty(maestroId, workerPtyToPanelRef.current),
@@ -965,12 +1382,13 @@ export function useOrquestra(): void {
           role: args.role || '',
           name: args.name ?? '',
           requireName: true,
-          // Only block duplicate names among *actively running* workers; done ones
-          // are handled by the reuse path above.
+          // Duplicate *active* names blocked; pool reassign path already handled open names.
           existingRoles: activeEntries.map((w) => w.role),
           existingNames: activeEntries.map((w) => w.name),
+          maxRoleChars: roleLimits.soft,
         })
         if (!guard.allow) {
+          bumpRecruitPending(maestroId, -1)
           writeToMaestro(maestroId, guard.message)
           orqWarn(`recruit rejected: ${guard.message}`)
           return
@@ -992,10 +1410,14 @@ export function useOrquestra(): void {
         const position = workerPosition(maestroId, recruitCountRef, orchestratorPanelId || '')
 
         let panelId: string | null = null
-        if (panelType === 'agent') {
-          panelId = store.createAgent(ws.id, position)
-        } else {
-          panelId = store.createTerminal(ws.id, undefined, position)
+        try {
+          if (panelType === 'agent') {
+            panelId = store.createAgent(ws.id, position)
+          } else {
+            panelId = store.createTerminal(ws.id, undefined, position)
+          }
+        } finally {
+          bumpRecruitPending(maestroId, -1)
         }
 
         if (panelId) {
@@ -1040,8 +1462,10 @@ export function useOrquestra(): void {
               return
             }
 
-            // Persist ROLE.md (Maestri-style role at rest) before starting agent.
-            const roleFileRel = workerRoleFileRelativePath(name)
+            const runId = (args as { runId?: string }).runId || resolveRunIdForMaestro(maestroId)
+
+            // Persist ROLE.md under this run (not a global name path).
+            const roleFileRel = workerRoleFileRelativePath(name, runId)
             const roleFileBody = args.role
               ? buildWorkerRoleFileContent(name, args.role)
               : ''
@@ -1060,7 +1484,14 @@ export function useOrquestra(): void {
               orq(`$ ${name} ${agentCmd}`)
             }
 
-            window.electronAPI?.orquestraTrackWorker?.(ptyId, maestroId, name, args.role || '', ws.rootPath || '')
+            window.electronAPI?.orquestraTrackWorker?.(
+              ptyId,
+              maestroId,
+              name,
+              args.role || '',
+              ws.rootPath || '',
+              runId,
+            )
             workerPtyToPanelRef.current.set(ptyId, { maestroId, panelId: panelId! })
             useOrchestrationRunStore.getState().noteWorkerReady(panelId!, ptyId)
 
@@ -1115,9 +1546,23 @@ export function useOrquestra(): void {
           ?? store.workspaces[0]
         if (!ws) return
         const target = args.target
-        const panel = Object.values(ws.panels).find(
-          (p) => p.title === target || p.title?.replace(/\s•\s*$/, '') === target || p.id === target,
-        )
+        // Only dismiss panels owned by THIS Maestro — never title-match another run.
+        const namesMap = workerNamesByMaestroRef.current.get(_maestroId) ?? new Map<string, string>()
+        const runEntries = useOrchestrationRunStore.getState().listForMaestro(_maestroId)
+        const owned = resolveOwnedWorkerPanel({
+          target,
+          panels: ws.panels,
+          namesMap,
+          runEntries,
+        })
+        if (!owned) {
+          writeToMaestro(
+            _maestroId,
+            `[orquestra] Dismiss failed: no worker named "${target}" owned by this Maestro`,
+          )
+          return
+        }
+        const panel = ws.panels[owned.panelId]
         if (panel) {
           releaseWorkerTracking(
             {
@@ -1170,25 +1615,26 @@ export function useOrquestra(): void {
         const namesMap = workerNamesByMaestroRef.current.get(_maestroId) ?? new Map<string, string>()
         workerNamesByMaestroRef.current.set(_maestroId, namesMap)
         const runEntries = useOrchestrationRunStore.getState().listForMaestro(_maestroId)
-        const resolved = resolveReusableWorkerPanel({
-          requestedName: args.target,
+        // Ownership only — no global title fallback (would steal another Maestro's worker).
+        const resolved = resolveOwnedWorkerPanel({
+          target: args.target,
           panels: ws.panels,
           namesMap,
           runEntries,
         })
-        // Fallback: raw title/id match
-        const panel = resolved
-          ? ws.panels[resolved.panelId]
-          : Object.values(ws.panels).find(
-            (p) => p.title === args.target || p.title?.replace(/\s•\s*$/, '') === args.target || p.id === args.target,
+        if (!resolved) {
+          writeToMaestro(
+            _maestroId,
+            `[orquestra] Reassign failed: no open worker named "${args.target}" owned by this Maestro`,
           )
+          return
+        }
+        const panel = ws.panels[resolved.panelId]
         if (!panel) {
           writeToMaestro(_maestroId, `[orquestra] Reassign failed: no open worker named "${args.target}"`)
           return
         }
-        const workerName = resolved?.functionName
-          || namesMap.get(panel.id)
-          || args.target
+        const workerName = resolved.functionName || namesMap.get(panel.id) || args.target
         store.updatePanelTitle(ws.id, panel.id, workerName)
         const result = await reassignExistingWorker({
           maestroId: _maestroId,
@@ -1273,6 +1719,73 @@ export function useOrquestra(): void {
               store.closePanel(ws.id, panelId)
               orq(`× ${functionName} closed`)
             }
+            return
+          }
+
+          // Auto-drain run-scoped queue onto this free slot (pool_queue).
+          const autoDrain = settings.orchestrationAutoDrainQueue !== false
+          const dispatchMode = settings.orchestrationDispatchMode
+          if (
+            autoDrain
+            && dispatchMode !== 'legacy_function_panels'
+            && ws
+            && (status === 'done' || status === 'failed')
+            && ws.panels[panelId]
+          ) {
+            // Same key as enqueue (runId or maestro:pty) so tasks never sink under "unknown".
+            const { key, runId } = resolveQueueKeyForMaestro(event.orchestratorId)
+            void (async () => {
+              const coord = getWorkspaceQueueCoord(ws.rootPath || '', ws.id)
+              // Atomic claim (peek+dequeue one lock) — never reassign a stale peek
+              // while a concurrent free-slot drain took the next item.
+              const claimed = await coord.claimHead(key)
+              const item = claimed.item
+              if (!item) return
+              const taskName = item.name
+              const taskRole = item.role
+              const nm = maps.workerNamesByMaestro.get(event.orchestratorId) ?? new Map<string, string>()
+              store.updatePanelTitle(ws.id, panelId, taskName)
+              nm.set(panelId, taskName)
+              maps.workerNamesByMaestro.set(event.orchestratorId, nm)
+              const result = await reassignExistingWorker({
+                maestroId: event.orchestratorId,
+                panelId,
+                name: taskName,
+                role: taskRole,
+                settings,
+                workspaceRoot: ws.rootPath || '',
+                workspaceId: ws.id,
+              })
+              if (result.ok) {
+                maps.workerPanelIds.get(event.orchestratorId)?.add(panelId)
+                maps.workerPtyToPanel.set(result.ptyId, {
+                  maestroId: event.orchestratorId,
+                  panelId,
+                })
+                writeToMaestro(
+                  event.orchestratorId,
+                  `[orquestra] Drained queue → reassigned "${taskName}" on free slot.`,
+                )
+                orq(`drain → ${taskName} key=${key}`)
+                void persistOrchestrationSnapshot(
+                  ws.rootPath || '',
+                  ws.id,
+                  event.orchestratorId,
+                  nm,
+                )
+              } else {
+                await coord.enqueue(
+                  key,
+                  {
+                    name: taskName,
+                    role: taskRole,
+                    source: 'recruit_overflow',
+                  },
+                  runId,
+                )
+                orqWarn(`drain failed: ${result.reason}`)
+              }
+            })()
           }
         }
 

@@ -34,12 +34,16 @@ describe('sanitizeMaestroFlags', () => {
   it('keeps focused maestro when multiple', () => {
     const keep = sanitizeMaestroFlags('ws1', 'b')
     expect(keep).toBe('b')
-    expect(setPanelMaestro).toHaveBeenCalledWith('ws1', 'a', false)
+    // Multi-Maestro default: keep both flags (no forced collapse).
+    // When multi is on, setPanelMaestro should NOT clear the other crown.
+    // Single-mode tests mock settings; without mock multi defaults true.
+    expect(setPanelMaestro).not.toHaveBeenCalled()
   })
 
-  it('keeps stable id sort when no focus', () => {
+  it('keeps multiple maestros when multi enabled (default)', () => {
     const keep = sanitizeMaestroFlags('ws1', null)
-    expect(keep).toBe('a')
-    expect(setPanelMaestro).toHaveBeenCalledWith('ws1', 'b', false)
+    // Returns first in Object.values order (b then a in mock) — either ok; must not clear flags
+    expect(keep === 'a' || keep === 'b').toBe(true)
+    expect(setPanelMaestro).not.toHaveBeenCalled()
   })
 })
