@@ -163,8 +163,15 @@ const CanvasNodeWrapper = React.memo(({ nodeId, canvasPanelId, renderPanelConten
     if (!workspacePanels) return
     const layout = dockStoreApi.getState().zones.center.layout
     if (!layout) return
+    // Never treat this canvas-node's seed panel as an orphan. A race after
+    // createTerminal can run this effect against a briefly-stale panels map;
+    // undocking the seed panel sets layout=null and the subscribe effect
+    // removeNode's the whole node — e2e seedTerminal and fast creates break.
+    const seedPanelId = node?.panelId
     const collectOrphans = (n: DockLayoutNode): string[] => {
-      if (n.type === 'tabs') return n.panelIds.filter((id) => !workspacePanels[id])
+      if (n.type === 'tabs') {
+        return n.panelIds.filter((id) => id !== seedPanelId && !workspacePanels[id])
+      }
       const out: string[] = []
       for (const c of n.children) out.push(...collectOrphans(c))
       return out
@@ -174,7 +181,7 @@ const CanvasNodeWrapper = React.memo(({ nodeId, canvasPanelId, renderPanelConten
     for (const id of orphans) {
       try { dockStoreApi.getState().undockPanel(id) } catch { /* ignore */ }
     }
-  }, [workspacePanels, dockStoreApi])
+  }, [workspacePanels, dockStoreApi, node?.panelId])
 
   // Read the live zoom lazily so this callback identity stays STABLE across
   // zoom frames — re-rendering it on every frame would re-render CanvasNode.

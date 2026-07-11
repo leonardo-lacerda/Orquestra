@@ -109,24 +109,69 @@ export async function seedTerminal(
   page: Page,
   point: { x: number; y: number } = { x: 200, y: 200 },
 ): Promise<string> {
-  const hint = await page.evaluate((p) => window.__orquestraE2E!.createTerminal(p), point)
-  // createTerminal returns the node id only if the canvas store has already
-  // registered the node synchronously; under CI's throttled rAF that can lag,
-  // in which case it returns the panel id instead. Resolve the real node id
-  // from the live store (matching either) so we wait on the right selector.
-  const nodeId = await page
-    .waitForFunction(
-      (h) => {
-        const n = window.__orquestraE2E!.nodes().find((x) => x.id === h || x.panelId === h)
-        return n ? n.id : null
-      },
-      hint,
-      { timeout: 15_000 },
-    )
-    .then((handle) => handle.jsonValue() as Promise<string>)
-  // Wait for the entering animation to settle so opacity/transform are at
-  // their final values before tests interact with the node.
-  await page.waitForSelector(`[data-node-id="${nodeId}"]`)
+  // Canvas must be mounted (after setWorkspaceRoot remount this can lag).
+  await page.waitForSelector('[data-canvas-panel-id]', { timeout: 15_000 })
+  await page.waitForFunction(() => window.__orquestraE2E?.ready === true, { timeout: 15_000 })
+
+  let lastDiag: unknown = null
+  let nodeId: string | null = null
+  // Retry create — first call after workspace root change can miss canvas binding.
+  for (let attempt = 0; attempt < 5 && !nodeId; attempt++) {
+    lastDiag = await page.evaluate((p) => {
+      const h = window.__orquestraE2E!
+      const canvas = h.activeCanvasPanelId()
+      const before = h.nodes().length
+      const id = h.createTerminal(p)
+      const after = h.nodes()
+      const hit = after.find((x) => x.id === id || x.panelId === id)
+      return {
+        id,
+        canvas,
+        before,
+        afterCount: after.length,
+        hit: hit ? { id: hit.id, panelId: hit.panelId } : null,
+      }
+    }, point)
+    const hitId = (lastDiag as { hit?: { id: string } | null }).hit?.id
+      ?? null
+    if (hitId) {
+      nodeId = hitId
+      break
+    }
+    // Brief yield for canvas store remount after root hydrate
+    await page.waitForTimeout(300)
+  }
+
+  if (!nodeId) {
+    // Final poll (legacy path: create returned node id before store settle)
+    try {
+      const hint = (lastDiag as { id?: string })?.id
+      nodeId = await page
+        .waitForFunction(
+          (h) => {
+            if (!h) return null
+            const n = window.__orquestraE2E!.nodes().find((x) => x.id === h || x.panelId === h)
+            return n ? n.id : null
+          },
+          hint ?? null,
+          { timeout: 8_000 },
+        )
+        .then((handle) => handle.jsonValue() as Promise<string>)
+    } catch (error) {
+      throw new Error(
+        `seedTerminal: createTerminal did not register a canvas node. diagnostics=${JSON.stringify(lastDiag)}`,
+        { cause: error },
+      )
+    }
+  }
+
+  // Wait for the node in the DOM. Use `attached` (not visible): the e2e Electron
+  // window is deliberately hidden, so Playwright visibility checks fail even when
+  // the node is mounted.
+  await page.waitForSelector(`[data-node-id="${nodeId}"]`, {
+    timeout: 10_000,
+    state: 'attached',
+  })
   await page.waitForTimeout(400)
   return nodeId
 }

@@ -176,11 +176,36 @@ export function installE2EHarness(): void {
 
   const createTerminal = (point: Point): string => {
     const wsId = useAppStore.getState().selectedWorkspaceId
-    const panelId = useAppStore.getState().createTerminal(wsId, undefined, point)
+    // Pin to the currently mounted canvas panel. After setWorkspaceRoot remounts
+    // the shell, default placement can miss the live canvas store and leave a
+    // panel with no node — seedTerminal then times out waiting for the node.
+    const canvasId = activeCanvasPanelId()
+    const placement = canvasId
+      ? { target: 'canvas' as const, canvasPanelId: canvasId, position: point }
+      : undefined
+    const panelId = useAppStore.getState().createTerminal(
+      wsId,
+      undefined,
+      point,
+      placement,
+    )
     const cs = activeCanvasStore()
     if (!cs) return panelId
     for (const n of Object.values(cs.getState().nodes)) {
-      if (n.panelId === panelId) return n.id
+      if (n.panelId === panelId) {
+        // Focus + pin so viewport culling always mounts the node (hidden e2e
+        // windows often have odd containerSize/offset → empty visible set).
+        const st = cs.getState()
+        st.focusNode(n.id)
+        if (!st.nodes[n.id]?.isPinned) st.togglePin(n.id)
+        st.setZoom(1)
+        cs.setState({ viewportOffset: { x: 0, y: 0 } })
+        // Ensure container size is non-zero for culling math (hidden windows)
+        if (st.containerSize.width === 0 || st.containerSize.height === 0) {
+          cs.setState({ containerSize: { width: 1280, height: 800 } })
+        }
+        return n.id
+      }
     }
     return panelId
   }
