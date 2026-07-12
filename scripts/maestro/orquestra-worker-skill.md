@@ -32,7 +32,7 @@ Você é um WORKER no sistema de orquestração. Você recebeu uma tarefa espec�
 ## Conclusão (importante para o `wait` do orquestrador)
 
 Quando terminar (sucesso ou falha), imprima o resumo acima e **pare de produzir output**.
-O Orquestra grava `.orquestra-results/worker-<seu-nome>.json` quando o worker fica idle ou o processo sai.
+O Orquestra grava `.orquestra/runs/<runId>/results/worker-<seu-nome>.json` (ou `.orquestra/results/`) quando o worker fica idle ou o processo sai.
 O maestro usa:
 
 ```

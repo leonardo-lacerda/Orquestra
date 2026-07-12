@@ -42,6 +42,7 @@ const AGENT_SKILL_ROOTS: string[][] = [
   ['.claude', 'skills'],
   ['.agents', 'skills'],
   ['.orquestra', 'pi-agent', 'skills'],
+  ['.orquestra', 'claude', 'skills'],
   ['.opencode', 'skills'],
   ['.codex', 'skills'],
   ['.agent', 'skills'],

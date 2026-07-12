@@ -11,8 +11,11 @@ export function isDeliverablePath(relPath: string): boolean {
   if (!p || p.endsWith('/')) return false
   // Never treat orquestra control plane as deliverable violation
   if (p.startsWith('.orquestra/') || p.includes('/.orquestra/')) return false
-  if (p === 'orquestra.js' || p.endsWith('/orquestra.js')) return false
+  if (p === 'orquestra.js' || p === 'orquestra.cjs' || p === 'orquestra.cmd') return false
+  if (p.endsWith('/orquestra.js') || p.endsWith('/orquestra.cjs') || p.endsWith('/orquestra.cmd')) return false
   if (p.startsWith('.claude/')) return false
+  if (p === '.orquestra-commands' || p.startsWith('.orquestra-commands/')) return false
+  if (p === '.orquestra-results' || p.startsWith('.orquestra-results/')) return false
   if (p.startsWith('node_modules/')) return false
   // Has an extension → likely a source/doc deliverable
   return /\.[a-zA-Z0-9]+$/.test(p)

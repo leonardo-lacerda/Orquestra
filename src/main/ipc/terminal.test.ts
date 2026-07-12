@@ -402,7 +402,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       trackWorker('pty-w', 'pty-m', 'worker-fail', 'Break things carefully now', dir)
       onWorkerExit('pty-w', 7)
 
-      const file = path.join(dir, '.orquestra-results', 'worker-worker-fail.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-worker-fail.json')
       expect(fs.existsSync(file)).toBe(true)
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
         status: string
@@ -427,7 +427,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       trackWorker('pty-clean', 'pty-m', 'w-clean', 'Create only secret.dat for the job', dir)
       feedWorkerOutput('pty-clean', 'ORQUESTRA_WORKER_DONE\r\n')
       onWorkerExit('pty-clean', 0)
-      const file = path.join(dir, '.orquestra-results', 'worker-w-clean.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-w-clean.json')
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
         status: string
         exitCode: number
@@ -452,7 +452,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       feedWorkerOutput('pty-w2', 'Wrote built.txt\r\nORQUESTRA_WORKER_DONE\r\n')
       onWorkerExit('pty-w2', 0)
 
-      const file = path.join(dir, '.orquestra-results', 'worker-worker-ok.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-worker-ok.json')
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
         status: string
         exitCode: number
@@ -490,7 +490,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       vi.setSystemTime(t0 + 15_000)
       feedWorkerOutput('pty-echo', 'Create only missing-out.dat for the task\r\nORQUESTRA_WORKER_DONE\r\n')
       onWorkerIdle('pty-echo')
-      const echoFile = path.join(dir, '.orquestra-results', 'worker-echo-w.json')
+      const echoFile = path.join(dir, '.orquestra/results', 'worker-echo-w.json')
       const echoPayload = JSON.parse(fs.readFileSync(echoFile, 'utf-8')) as { status: string }
       expect(echoPayload.status).toBe('running')
 
@@ -504,7 +504,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
         'Tried writing missing-out.dat\r\nCould not find path\r\nORQUESTRA_WORKER_DONE\r\n',
       )
       onWorkerIdle('pty-miss')
-      const failFile = path.join(dir, '.orquestra-results', 'worker-miss-w.json')
+      const failFile = path.join(dir, '.orquestra/results', 'worker-miss-w.json')
       const failPayload = JSON.parse(fs.readFileSync(failFile, 'utf-8')) as {
         status: string
         accept?: Array<{ ok: boolean }>
@@ -520,7 +520,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       feedWorkerOutput('pty-idle', 'Wrote out.txt successfully\r\nORQUESTRA_WORKER_DONE\r\n')
       onWorkerIdle('pty-idle')
 
-      const file = path.join(dir, '.orquestra-results', 'worker-worker-idle.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-worker-idle.json')
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
         status: string
         exitCode: number
@@ -545,7 +545,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
       const { trackWorker, cascadeOrchestratorWorkers } = await import('./terminal')
       trackWorker('pty-w', 'pty-maestro', 'html', 'Create only index.html', dir)
       cascadeOrchestratorWorkers('pty-maestro', 'takeover')
-      const file = path.join(dir, '.orquestra-results', 'worker-html.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-html.json')
       expect(fs.existsSync(file)).toBe(true)
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
         status: string
@@ -582,7 +582,7 @@ describe('orquestra worker result files (shipped onWorkerExit / onWorkerIdle)', 
         'Update(app.js)\r\nEdited nav class\r\n✅ Task complete\r\n',
       )
       onWorkerIdle('pty-mid')
-      const file = path.join(dir, '.orquestra-results', 'worker-js.json')
+      const file = path.join(dir, '.orquestra/results', 'worker-js.json')
       const payload = JSON.parse(fs.readFileSync(file, 'utf-8')) as { status: string }
       expect(payload.status).toBe('running')
 

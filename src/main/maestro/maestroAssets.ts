@@ -107,23 +107,27 @@ process.exit(r.status === null ? 1 : r.status)
 `
 
 /**
- * Install orchestration CLI into a user workspace.
+ * Install orchestration CLI into a user workspace under `.orquestra/cli/`.
  * Always writes orquestra.cjs (immune to package.json "type":"module").
  * Writes orquestra.js as a small bootstrap that matches the package type so
- * `node orquestra.js …` keeps working after workers add "type":"module".
+ * `node .orquestra/cli/orquestra.js …` keeps working after workers add "type":"module".
+ *
+ * Also best-effort removes pre-centralization root litter (orquestra.cjs/js/cmd).
  *
  * @returns paths written (for rollback lists)
  */
 export function installOrquestraCliToWorkspace(
   workspacePath: string,
   cliSourceDir: string,
-): { cjsPath: string; jsPath: string; cmdPath: string | null } {
+): { cjsPath: string; jsPath: string; cmdPath: string | null; cliDir: string } {
   const srcJs = path.join(cliSourceDir, 'orquestra.js')
   if (!fs.existsSync(srcJs)) {
     throw new Error(`Missing maestro CLI source: ${srcJs}`)
   }
-  const cjsPath = path.join(workspacePath, 'orquestra.cjs')
-  const jsPath = path.join(workspacePath, 'orquestra.js')
+  const cliDir = path.join(workspacePath, '.orquestra', 'cli')
+  fs.mkdirSync(cliDir, { recursive: true })
+  const cjsPath = path.join(cliDir, 'orquestra.cjs')
+  const jsPath = path.join(cliDir, 'orquestra.js')
   fs.copyFileSync(srcJs, cjsPath)
 
   const isModule = workspacePackageIsModule(workspacePath)
@@ -132,7 +136,7 @@ export function installOrquestraCliToWorkspace(
   let cmdPath: string | null = null
   const cmdSrc = path.join(cliSourceDir, 'orquestra.cmd')
   if (fs.existsSync(cmdSrc)) {
-    cmdPath = path.join(workspacePath, 'orquestra.cmd')
+    cmdPath = path.join(cliDir, 'orquestra.cmd')
     // Always point at .cjs so Windows works under type:module too
     fs.writeFileSync(
       cmdPath,
@@ -140,5 +144,14 @@ export function installOrquestraCliToWorkspace(
       'utf-8',
     )
   }
-  return { cjsPath, jsPath, cmdPath }
+
+  // Clean pre-hub root copies so the project root stays tidy
+  for (const name of ['orquestra.cjs', 'orquestra.js', 'orquestra.cmd'] as const) {
+    const rootCopy = path.join(workspacePath, name)
+    try {
+      if (fs.existsSync(rootCopy)) fs.unlinkSync(rootCopy)
+    } catch { /* best-effort */ }
+  }
+
+  return { cjsPath, jsPath, cmdPath, cliDir }
 }

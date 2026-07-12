@@ -19,7 +19,8 @@ import * as path from 'node:path'
 import { hasMultipleTasks, isPureQuestion } from './multiTask'
 
 const CROWN_MARKER = '.orquestra/crown.json'
-const COMMANDS_DIR = '.orquestra-commands'
+/** Flat commands under hub when runId unknown (was root `.orquestra-commands`). */
+const COMMANDS_DIR = path.join('.orquestra', 'commands')
 
 /**
  * True when a *new* function name would exceed maxWorkers in the extension's
@@ -66,7 +67,7 @@ Reassign is the default next step; recruit only opens a free pool slot.
 ## Workflow (mandatory order)
 0. PLAN TASKS — ordered backlog + choose pool size K (usually 1–2)
 1. RECRUIT only K stable slots (e.g. w1) with --name + --role
-2. WAIT — node orquestra.js wait --run <runId> --workers w1 --timeout 300
+2. WAIT — node .orquestra/cli/orquestra.cjs wait --run <runId> --workers w1 --timeout 300
 3. REASSIGN free slots to the next tasks (or let auto-drain pull the queue)
 4. CONSOLIDATE — short summary of YOUR worker results only
 5. DISMISS pool slots when done
@@ -195,7 +196,14 @@ function ok(text: string): AgentToolResult<unknown> {
 function isAllowedMaestroBash(command: string): boolean {
   const c = command.trim().toLowerCase()
   if (!c) return false
-  if (c.includes('orquestra.js') || c.includes('orquestra.cmd') || /\borquestra\b/.test(c)) {
+  if (
+    c.includes('orquestra.js')
+    || c.includes('orquestra.cjs')
+    || c.includes('orquestra.cmd')
+    || c.includes('.orquestra/cli/')
+    || c.includes('.orquestra\\cli\\')
+    || /\borquestra\b/.test(c)
+  ) {
     return true
   }
   // read-only-ish inspection
@@ -383,7 +391,7 @@ export default function (pi: ExtensionAPI) {
     name: 'orquestra_wait',
     label: 'Wait for Workers',
     description:
-      'Block until named workers finish (polls .orquestra-results). Returns each worker status + summary. Call after recruit/reassign, before consolidating.',
+      'Block until named workers finish (polls .orquestra/runs/.../results or .orquestra/results). Returns each worker status + summary. Call after recruit/reassign, before consolidating.',
     promptSnippet: 'orquestra_wait — wait and read completion summaries',
     parameters: {
       type: 'object',
@@ -412,31 +420,44 @@ export default function (pi: ExtensionAPI) {
         .filter(Boolean)
       const timeoutSec = Math.max(1, Number(params.timeout) || 300)
       const deadline = Date.now() + timeoutSec * 1000
-      const resultsDir = path.join(cwd, '.orquestra-results')
+      const { runId } = resolveMaestroIdentity(cwd)
+
+      const resultCandidates = (name: string): string[] => {
+        const safe = path.basename(name).replace(/[/\\]/g, '_')
+        const file = `worker-${safe}.json`
+        const out: string[] = []
+        if (runId) {
+          out.push(path.join(cwd, '.orquestra', 'runs', runId.replace(/[/\\]/g, '_'), 'results', file))
+        }
+        out.push(path.join(cwd, '.orquestra', 'results', file))
+        out.push(path.join(cwd, '.orquestra-results', file)) // pre-hub fallback
+        return out
+      }
 
       const readResult = (name: string): {
         status: string | null
         summary: string
         role: string
       } => {
-        const safe = path.basename(name).replace(/[/\\]/g, '_')
-        const fp = path.join(resultsDir, `worker-${safe}.json`)
-        if (!fs.existsSync(fp)) return { status: null, summary: '', role: '' }
-        try {
-          const j = JSON.parse(fs.readFileSync(fp, 'utf-8')) as {
-            status?: string
-            summary?: string
-            role?: string
-            workerRole?: string
+        for (const fp of resultCandidates(name)) {
+          if (!fs.existsSync(fp)) continue
+          try {
+            const j = JSON.parse(fs.readFileSync(fp, 'utf-8')) as {
+              status?: string
+              summary?: string
+              role?: string
+              workerRole?: string
+            }
+            return {
+              status: String(j.status || '').toLowerCase(),
+              summary: String(j.summary || '').replace(/\s+/g, ' ').slice(0, 400),
+              role: String(j.role || j.workerRole || '').slice(0, 120),
+            }
+          } catch {
+            /* try next */
           }
-          return {
-            status: String(j.status || '').toLowerCase(),
-            summary: String(j.summary || '').replace(/\s+/g, ' ').slice(0, 400),
-            role: String(j.role || j.workerRole || '').slice(0, 120),
-          }
-        } catch {
-          return { status: null, summary: '', role: '' }
         }
+        return { status: null, summary: '', role: '' }
       }
 
       const terminal = new Set(['done', 'completed', 'failed', 'timeout'])
@@ -461,7 +482,7 @@ export default function (pi: ExtensionAPI) {
         await new Promise((r) => setTimeout(r, 2000))
       }
       return ok(
-        `Wait timed out after ${timeoutSec}s. Check .orquestra-results and reassign failed workers. Do not implement their work yourself.`,
+        `Wait timed out after ${timeoutSec}s. Check .orquestra/results (or runs/*/results) and reassign failed workers. Do not implement their work yourself.`,
       )
     },
   })
@@ -588,7 +609,7 @@ CROWN ACTIVE — ORCHESTRATOR ONLY. PLAN BEFORE RECRUIT.
 2) Recruit ONLY those planned workers (usually 2–4). maxWorkers is a ceiling, NOT a target.
 3) NEVER open 10 workers with the same role / same prompt.
 4) NEVER implement the deliverables yourself (no Write/Edit of project files).
-5) After recruits: orquestra_wait (or node orquestra.js wait). If wait is short or workers idle, reassign — do not code.
+5) After recruits: orquestra_wait (or node .orquestra/cli/orquestra.cjs wait). If wait is short or workers idle, reassign — do not code.
 6) Consolidate only after real worker results.
 
 ${multi ? 'Multi-part request → one worker per real part (e.g. html, css, js = 3).' : 'Implementation request → plan the minimal worker set, then recruit.'}
@@ -625,7 +646,7 @@ ${event.text}`,
         return {
           block: true,
           reason:
-            'Maestro mode: bash is limited to node orquestra.js ... and read-only inspection. Delegate implementation via orquestra_recruit.',
+            'Maestro mode: bash is limited to node .orquestra/cli/orquestra.cjs ... and read-only inspection. Delegate implementation via orquestra_recruit.',
         }
       }
     }

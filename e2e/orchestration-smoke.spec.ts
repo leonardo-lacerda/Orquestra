@@ -21,7 +21,7 @@ function writeWorkerResult(
   status: 'done' | 'failed' = 'done',
   summary = 'ok',
 ): void {
-  const dir = path.join(root, '.orquestra-results')
+  const dir = path.join(root, '.orquestra', 'results')
   fsSync.mkdirSync(dir, { recursive: true })
   const payload = {
     name,
@@ -57,15 +57,14 @@ test('orchestration smoke: recruit workers, seed results, wait succeeds', async 
     expect(await mainWindow.evaluate((nodeId) =>
       window.__orquestraE2E!.enableMaestro(nodeId), maestroNodeId)).toBe(true)
 
-    // CLI should be copied into the workspace by terminalSetMaestro
-    // (orquestra.cjs always; orquestra.js may be thin bootstrap)
+    // CLI should be copied under .orquestra/cli/ by terminalSetMaestro
     await expect.poll(async () => {
       try {
-        await fs.access(path.join(root, 'orquestra.cjs'))
+        await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.cjs'))
         return true
       } catch {
         try {
-          await fs.access(path.join(root, 'orquestra.js'))
+          await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.js'))
           return true
         } catch {
           return false

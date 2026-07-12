@@ -4,11 +4,16 @@
 // =============================================================================
 
 import {
+  ORQUESTRA_CLAUDE_DIR,
+  ORQUESTRA_CLAUDE_LOCAL,
+  ORQUESTRA_CLI_DIR,
   ORQUESTRA_LATEST_RUN_FILE,
   ORQUESTRA_LEGACY_COMMANDS_DIR,
   ORQUESTRA_LEGACY_RESULTS_DIR,
   ORQUESTRA_REGISTRY_FILE,
   ORQUESTRA_RUNS_DIR,
+  ORQUESTRA_ULTRA_LEGACY_COMMANDS_DIR,
+  ORQUESTRA_ULTRA_LEGACY_RESULTS_DIR,
 } from './types'
 
 /** Sanitize run/worker id segments for path safety. */
@@ -84,9 +89,43 @@ export function legacyCommandsDirRelative(): string {
   return ORQUESTRA_LEGACY_COMMANDS_DIR
 }
 
+/** Pre-hub root commands dir — watcher still scans for old workspaces. */
+export function ultraLegacyCommandsDirRelative(): string {
+  return ORQUESTRA_ULTRA_LEGACY_COMMANDS_DIR
+}
+
+/** Pre-hub root results dir — CLI wait still polls as fallback. */
+export function ultraLegacyResultsDirRelative(): string {
+  return ORQUESTRA_ULTRA_LEGACY_RESULTS_DIR
+}
+
 export function legacyWorkerResultPathRelative(workerName: string): string {
   const safe = safeOrquestraSegment(pathBasename(workerName))
   return `${ORQUESTRA_LEGACY_RESULTS_DIR}/worker-${safe}.json`
+}
+
+/** `.orquestra/cli` — installed Maestro CLI. */
+export function cliDirRelative(): string {
+  return ORQUESTRA_CLI_DIR
+}
+
+export function cliCjsRelative(): string {
+  return `${ORQUESTRA_CLI_DIR}/orquestra.cjs`
+}
+
+/** Shell invocation used in Maestro instructions / inject notes. */
+export function cliInvokeRelative(): string {
+  return `node ${cliCjsRelative()}`
+}
+
+/** Managed Maestro CLAUDE.local under the hub. */
+export function claudeLocalRelative(): string {
+  return ORQUESTRA_CLAUDE_LOCAL
+}
+
+/** Agent skill/commands tree under `.orquestra/claude`. */
+export function claudeHubDirRelative(): string {
+  return ORQUESTRA_CLAUDE_DIR
 }
 
 export function absFromWorkspace(workspaceRoot: string, rel: string): string {

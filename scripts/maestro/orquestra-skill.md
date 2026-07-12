@@ -47,7 +47,7 @@ Rules for the plan:
 For **each** planned worker, one command:
 
 ```bash
-node orquestra.cjs recruit --role "<that worker's unique role only>" --name <name>
+node .orquestra/cli/orquestra.cjs recruit --role "<that worker's unique role only>" --name <name>
 ```
 
 Pass `--run <yourRunId>` when multi-Maestro or when the system note gave you a runId.
@@ -62,7 +62,7 @@ Forbidden:
 ## STEP 2 — WAIT
 
 ```bash
-node orquestra.cjs wait --workers name1,name2,... --timeout 300
+node .orquestra/cli/orquestra.cjs wait --workers name1,name2,... --timeout 300
 ```
 
 ## STEP 3 — CONSOLIDATE
@@ -74,9 +74,9 @@ Summarize worker results. Do not re-implement their work.
 User asked for API + tests (example only — **do not run this unless they asked**):
 
 ```bash
-node orquestra.cjs recruit --name api --role "Add POST /items handler in the existing router. No tests."
-node orquestra.cjs recruit --name tests --role "Add unit tests for POST /items success and validation errors."
-node orquestra.cjs wait --workers api,tests --timeout 300
+node .orquestra/cli/orquestra.cjs recruit --name api --role "Add POST /items handler in the existing router. No tests."
+node .orquestra/cli/orquestra.cjs recruit --name tests --role "Add unit tests for POST /items success and validation errors."
+node .orquestra/cli/orquestra.cjs wait --workers api,tests --timeout 300
 ```
 
 ## Final override

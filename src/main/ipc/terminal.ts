@@ -56,6 +56,8 @@ import {
 } from '../../shared/orchestration/multiMaestroPolicy'
 import {
   absFromWorkspace,
+  claudeHubDirRelative,
+  claudeLocalRelative,
   legacyCommandsDirRelative,
   legacyResultsDirRelative,
   registryPathRelative,
@@ -64,6 +66,7 @@ import {
   runResultsDirRelative,
   runWorkerResultPathRelative,
   safeOrquestraSegment,
+  ultraLegacyCommandsDirRelative,
 } from '../../shared/orchestration/runFiles'
 import type { MaestroRegistryEntry, MaestroRegistryFile } from '../../shared/orchestration/types'
 import { getOrCreateLogger, removeLogger, flushAll as flushAllLoggers, disposeAll as disposeAllLoggers } from './terminalLogger'
@@ -263,8 +266,10 @@ export function onMaestroPtyGone(terminalId: string): void {
       try {
         const crownMarker = path.join(wsPath, '.orquestra', 'crown.json')
         if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
-        const claudeLocalPath = path.join(wsPath, 'CLAUDE.local.md')
-        if (fs.existsSync(claudeLocalPath)) {
+        // Managed Maestro block lives under the hub; also strip legacy root file
+        for (const rel of [claudeLocalRelative(), 'CLAUDE.local.md'] as const) {
+          const claudeLocalPath = path.join(wsPath, rel.replace(/\//g, path.sep))
+          if (!fs.existsSync(claudeLocalPath)) continue
           const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
           const next = removeMaestroFromClaudeLocal(prev)
           if (next == null) fs.unlinkSync(claudeLocalPath)
@@ -321,8 +326,9 @@ const PROCESSED_CLEANUP_MS = 5 * 60 * 1000 // clear dedup set every 5 min
 
 /**
  * Start or keep a workspace-level command demux poller.
- * Scans each run's commands folder (and legacy .orquestra-commands) and routes
- * each command to the Maestro PTY registered for that run (multi-Maestro safe).
+ * Scans each run's commands folder (and flat `.orquestra/commands`, plus
+ * ultra-legacy root `.orquestra-commands`) and routes each command to the
+ * Maestro PTY registered for that run (multi-Maestro safe).
  */
 export function startOrquestraWatcher(
   workspacePath: string,
@@ -339,8 +345,9 @@ export function startOrquestraWatcher(
     return
   }
 
-  const legacyCommandsDir = path.join(workspacePath, legacyCommandsDirRelative())
+  const legacyCommandsDir = path.join(workspacePath, legacyCommandsDirRelative().replace(/\//g, path.sep))
   if (!fs.existsSync(legacyCommandsDir)) fs.mkdirSync(legacyCommandsDir, { recursive: true })
+  const ultraLegacyCommandsDir = path.join(workspacePath, ultraLegacyCommandsDirRelative())
 
   const processedFiles = new Set<string>()
 
@@ -449,31 +456,35 @@ export function startOrquestraWatcher(
       }
     }
 
-    // Legacy flat commands dir: only when a single live Maestro (avoid last-armed steal)
+    // Flat commands dirs: only when a single live Maestro (avoid last-armed steal)
     const liveMaestros = [...orquestraTerminals]
     if (liveMaestros.length !== 1) {
-      // Multi: ignore legacy dir — unstamped cmds would always go to last-armed.
-      return
-    }
-    let legacyFiles: string[]
-    try {
-      legacyFiles = fs.readdirSync(legacyCommandsDir).filter((f) => f.endsWith('.json'))
-    } catch {
+      // Multi: ignore flat dirs — unstamped cmds would always go to last-armed.
       return
     }
     const fallbackMaestro = liveMaestros[0]
     const fallbackRun = maestroRunByPty.get(fallbackMaestro)
-    for (const filename of legacyFiles) {
-      processCommandFile(
-        path.join(legacyCommandsDir, filename),
-        filename,
-        fallbackMaestro,
-        fallbackRun,
-        winId,
-        // Sole live Maestro: unstamped legacy cmds (old agents / hand-written)
-        // are trusted — multi-Maestro already returned above when live ≠ 1.
-        true,
-      )
+    const flatDirs = [legacyCommandsDir, ultraLegacyCommandsDir]
+    for (const flatDir of flatDirs) {
+      let legacyFiles: string[]
+      try {
+        if (!fs.existsSync(flatDir)) continue
+        legacyFiles = fs.readdirSync(flatDir).filter((f) => f.endsWith('.json'))
+      } catch {
+        continue
+      }
+      for (const filename of legacyFiles) {
+        processCommandFile(
+          path.join(flatDir, filename),
+          filename,
+          fallbackMaestro,
+          fallbackRun,
+          winId,
+          // Sole live Maestro: unstamped flat cmds (old agents / hand-written)
+          // are trusted — multi-Maestro already returned above when live ≠ 1.
+          true,
+        )
+      }
     }
   }
 
@@ -762,7 +773,7 @@ export function normalizeWorkerResultStatus(status: string): string {
 }
 
 /** Write a worker result JSON file so the orquestra.js CLI's `wait` command
- *  can poll for it. Files are stored in <workspace>/.orquestra-results/.
+ *  can poll for it. Files are stored under <workspace>/.orquestra/results/.
  *
  *  Canonical schema (keep aliases for older CLIs):
  *    name, workerName, role, workerRole, status, exitCode, summary, timestamp, updatedAt
@@ -807,10 +818,10 @@ export function writeWorkerResultFile(workspacePath: string, result: {
       fs.writeFileSync(filePath, json)
     }
 
-    // Single-maestro / legacy CLI: also write flat .orquestra-results/
+    // Single-maestro / legacy CLI: also write flat `.orquestra/results/`
     // Multi with runId: skip flat write so same-name workers in two runs never collide.
     if (!multi || !runId) {
-      const resultsDir = path.join(workspacePath, legacyResultsDirRelative())
+      const resultsDir = path.join(workspacePath, legacyResultsDirRelative().replace(/\//g, path.sep))
       if (!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true })
       const safeName = path.basename(result.workerName).replace(/[/\\]/g, '_')
       fs.writeFileSync(path.join(resultsDir, `worker-${safeName}.json`), json)
@@ -1768,12 +1779,15 @@ export function registerHandlers(): void {
               const crownMarker = path.join(workspacePath, '.orquestra', 'crown.json')
               if (fs.existsSync(crownMarker)) fs.unlinkSync(crownMarker)
             }
-            const claudeLocalPath = path.join(workspacePath, 'CLAUDE.local.md')
-            if (fs.existsSync(claudeLocalPath) && reg.runs.length === 0) {
-              const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
-              const next = removeMaestroFromClaudeLocal(prev)
-              if (next == null) fs.unlinkSync(claudeLocalPath)
-              else fs.writeFileSync(claudeLocalPath, next, 'utf-8')
+            if (reg.runs.length === 0) {
+              for (const rel of [claudeLocalRelative(), 'CLAUDE.local.md'] as const) {
+                const claudeLocalPath = path.join(workspacePath, rel.replace(/\//g, path.sep))
+                if (!fs.existsSync(claudeLocalPath)) continue
+                const prev = fs.readFileSync(claudeLocalPath, 'utf-8')
+                const next = removeMaestroFromClaudeLocal(prev)
+                if (next == null) fs.unlinkSync(claudeLocalPath)
+                else fs.writeFileSync(claudeLocalPath, next, 'utf-8')
+              }
             }
           } catch (err) {
             log.error('[terminal] failed to remove crown markers: %s', err)
@@ -1876,25 +1890,28 @@ export function registerHandlers(): void {
       const partial: string[] = []
 
       try {
-        // 5. Copy CLI as orquestra.cjs (+ adaptive orquestra.js bootstrap).
+        // 5. Everything under `.orquestra/` hub (CLI, skills, commands, extension).
         // Workers often set package.json "type":"module", which breaks a plain
         // CommonJS orquestra.js — wait/recruit then fail and Maestro self-edits the CLI.
+        const orquestraDir = path.join(workspacePath!, '.orquestra')
+        if (!fs.existsSync(orquestraDir)) fs.mkdirSync(orquestraDir, { recursive: true })
+
         const installed = installOrquestraCliToWorkspace(workspacePath!, cliPath)
         partial.push(installed.cjsPath, installed.jsPath)
         if (installed.cmdPath) partial.push(installed.cmdPath)
 
-        const commandsDir = path.join(workspacePath!, '.claude', 'commands')
+        // Agent skills/commands live under `.orquestra/claude/` (not workspace-root `.claude/`)
+        const claudeHub = path.join(workspacePath!, claudeHubDirRelative().replace(/\//g, path.sep))
+        const commandsDir = path.join(claudeHub, 'commands')
         if (!fs.existsSync(commandsDir)) fs.mkdirSync(commandsDir, { recursive: true })
         const workerSkillSrc = path.join(cliPath, 'orquestra-worker-skill.md')
         const workerSkillDst = path.join(commandsDir, 'worker.md')
         fs.copyFileSync(workerSkillSrc, workerSkillDst)
         partial.push(workerSkillDst)
 
-        const cliCmdDir = path.join(workspacePath!, '.orquestra-commands')
+        // Flat IPC fallback when runId unknown (also under hub)
+        const cliCmdDir = path.join(workspacePath!, legacyCommandsDirRelative().replace(/\//g, path.sep))
         if (!fs.existsSync(cliCmdDir)) fs.mkdirSync(cliCmdDir, { recursive: true })
-
-        const orquestraDir = path.join(workspacePath!, '.orquestra')
-        if (!fs.existsSync(orquestraDir)) fs.mkdirSync(orquestraDir, { recursive: true })
 
         const piAgentDir = path.join(orquestraDir, 'pi-agent')
         if (!fs.existsSync(piAgentDir)) fs.mkdirSync(piAgentDir, { recursive: true })
@@ -1910,13 +1927,13 @@ export function registerHandlers(): void {
           partial.push(dst)
         }
 
-        // Project skill injection — Claude/Verboo slash & project skills
+        // Project skill injection — under hub (agents also get inject/ROLE/extension)
         const skillSrc = path.join(cliPath, 'orquestra-skill.md')
         if (fs.existsSync(skillSrc)) {
           const skillCmdDst = path.join(commandsDir, 'orquestra.md')
           fs.copyFileSync(skillSrc, skillCmdDst)
           partial.push(skillCmdDst)
-          const skillDir = path.join(workspacePath!, '.claude', 'skills', 'orquestra')
+          const skillDir = path.join(claudeHub, 'skills', 'orquestra')
           if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true })
           const skillMd = path.join(skillDir, 'SKILL.md')
           fs.copyFileSync(skillSrc, skillMd)
@@ -1998,11 +2015,12 @@ export function registerHandlers(): void {
         }, null, 2))
         partial.push(crownMarker)
 
-        const claudeLocalPath = path.join(workspacePath!, 'CLAUDE.local.md')
-        // Multi-Maestro: NEVER put a specific runId into workspace CLAUDE.local.md.
-        // That file is global — last crown to arm would overwrite runId and the other
-        // Maestro's agent would recruit/wait into the wrong run (log: all cmds on B's run).
+        // Managed Maestro instructions under hub (not workspace-root CLAUDE.local.md).
+        // Multi-Maestro: NEVER put a specific runId into this shared file — last crown
+        // would overwrite runId and steal the other Maestro's recruit/wait path.
         // Per-terminal run id stays in shell ORQUESTRA_RUN_ID + runs/{runId}/crown.json.
+        const claudeLocalPath = path.join(workspacePath!, claudeLocalRelative().replace(/\//g, path.sep))
+        fs.mkdirSync(path.dirname(claudeLocalPath), { recursive: true })
         const maestroInstructions = buildMaestroInstructions(orchestrationSettings, {
           runId: multiMaestro ? undefined : runId,
           multiMaestro,
@@ -2016,6 +2034,16 @@ export function registerHandlers(): void {
         const mergedClaude = mergeMaestroIntoClaudeLocal(prevClaude, maestroInstructions)
         fs.writeFileSync(claudeLocalPath, mergedClaude, 'utf-8')
         if (!prevClaude.trim()) partial.push(claudeLocalPath)
+        // Strip Maestro block from legacy root CLAUDE.local.md if present (hub is canonical)
+        try {
+          const rootClaude = path.join(workspacePath!, 'CLAUDE.local.md')
+          if (fs.existsSync(rootClaude)) {
+            const prev = fs.readFileSync(rootClaude, 'utf-8')
+            const next = removeMaestroFromClaudeLocal(prev)
+            if (next == null) fs.unlinkSync(rootClaude)
+            else if (next !== prev) fs.writeFileSync(rootClaude, next, 'utf-8')
+          }
+        } catch { /* best-effort migrate */ }
         void import('./linkedContext')
           .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
           .catch(() => { /* non-fatal */ })

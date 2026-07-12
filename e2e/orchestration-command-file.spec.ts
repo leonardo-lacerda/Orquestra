@@ -31,14 +31,14 @@ test('command-file recruit creates worker nodes on canvas', async () => {
       window.__orquestraE2E!.enableMaestro(nodeId), maestroNodeId)
     expect(enabled).toBe(true)
 
-    // CLI bootstrap (orquestra.cjs and/or orquestra.js) must land in workspace
+    // CLI bootstrap lands under .orquestra/cli/ (hub layout)
     await expect.poll(async () => {
       try {
-        await fs.access(path.join(root, 'orquestra.cjs'))
+        await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.cjs'))
         return true
       } catch {
         try {
-          await fs.access(path.join(root, 'orquestra.js'))
+          await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.js'))
           return true
         } catch {
           return false
@@ -77,7 +77,7 @@ test('command-file recruit creates worker nodes on canvas', async () => {
     const filename = `cmd-${Date.now()}-e2e.json`
     fsSync.writeFileSync(path.join(runCmdDir, filename), JSON.stringify(cmdPayload))
     // Dual-write legacy (CLI does this for single-run older watchers)
-    const legacyDir = path.join(root, '.orquestra-commands')
+    const legacyDir = path.join(root, '.orquestra', 'commands')
     fsSync.mkdirSync(legacyDir, { recursive: true })
     fsSync.writeFileSync(path.join(legacyDir, filename), JSON.stringify(cmdPayload))
 

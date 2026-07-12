@@ -37,10 +37,10 @@ function writeRunWorkerResult(
     runId,
   }
   fsSync.writeFileSync(path.join(dir, `worker-${name}.json`), JSON.stringify(payload, null, 2))
-  // Dual-write legacy for older waiters
-  const legacy = path.join(root, '.orquestra-results')
-  fsSync.mkdirSync(legacy, { recursive: true })
-  fsSync.writeFileSync(path.join(legacy, `worker-${name}.json`), JSON.stringify(payload, null, 2))
+  // Dual-write flat hub results for waiters without runId
+  const hubFlat = path.join(root, '.orquestra', 'results')
+  fsSync.mkdirSync(hubFlat, { recursive: true })
+  fsSync.writeFileSync(path.join(hubFlat, `worker-${name}.json`), JSON.stringify(payload, null, 2))
 }
 
 test('wait-seeded: command-file recruit + seeded results → CLI wait 0', async () => {
@@ -63,11 +63,11 @@ test('wait-seeded: command-file recruit + seeded results → CLI wait 0', async 
 
     await expect.poll(async () => {
       try {
-        await fs.access(path.join(root, 'orquestra.cjs'))
+        await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.cjs'))
         return true
       } catch {
         try {
-          await fs.access(path.join(root, 'orquestra.js'))
+          await fs.access(path.join(root, '.orquestra', 'cli', 'orquestra.js'))
           return true
         } catch {
           return false

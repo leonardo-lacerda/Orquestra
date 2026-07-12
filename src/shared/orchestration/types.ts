@@ -89,10 +89,22 @@ export const ORQUESTRA_RUNS_DIR = '.orquestra/runs'
 export const ORQUESTRA_LATEST_RUN_FILE = 'latest.json'
 /** Active Maestro runs registry under `.orquestra/registry.json`. */
 export const ORQUESTRA_REGISTRY_FILE = 'registry.json'
-/** Legacy flat results dir (pre multi-run). Still dual-written in single-maestro mode. */
-export const ORQUESTRA_LEGACY_RESULTS_DIR = '.orquestra-results'
-/** Legacy flat commands dir (pre multi-run). */
-export const ORQUESTRA_LEGACY_COMMANDS_DIR = '.orquestra-commands'
+/**
+ * Flat results dir (single-maestro / no runId). Lives under the hub so the
+ * workspace root stays clean. Still dual-written when multi is off.
+ */
+export const ORQUESTRA_LEGACY_RESULTS_DIR = '.orquestra/results'
+/** Flat commands dir (no runId) — under `.orquestra/` hub. */
+export const ORQUESTRA_LEGACY_COMMANDS_DIR = '.orquestra/commands'
+/** Pre-centralization root paths — read-only fallback for existing workspaces. */
+export const ORQUESTRA_ULTRA_LEGACY_RESULTS_DIR = '.orquestra-results'
+export const ORQUESTRA_ULTRA_LEGACY_COMMANDS_DIR = '.orquestra-commands'
+/** CLI install dir under the hub (orquestra.cjs / .js / .cmd). */
+export const ORQUESTRA_CLI_DIR = '.orquestra/cli'
+/** Managed Maestro instructions (was workspace-root CLAUDE.local.md). */
+export const ORQUESTRA_CLAUDE_LOCAL = '.orquestra/CLAUDE.local.md'
+/** Skills / slash commands for agents (was workspace-root `.claude/`). */
+export const ORQUESTRA_CLAUDE_DIR = '.orquestra/claude'
 
 /** One active Maestro crown / orchestration run. */
 export interface MaestroRegistryEntry {

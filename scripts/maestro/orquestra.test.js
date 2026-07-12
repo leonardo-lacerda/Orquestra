@@ -76,9 +76,9 @@ function runRaw(argList, opts = {}) {
   }
 }
 
-// Read the most recently created JSON in .orquestra-commands/
+// Read the most recently created JSON in .orquestra/commands/
 function readLatestCommand(dir) {
-  const cmdDir = path.join(dir, '.orquestra-commands')
+  const cmdDir = path.join(dir, '.orquestra', 'commands')
   if (!fs.existsSync(cmdDir)) return null
   const files = fs.readdirSync(cmdDir).filter(f => f.endsWith('.json')).sort()
   if (files.length === 0) return null
@@ -87,20 +87,14 @@ function readLatestCommand(dir) {
 }
 
 function countCommandFiles(dir) {
-  const cmdDir = path.join(dir, '.orquestra-commands')
+  const cmdDir = path.join(dir, '.orquestra', 'commands')
   if (!fs.existsSync(cmdDir)) return 0
   return fs.readdirSync(cmdDir).filter(f => f.endsWith('.json')).length
 }
 
 function cleanupDir(dir) {
   try {
-    const cmdDir = path.join(dir, '.orquestra-commands')
-    if (fs.existsSync(cmdDir)) {
-      for (const f of fs.readdirSync(cmdDir)) {
-        fs.unlinkSync(path.join(cmdDir, f))
-      }
-      fs.rmdirSync(cmdDir)
-    }
+    fs.rmSync(dir, { recursive: true, force: true })
   } catch { /* best effort */ }
 }
 
@@ -153,8 +147,7 @@ section('2. CLI — Recruit Command')
     assert(typeof cmd.timestamp === 'number', 'timestamp should be a number')
     assert(cmd.timestamp > 0, 'timestamp should be positive')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -170,8 +163,7 @@ section('2. CLI — Recruit Command')
     assert(cmd.args.agent === 'verboo', 'args.agent should be "verboo"')
     assert(cmd.args.name === 'my-worker', 'args.name should be "my-worker"')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -203,8 +195,7 @@ section('3. CLI — Dismiss Command')
     assert(cmd.cmd === 'dismiss', 'cmd should be "dismiss"')
     assert(cmd.args.target === 'worker-name', 'args.target should match')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -229,8 +220,7 @@ section('4. CLI — Connect Command')
     assert(cmd.args.target === 'worker-name', 'args.target should match')
     assert(cmd.args.path === './file.md', 'args.path should match')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -258,8 +248,7 @@ section('5. CLI — List Command')
     // list calls send('list') without args, so args defaults to {}
     assert(Object.keys(cmd.args).length === 0, 'args should be empty for list')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -278,8 +267,7 @@ section('6. CLI — Reassign Command')
     assert(cmd.args.target === 'worker-name', 'args.target should match')
     assert(cmd.args.role === 'New task', 'args.role should match')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -317,8 +305,7 @@ section('8. JSON Structure Validation')
     assert(cmd.timestamp >= before, 'timestamp should be >= before time')
     assert(cmd.timestamp <= after, 'timestamp should be <= after time')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -326,7 +313,7 @@ section('8. JSON Structure Validation')
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
     run('recruit --name file --role "File naming test"', { cwd: tmpDir })
-    const cmdDir = path.join(tmpDir, '.orquestra-commands')
+    const cmdDir = path.join(tmpDir, '.orquestra/commands')
     const files = fs.readdirSync(cmdDir)
     assert(files.length === 1, 'exactly one file should be created')
     assert(files[0].startsWith('cmd-'), 'filename should start with "cmd-"')
@@ -337,8 +324,7 @@ section('8. JSON Structure Validation')
     assert(nameMatch !== null, 'filename should match cmd-<timestamp>-<random>.json pattern')
     assert(nameMatch[2].length === 6, 'random suffix should be 6 chars')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -349,7 +335,7 @@ section('8. JSON Structure Validation')
     run('recruit --name t2 --role "Task 2" --agent verboo', { cwd: tmpDir })
     run('dismiss worker-1', { cwd: tmpDir })
 
-    const cmdDir = path.join(tmpDir, '.orquestra-commands')
+    const cmdDir = path.join(tmpDir, '.orquestra/commands')
     const files = fs.readdirSync(cmdDir).filter(f => f.endsWith('.json'))
     assert(files.length === 3, 'three command files should exist')
 
@@ -362,30 +348,28 @@ section('8. JSON Structure Validation')
       assert(typeof parsed.timestamp === 'number', f + ' should have timestamp number')
     }
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
 ;(function testDirectoryAutoCreation() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const cmdDir = path.join(tmpDir, '.orquestra-commands')
+    const cmdDir = path.join(tmpDir, '.orquestra/commands')
     assert(!fs.existsSync(cmdDir), 'commands dir should not exist before')
 
     run('recruit --name auto --role "Auto-create test"', { cwd: tmpDir })
     assert(fs.existsSync(cmdDir), 'commands dir should be auto-created')
     assert(fs.statSync(cmdDir).isDirectory(), 'should be a directory')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
 ;(function testExistingDirectoryNotRecreated() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-test-'))
   try {
-    const cmdDir = path.join(tmpDir, '.orquestra-commands')
+    const cmdDir = path.join(tmpDir, '.orquestra/commands')
     fs.mkdirSync(cmdDir, { recursive: true })
 
     // Write a pre-existing file
@@ -397,8 +381,7 @@ section('8. JSON Structure Validation')
     assert(files.includes('existing.json'), 'pre-existing file should be preserved')
     assert(files.length === 2, 'new file should be added alongside existing')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -407,7 +390,7 @@ section('9. File Watcher Simulation')
 
 ;(function testFileWatcherDetection() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-watcher-'))
-  const cmdDir = path.join(tmpDir, '.orquestra-commands')
+  const cmdDir = path.join(tmpDir, '.orquestra/commands')
   fs.mkdirSync(cmdDir, { recursive: true })
 
   let detected = false
@@ -817,8 +800,7 @@ section('21. Edge Cases')
     const cmd = readLatestCommand(tmpDir)
     assert(cmd.args.role === 'Fix bug #123 & deploy to prod!', 'special chars should be preserved in JSON')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -830,8 +812,7 @@ section('21. Edge Cases')
     const cmd = readLatestCommand(tmpDir)
     assert(cmd.args.name === 'dev-\u65e5\u672c\u8a9e', 'unicode should be preserved in JSON')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -845,8 +826,7 @@ section('21. Edge Cases')
     const rNoRole = runRaw(['recruit', '--name', 'html'], { cwd: tmpDir })
     assert(rNoRole.exitCode === 1, 'recruit without --role exits 1')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 
@@ -861,8 +841,7 @@ section('21. Edge Cases')
     assert(cmd.args.role.length === 500, 'long role should be preserved in JSON')
     assert(cmd.args.name === 'long', 'name should be set')
   } finally {
-    cleanupDir(tmpDir)
-    fs.rmdirSync(tmpDir)
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 })()
 

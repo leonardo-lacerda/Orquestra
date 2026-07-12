@@ -18,7 +18,8 @@ const tempDirs: string[] = []
 function makeWorkspace(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orquestra-wait-'))
   tempDirs.push(dir)
-  fs.mkdirSync(path.join(dir, '.orquestra-results'), { recursive: true })
+  // Hub flat results (post-centralization)
+  fs.mkdirSync(path.join(dir, '.orquestra', 'results'), { recursive: true })
   return dir
 }
 
@@ -40,8 +41,9 @@ function writeResult(
     updatedAt: Date.now(),
     ...extra,
   }
+  fs.mkdirSync(path.join(cwd, '.orquestra', 'results'), { recursive: true })
   fs.writeFileSync(
-    path.join(cwd, '.orquestra-results', `worker-${name}.json`),
+    path.join(cwd, '.orquestra', 'results', `worker-${name}.json`),
     JSON.stringify(payload, null, 2),
   )
 }
@@ -219,7 +221,7 @@ describe('shipped Maestro CLI wait/results', () => {
     expect(r.stdout).toContain('WORKER_RESULT:slow:TIMEOUT:')
     expect(r.stderr).toMatch(/Timeout/i)
 
-    const timeoutFile = path.join(cwd, '.orquestra-results', 'worker-slow.json')
+    const timeoutFile = path.join(cwd, '.orquestra', 'results', 'worker-slow.json')
     expect(fs.existsSync(timeoutFile)).toBe(true)
     const parsed = JSON.parse(fs.readFileSync(timeoutFile, 'utf-8')) as { status: string }
     expect(parsed.status).toBe('timeout')

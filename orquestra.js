@@ -2,12 +2,14 @@
 // =============================================================================
 // orquestra — CLI for Maestro mode terminals (canonical copy).
 //
-// Copied into the workspace as orquestra.cjs when Maestro is enabled
+// Copied into the workspace as .orquestra/cli/orquestra.cjs when Maestro is enabled
 // (see installOrquestraCliToWorkspace). Keep in sync with repo-root orquestra.js.
 // .cjs avoids breakage when the workspace package.json sets "type":"module".
 //
-// IPC commands write JSON to .orquestra-commands/ (watched by Orquestra main).
-// Local commands (wait / status) poll .orquestra-results/worker-<name>.json.
+// IPC commands write JSON to .orquestra/runs/{runId}/commands/ (or flat
+// .orquestra/commands/ when runId unknown). Watched by Orquestra main.
+// Local commands (wait / status) poll .orquestra/runs/.../results or
+// .orquestra/results/worker-<name>.json.
 //
 // Result file schema (worker-<name>.json):
 //   {
@@ -27,8 +29,12 @@
 const fs = require('fs')
 const path = require('path')
 
-const LEGACY_COMMANDS_DIR = '.orquestra-commands'
-const LEGACY_RESULTS_DIR = '.orquestra-results'
+/** Flat dirs under the .orquestra hub (post-centralization). */
+const LEGACY_COMMANDS_DIR = path.join('.orquestra', 'commands')
+const LEGACY_RESULTS_DIR = path.join('.orquestra', 'results')
+/** Pre-hub root dirs — still read for older workspaces. */
+const ULTRA_LEGACY_COMMANDS_DIR = '.orquestra-commands'
+const ULTRA_LEGACY_RESULTS_DIR = '.orquestra-results'
 const REGISTRY_PATH = path.resolve('.orquestra', 'registry.json')
 
 /** Statuses that mean wait() can stop polling this worker. */
@@ -96,14 +102,25 @@ function resultsDirFor(runId) {
   return path.resolve(LEGACY_RESULTS_DIR)
 }
 
+/** Prefer hub result file; fall back to pre-centralization root path. */
+function resultFileCandidates(runId, workerName) {
+  const safe = safeSeg(workerName)
+  const name = 'worker-' + safe + '.json'
+  const out = []
+  if (runId) {
+    out.push(path.join(resultsDirFor(runId), name))
+  }
+  out.push(path.join(path.resolve(LEGACY_RESULTS_DIR), name))
+  out.push(path.join(path.resolve(ULTRA_LEGACY_RESULTS_DIR), name))
+  return out
+}
+
 function send(cmd, args = {}, runId) {
   const rid = runId || resolveRunId({}) || null
   const dir = commandsDirFor(rid)
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-  // Also ensure legacy dir exists for older main builds
-  if (!fs.existsSync(LEGACY_COMMANDS_DIR)) {
-    try { fs.mkdirSync(path.resolve(LEGACY_COMMANDS_DIR), { recursive: true }) } catch { /* ignore */ }
-  }
+  // Ensure flat hub dir exists for older main builds / no-runId path
+  try { fs.mkdirSync(path.resolve(LEGACY_COMMANDS_DIR), { recursive: true }) } catch { /* ignore */ }
   const maestroId = readCrownMaestroId(rid)
   const payload = JSON.stringify({
     cmd,
@@ -114,7 +131,7 @@ function send(cmd, args = {}, runId) {
   })
   const filename = 'cmd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.json'
   fs.writeFileSync(path.join(dir, filename), payload)
-  // Dual-write to legacy commands when single-run for older watchers
+  // Dual-write to flat hub commands when run-scoped (older watchers / single-run tools)
   if (rid) {
     try {
       fs.writeFileSync(path.join(path.resolve(LEGACY_COMMANDS_DIR), filename), payload)
@@ -160,6 +177,7 @@ function safeWorkerFileName(name) {
 }
 
 function resultPathFor(name, runId) {
+  // Canonical write path (hub). Reads still fall through via readWorkerResult.
   const rid = runId || resolveRunId({})
   if (rid) {
     return path.join(resultsDirFor(rid), `worker-${safeWorkerFileName(name)}.json`)
@@ -168,24 +186,17 @@ function resultPathFor(name, runId) {
 }
 
 function readWorkerResult(name, runId) {
-  const rp = resultPathFor(name, runId)
-  if (!fs.existsSync(rp)) {
-    // Fallback legacy flat path
-    const legacy = path.resolve(LEGACY_RESULTS_DIR, `worker-${safeWorkerFileName(name)}.json`)
-    if (!fs.existsSync(legacy)) return null
+  const rid = runId || resolveRunId({})
+  for (const rp of resultFileCandidates(rid, name)) {
+    if (!fs.existsSync(rp)) continue
     try {
-      const raw = JSON.parse(fs.readFileSync(legacy, 'utf-8'))
+      const raw = JSON.parse(fs.readFileSync(rp, 'utf-8'))
       return normalizeResult(raw, name)
     } catch {
-      return null
+      /* try next candidate */
     }
   }
-  try {
-    const raw = JSON.parse(fs.readFileSync(rp, 'utf-8'))
-    return normalizeResult(raw, name)
-  } catch {
-    return null
-  }
+  return null
 }
 
 function normalizeResult(raw, name) {

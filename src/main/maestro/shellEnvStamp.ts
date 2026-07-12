@@ -71,7 +71,7 @@ export function buildMaestroArmSystemNote(runId: string): string {
   const safe = sanitizeRunId(runId)
   return (
     `[ORQUESTRA SYSTEM — not a user task] Maestro crown armed. Your runId is ${safe}. ` +
-    `On every CLI call pass --run ${safe} (example: node orquestra.cjs wait --run ${safe} --workers w1 --timeout 300). ` +
+    `On every CLI call pass --run ${safe} (example: node .orquestra/cli/orquestra.cjs wait --run ${safe} --workers w1 --timeout 300). ` +
     `Do NOT recruit, reassign, plan a backlog, invent workers, or start any product work from this message. ` +
     `Do NOT invent a calculator, landing page, or html/css/js split from the folder name. ` +
     `Stay idle until the human sends a NEW real request after this line. Reply with one short line only: "Maestro ready (run ${safe}). Waiting for your request."\r`

@@ -103,25 +103,32 @@ describe('maestroAssets', () => {
     expect(check.missing).toContain('cli:orquestra-worker-skill.md')
   })
 
-  it('installOrquestraCliToWorkspace: type module still runs node orquestra.js via cjs', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-cli-esm-'))
+  it('installOrquestraCliToWorkspace: installs under .orquestra/cli and cleans root litter', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maestro-cli-hub-'))
     tempRoots.push(root)
     const cliSrc = seedCliDir(root)
-    // Real-ish CLI body that prints ok (overwrite seed stub)
     fs.writeFileSync(
       path.join(cliSrc, 'orquestra.js'),
       "#!/usr/bin/env node\nconsole.log('cli-ok', process.argv[2] || '')\n",
     )
+    // Pre-hub root pollution should be removed on install
+    fs.writeFileSync(path.join(root, 'orquestra.js'), 'stale-root')
+    fs.writeFileSync(path.join(root, 'orquestra.cjs'), 'stale-root')
     fs.writeFileSync(
       path.join(root, 'package.json'),
       JSON.stringify({ name: 'demo', type: 'module' }, null, 2),
     )
     expect(workspacePackageIsModule(root)).toBe(true)
 
-    const { cjsPath, jsPath } = installOrquestraCliToWorkspace(root, cliSrc)
+    const { cjsPath, jsPath, cliDir } = installOrquestraCliToWorkspace(root, cliSrc)
+    expect(cliDir).toBe(path.join(root, '.orquestra', 'cli'))
+    expect(cjsPath).toBe(path.join(cliDir, 'orquestra.cjs'))
+    expect(jsPath).toBe(path.join(cliDir, 'orquestra.js'))
     expect(fs.existsSync(cjsPath)).toBe(true)
     expect(fs.readFileSync(jsPath, 'utf-8')).toContain('import.meta.url')
     expect(fs.readFileSync(jsPath, 'utf-8')).toContain(ORQUESTRA_JS_BOOTSTRAP_ESM.slice(0, 40))
+    expect(fs.existsSync(path.join(root, 'orquestra.js'))).toBe(false)
+    expect(fs.existsSync(path.join(root, 'orquestra.cjs'))).toBe(false)
 
     const r = spawnSync(process.execPath, [jsPath, 'wait'], {
       encoding: 'utf-8',
@@ -143,6 +150,7 @@ describe('maestroAssets', () => {
     expect(workspacePackageIsModule(root)).toBe(false)
 
     const { jsPath } = installOrquestraCliToWorkspace(root, cliSrc)
+    expect(jsPath).toContain(path.join('.orquestra', 'cli'))
     expect(fs.readFileSync(jsPath, 'utf-8')).toContain("require('child_process')")
 
     const r = spawnSync(process.execPath, [jsPath], { encoding: 'utf-8', cwd: root })

@@ -48,7 +48,7 @@ describe('maestroInstructions', () => {
     expect(instructions).toMatch(/POOL \+ QUEUE \+ REUSE|REUSES the panel/i)
     expect(instructions).toMatch(/COMPLETION/i)
     expect(instructions).toMatch(/DISMISS|dismiss/i)
-    expect(instructions).toContain('node orquestra.js dismiss')
+    expect(instructions).toContain('node .orquestra/cli/orquestra.cjs dismiss')
     expect(instructions).toMatch(/Preferred pool loop|recruit --name w1/i)
     expect(instructions).toMatch(/do not invent new names to bypass|do not bypass with a new --name/i)
     expect(instructions).toMatch(/NEVER default to html\/css\/js|canned demo plan/i)

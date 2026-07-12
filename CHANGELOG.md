@@ -4,6 +4,18 @@ All notable changes to Orquestra will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.4] - 2026-07-12
+
+### Changed
+
+- **Workspace hub layout**: all Orquestra-managed workspace files live under a single `.orquestra/` folder so the project root stays clean.
+  - CLI → `.orquestra/cli/` (`orquestra.cjs` / `.js` / `.cmd`)
+  - Flat commands/results → `.orquestra/commands/`, `.orquestra/results/`
+  - Maestro instructions → `.orquestra/CLAUDE.local.md`
+  - Skills/commands → `.orquestra/claude/`
+- Agents invoke the CLI as `node .orquestra/cli/orquestra.cjs …`.
+- Pre-hub root paths (`.orquestra-commands`, `.orquestra-results`, root CLI files, root Maestro `CLAUDE.local.md` block) are still **read** as fallbacks; enable migrates/cleans root litter.
+
 ## [1.5.0] - 2026-07-12
 
 ### Added

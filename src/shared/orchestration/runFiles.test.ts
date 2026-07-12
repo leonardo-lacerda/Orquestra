@@ -4,6 +4,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   absFromWorkspace,
+  claudeLocalRelative,
+  cliCjsRelative,
+  cliDirRelative,
+  cliInvokeRelative,
+  legacyCommandsDirRelative,
+  legacyResultsDirRelative,
   registryPathRelative,
   runCommandsDirRelative,
   runCrownPathRelative,
@@ -11,6 +17,8 @@ import {
   runQueuePathRelative,
   runResultsDirRelative,
   runWorkerResultPathRelative,
+  ultraLegacyCommandsDirRelative,
+  ultraLegacyResultsDirRelative,
   workerRolePathRelative,
   safeOrquestraSegment,
 } from './runFiles'
@@ -23,6 +31,18 @@ describe('runFiles multi-Maestro paths', () => {
     expect(runCommandsDirRelative(runId)).toBe('.orquestra/runs/run-abc-123/commands')
     expect(runResultsDirRelative(runId)).toBe('.orquestra/runs/run-abc-123/results')
     expect(registryPathRelative()).toBe('.orquestra/registry.json')
+  })
+
+  it('hub layout: CLI, flat commands/results, CLAUDE.local all under .orquestra/', () => {
+    expect(cliDirRelative()).toBe('.orquestra/cli')
+    expect(cliCjsRelative()).toBe('.orquestra/cli/orquestra.cjs')
+    expect(cliInvokeRelative()).toBe('node .orquestra/cli/orquestra.cjs')
+    expect(legacyCommandsDirRelative()).toBe('.orquestra/commands')
+    expect(legacyResultsDirRelative()).toBe('.orquestra/results')
+    expect(claudeLocalRelative()).toBe('.orquestra/CLAUDE.local.md')
+    // Ultra-legacy root paths still exported for read fallback
+    expect(ultraLegacyCommandsDirRelative()).toBe('.orquestra-commands')
+    expect(ultraLegacyResultsDirRelative()).toBe('.orquestra-results')
   })
 
   it('same worker name under two runs → distinct result + ROLE paths', () => {

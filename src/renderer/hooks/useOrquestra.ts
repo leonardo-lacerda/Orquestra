@@ -1700,7 +1700,7 @@ export function useOrquestra(): void {
           workerPtyToPanelRef.current.set(result.ptyId, { maestroId: _maestroId, panelId: panel.id })
           writeToMaestro(
             _maestroId,
-            `[orquestra] Reassigned "${workerName}" → new task. Wait with: node orquestra.js wait --workers ${workerName}`,
+            `[orquestra] Reassigned "${workerName}" → new task. Wait with: node .orquestra/cli/orquestra.cjs wait --workers ${workerName}`,
           )
           orq(`~ ${workerName} reassign`)
         } else {
