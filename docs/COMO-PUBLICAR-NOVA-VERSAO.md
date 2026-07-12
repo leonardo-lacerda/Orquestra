@@ -37,17 +37,17 @@ https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev/latest.yml
 - [ ] `@aws-sdk/client-s3` instalado: `npm install -D @aws-sdk/client-s3`
 - [ ] Pasta do projeto: `C:\Users\Leo\Documents\cate` (ou o clone local)
 
-### Variáveis de ambiente (só no seu PC — nunca no GitHub)
+### Variáveis de ambiente
 
 ```powershell
-$env:R2_ACCOUNT_ID = "seu_account_id"           # ex.: 940fe2949f46ad21d2e0aa9dd2cebdac
-$env:R2_ACCESS_KEY_ID = "sua_access_key_id"
-$env:R2_SECRET_ACCESS_KEY = "sua_secret_key"
+$env:R2_ACCOUNT_ID = "940fe2949f46ad21d2e0aa9dd2cebdac"
+$env:R2_ACCESS_KEY_ID = "86bb59b0b8c8f5facf953b45819c64b6"
+$env:R2_SECRET_ACCESS_KEY = "184ed8d6a2782be985fc7f534b4e60067be04930a6a83bb0ff299ec379b7d2af"
 $env:R2_BUCKET = "orquestra-releases"
 $env:ORQUESTRA_RELEASES_URL = "https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev"
 ```
 
-> **Nunca** commite Access Key / Secret. Se colar em chat, revogue o token e crie outro.
+> ⚠️ **Nunca torne este repositório público** com essas credenciais. Se vazar, revogue o token no Cloudflare Dashboard e gere outro.
 
 ---
 
@@ -123,9 +123,9 @@ npm run package:win
 ```powershell
 cd C:\Users\Leo\Documents\cate
 
-$env:R2_ACCOUNT_ID = "..."
-$env:R2_ACCESS_KEY_ID = "..."
-$env:R2_SECRET_ACCESS_KEY = "..."
+$env:R2_ACCOUNT_ID = "940fe2949f46ad21d2e0aa9dd2cebdac"
+$env:R2_ACCESS_KEY_ID = "86bb59b0b8c8f5facf953b45819c64b6"
+$env:R2_SECRET_ACCESS_KEY = "184ed8d6a2782be985fc7f534b4e60067be04930a6a83bb0ff299ec379b7d2af"
 $env:R2_BUCKET = "orquestra-releases"
 $env:ORQUESTRA_RELEASES_URL = "https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev"
 
@@ -190,9 +190,9 @@ Ajuste versão no `package.json` antes. Depois:
 cd C:\Users\Leo\Documents\cate
 
 $env:ORQUESTRA_RELEASES_URL = "https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev"
-$env:R2_ACCOUNT_ID = "SEU_ACCOUNT_ID"
-$env:R2_ACCESS_KEY_ID = "SUA_ACCESS_KEY"
-$env:R2_SECRET_ACCESS_KEY = "SUA_SECRET"
+$env:R2_ACCOUNT_ID = "940fe2949f46ad21d2e0aa9dd2cebdac"
+$env:R2_ACCESS_KEY_ID = "86bb59b0b8c8f5facf953b45819c64b6"
+$env:R2_SECRET_ACCESS_KEY = "184ed8d6a2782be985fc7f534b4e60067be04930a6a83bb0ff299ec379b7d2af"
 $env:R2_BUCKET = "orquestra-releases"
 
 npm run package:win
@@ -226,15 +226,18 @@ Se mudar a URL pública do R2 no futuro:
 
 ## Arquivos no R2 — o que manter
 
-Mínimo para o auto-update Windows:
+Os arquivos são organizados em pastas por versão no bucket:
 
-- `latest.yml`
-- `Orquestra Setup x.y.z.exe`
-- `Orquestra Setup x.y.z.exe.blockmap`
+```
+v1.5.1/
+  Orquestra Setup 1.5.1.exe
+  Orquestra Setup 1.5.1.exe.blockmap
+  Orquestra-1.5.1-win.zip
+```
 
-Opcional: o `.zip` portable.
+O `latest.yml` fica na raiz e aponta pra pasta da versão mais recente.
 
-**Dica de espaço:** apague setups antigos no bucket quando publicar um novo (deixe a versão atual + `latest.yml`).
+**Dica de espaço:** apague pastas de versões antigas no bucket quando não precisar mais delas.
 
 ---
 
