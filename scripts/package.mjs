@@ -65,10 +65,10 @@ if (!process.env.ORQUESTRA_RELEASES_URL) {
   // Keep in sync with src/shared/releasesFeed.ts default (override before package
   // with the real public R2 URL once the bucket exists).
   process.env.ORQUESTRA_RELEASES_URL =
-    'https://pub-PLACEHOLDER.r2.dev/orquestra-releases'
-  console.warn(
-    '[package] ORQUESTRA_RELEASES_URL not set — using placeholder. ' +
-      'Set it to your public Cloudflare R2 URL before shipping auto-update.',
+    'https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev'
+  console.log(
+    '[package] ORQUESTRA_RELEASES_URL default →',
+    process.env.ORQUESTRA_RELEASES_URL,
   )
 }
 

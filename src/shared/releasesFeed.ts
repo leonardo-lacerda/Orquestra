@@ -21,9 +21,9 @@ function normalizeFeedBase(url: string): string {
  */
 export const ORQUESTRA_RELEASES_FEED_URL = normalizeFeedBase(
   (typeof process !== 'undefined' && process.env.ORQUESTRA_RELEASES_URL) ||
-    // Default: set this once after creating the R2 public bucket / custom domain.
-    // Until then, publish script / docs tell you to set ORQUESTRA_RELEASES_URL.
-    'https://pub-PLACEHOLDER.r2.dev/orquestra-releases',
+    // Cloudflare R2 public development URL (bucket: orquestra-releases).
+    // Override with ORQUESTRA_RELEASES_URL if you switch to a custom domain.
+    'https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev',
 )
 
 /** true when the feed URL still has the setup placeholder. */
