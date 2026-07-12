@@ -30,6 +30,7 @@ import { displayString, PANEL_DEFAULT_SIZES } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Tooltip } from '../ui/Tooltip'
 import { useTranslation } from '../i18n/useTranslation'
+import { PRESET_COLORS, setDrawingStyle, useDrawingStyle } from './drawingStyle'
 
 // The minimap pill can be docked in any of the four canvas corners. The choice
 // persists across sessions in ui-state.json (via the UI-state store).
@@ -217,6 +218,7 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const zoomOutKey = useShortcutStore((s) => displayString(s.shortcuts.zoomOut))
   const zoomResetKey = useShortcutStore((s) => displayString(s.shortcuts.zoomReset))
   const zoomText = `${Math.round(zoom * 100)}%`
+  const drawingStyle = useDrawingStyle()
 
   // Minimap pill docking corner + drag-to-dock handling. The toggle button
   // doubles as a drag handle: a click toggles the map, a drag past a small
@@ -266,7 +268,68 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   return (
     <>
     <div className="absolute inset-x-0 bottom-4 z-50 flex justify-center pointer-events-none">
-      <div data-onboarding="toolbar" className="relative pointer-events-auto">
+      <div data-onboarding="toolbar" className="relative pointer-events-auto flex flex-col items-center gap-2">
+        {/* Draw style strip — sibling of the toolbar (not a body portal) so Vite
+            HMR remounts never fight document.body removeChild. */}
+        {activeTool === 'draw' && (
+          <div
+            data-drawing-style-picker
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-subtle bg-surface-0 shadow-[0_8px_24px_-6px_var(--shadow-node)]"
+          >
+            {PRESET_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setDrawingStyle({ strokeColor: c })}
+                aria-label={`Color ${c}`}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: c,
+                  border: c === drawingStyle.strokeColor ? '2.5px solid var(--focus-blue)' : '2px solid var(--border-subtle)',
+                  cursor: 'pointer', padding: 0, flexShrink: 0,
+                }}
+              />
+            ))}
+            <div className="w-px h-5 bg-surface-5 mx-1" />
+            <select
+              value={drawingStyle.strokeWidth}
+              onChange={(e) => setDrawingStyle({ strokeWidth: Number(e.target.value) })}
+              className="bg-surface-2 text-primary border border-subtle rounded-md px-1.5 py-0.5 text-[12px] cursor-pointer"
+            >
+              <option value={1}>Thin</option>
+              <option value={2}>Normal</option>
+              <option value={4}>Thick</option>
+            </select>
+            {activeDrawingTool === 'rect' && (
+              <button
+                type="button"
+                onClick={() => setDrawingStyle({
+                  fillColor: drawingStyle.fillColor === 'transparent'
+                    ? `${drawingStyle.strokeColor}33`
+                    : 'transparent',
+                })}
+                className={`px-2.5 py-0.5 rounded-md text-[11px] border border-subtle cursor-pointer ${
+                  drawingStyle.fillColor !== 'transparent' ? 'bg-hover-strong' : 'bg-transparent'
+                } text-primary`}
+              >
+                Fill
+              </button>
+            )}
+            {activeDrawingTool === 'text' && (
+              <select
+                value={drawingStyle.fontSize}
+                onChange={(e) => setDrawingStyle({ fontSize: Number(e.target.value) })}
+                className="bg-surface-2 text-primary border border-subtle rounded-md px-1.5 py-0.5 text-[12px] cursor-pointer"
+              >
+                <option value={12}>12px</option>
+                <option value={16}>16px</option>
+                <option value={20}>20px</option>
+                <option value={28}>28px</option>
+                <option value={36}>36px</option>
+              </select>
+            )}
+          </div>
+        )}
         <div className="rounded-full border border-subtle bg-surface-0 shadow-[0_8px_24px_-6px_var(--shadow-node)]">
           <div className="flex items-center gap-0.5 px-1 py-1">
             {/* Interaction tools (Select / Hand) */}

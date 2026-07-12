@@ -211,17 +211,16 @@ export function wireTerminalListeners(args: {
   const removeDataListener = electronAPI.onTerminalData((id: string, data: string) => {
     if (id === ptyId) {
       sawOutput = true
-      terminal.write(data)
+      const hardHeal = looksLikeTuiFullRedraw(data)
+      // xterm.write is asynchronous: parsing and rendering are queued. Healing
+      // before its callback races the active TUI frame and can clear/recreate
+      // the renderer while that frame is still being committed.
+      terminal.write(data, () => {
+        try {
+          scheduleTuiWebglHeal({ hard: hardHeal, reason: 'output' })
+        } catch { /* ignore mid-dispose */ }
+      })
       if (outputShowsBodySpinner(data)) noteAgentSpinnerByte(ptyId)
-      // TUI full-frame redraws (Grok/Claude/Verboo) scramble the shared WebGL
-      // atlas until a real resize. Self-heal without SIGWINCH — soft clear on
-      // any chunk, hard rebuild when the payload looks like a full paint.
-      try {
-        scheduleTuiWebglHeal({
-          hard: looksLikeTuiFullRedraw(data),
-          reason: 'output',
-        })
-      } catch { /* ignore mid-dispose */ }
     }
   })
   cleanupListeners.push(removeDataListener)

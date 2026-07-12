@@ -3,6 +3,7 @@
 // Ported from CanvasView.swift.
 // =============================================================================
 
+/* @refresh reset */
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useCanvasStoreContext, useCanvasStoreApi } from '../stores/CanvasStoreContext'

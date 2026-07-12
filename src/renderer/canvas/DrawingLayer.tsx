@@ -1,7 +1,11 @@
+/* @refresh reset */
 // =============================================================================
 // DrawingLayer — SVG overlay for whiteboard-style annotations on the canvas.
 // Fixes: per-element arrowheads, capture-phase context menu, text tool,
 // select/move/resize, delete key.
+//
+// Style chrome lives in CanvasToolbar (no body portal) so Vite HMR remounts of
+// this module don't hit removeChild on orphaned portal nodes under document.body.
 // =============================================================================
 
 import React, { useCallback, useRef, useState, useEffect } from 'react'
@@ -11,31 +15,12 @@ import { useUIStore } from '../stores/uiStore'
 import { viewToCanvas, canvasToView } from '../lib/canvas/coordinates'
 import type { DrawingElement, DrawingTool, DrawingRect, DrawingArrow, DrawingLine, DrawingText } from '../../shared/types'
 import { generateId } from '../stores/canvas/helpers'
-
-// ---------------------------------------------------------------------------
-// Drawing style
-// ---------------------------------------------------------------------------
-
-interface DrawingStyle {
-  strokeColor: string
-  strokeWidth: number
-  fillColor: string
-  fontSize: number
-}
-
-const PRESET_COLORS = [
-  '#ffffff', '#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c',
-  '#4dabf7', '#9775fa', '#f06595', '#868e96', '#000000',
-]
-
-const DEFAULT_STYLE: DrawingStyle = {
-  // Blue is visible on both dark and light canvas backgrounds (pure white
-  // vanished on light themes and looked "broken").
-  strokeColor: '#4dabf7',
-  strokeWidth: 2,
-  fillColor: 'transparent',
-  fontSize: 16,
-}
+import {
+  type DrawingStyle,
+  getDrawingStyle,
+  useDrawingStyle,
+  getDrawingPortalHost,
+} from './drawingStyle'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -69,7 +54,7 @@ const DrawingLayer: React.FC = () => {
   const dragRef = useRef<{ startX: number; startY: number; tool: DrawingTool; style: DrawingStyle } | null>(null)
   const [textInput, setTextInput] = useState<{ clientX: number; clientY: number; canvasX: number; canvasY: number } | null>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
-  const [style, setStyle] = useState<DrawingStyle>(DEFAULT_STYLE)
+  const style = useDrawingStyle()
   const svgRef = useRef<SVGSVGElement | null>(null)
   /** Host canvas container for THIS DrawingLayer — set via svg callback ref so
    *  multi-canvas windows don't all bind to document.querySelector's first hit. */
@@ -80,7 +65,6 @@ const DrawingLayer: React.FC = () => {
     setHostContainer((prev) => (prev === next ? prev : next))
   }, [])
   const activeTool = useUIStore((s) => s.activeTool)
-  const activeDrawingTool = useUIStore((s) => s.activeDrawingTool)
 
   const resolveContainer = useCallback((): Element | null => {
     return hostContainer
@@ -176,7 +160,7 @@ const DrawingLayer: React.FC = () => {
           return
         }
 
-        const currentStyle = { ...style }
+        const currentStyle = { ...getDrawingStyle() }
         dragRef.current = { startX: point.x, startY: point.y, tool: drawTool, style: currentStyle }
 
         const handleMouseMove = (ev: MouseEvent) => {
@@ -238,7 +222,14 @@ const DrawingLayer: React.FC = () => {
     // Capture so we run before panel content / React marquee handlers.
     container.addEventListener('mousedown', handleMouseDown as EventListener, true)
     return () => container.removeEventListener('mousedown', handleMouseDown as EventListener, true)
-  }, [hostContainer, getCanvasPoint, addDrawing, selectDrawing, style, commitFromDrag])
+  }, [hostContainer, getCanvasPoint, addDrawing, selectDrawing, commitFromDrag])
+
+  // Drop ephemeral UI when this layer unmounts (HMR / canvas switch).
+  useEffect(() => () => {
+    setTextInput(null)
+    setGhost(null)
+    dragRef.current = null
+  }, [])
 
   // ---- Task 2: Context menu for drawings (state-based, same pattern as Canvas.tsx) ----
   const [drawingContextMenuId, setDrawingContextMenuId] = useState<string | null>(null)
@@ -412,14 +403,15 @@ const DrawingLayer: React.FC = () => {
     if (!input || !textInput) return
     const text = input.value.trim()
     if (text) {
+      const s = getDrawingStyle()
       addDrawing({
         type: 'text', id: generateId(),
         x: textInput.canvasX, y: textInput.canvasY,
-        text, fontSize: style.fontSize, color: style.strokeColor,
+        text, fontSize: s.fontSize, color: s.strokeColor,
       })
     }
     setTextInput(null)
-  }, [textInput, addDrawing, style])
+  }, [textInput, addDrawing])
 
   const allElements = [...drawings, ...(ghost ? [ghost] : [])]
 
@@ -582,7 +574,8 @@ const DrawingLayer: React.FC = () => {
         })}
       </svg>
 
-      {/* Task 3: Text input — portaled to body */}
+      {/* Text input — only portal while typing; host is a stable body node so
+          HMR remounts don't fight document.body's direct children list. */}
       {textInput && createPortal(
         <div style={{ position: 'fixed', left: textInput.clientX, top: textInput.clientY - 16, zIndex: 2147483000 }}>
           <input
@@ -604,82 +597,7 @@ const DrawingLayer: React.FC = () => {
             onBlur={handleTextSubmit}
           />
         </div>,
-        document.body,
-      )}
-
-      {/* Style picker — visible in draw mode */}
-      {activeTool === 'draw' && createPortal(
-        <div
-          data-drawing-style-picker
-          style={{
-          position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 2147483000,
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 12px', borderRadius: 12,
-          background: 'var(--surface-0)', border: '1px solid var(--border-subtle)',
-          boxShadow: '0 8px 24px -6px var(--shadow-node)',
-        }}>
-          {PRESET_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setStyle((s) => ({ ...s, strokeColor: c }))}
-              style={{
-                width: 22, height: 22, borderRadius: '50%',
-                background: c,
-                border: c === style.strokeColor ? '2.5px solid var(--focus-blue)' : '2px solid var(--border-subtle)',
-                cursor: 'pointer', padding: 0, flexShrink: 0,
-              }}
-            />
-          ))}
-          <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', margin: '0 4px' }} />
-          <select
-            value={style.strokeWidth}
-            onChange={(e) => setStyle((s) => ({ ...s, strokeWidth: Number(e.target.value) }))}
-            style={{
-              background: 'var(--surface-2)', color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)', borderRadius: 6,
-              padding: '2px 6px', fontSize: 12, cursor: 'pointer',
-            }}
-          >
-            <option value={1}>Thin</option>
-            <option value={2}>Normal</option>
-            <option value={4}>Thick</option>
-          </select>
-          {activeDrawingTool === 'rect' && (
-            <button
-              onClick={() => setStyle((s) => ({
-                ...s,
-                fillColor: s.fillColor === 'transparent' ? s.strokeColor + '33' : 'transparent',
-              }))}
-              style={{
-                padding: '3px 10px', borderRadius: 6, fontSize: 11,
-                background: style.fillColor !== 'transparent' ? 'var(--hover-strong)' : 'transparent',
-                color: 'var(--text-primary)', border: '1px solid var(--border-subtle)',
-                cursor: 'pointer',
-              }}
-            >
-              Fill
-            </button>
-          )}
-          {activeDrawingTool === 'text' && (
-            <select
-              value={style.fontSize}
-              onChange={(e) => setStyle((s) => ({ ...s, fontSize: Number(e.target.value) }))}
-              style={{
-                background: 'var(--surface-2)', color: 'var(--text-primary)',
-                border: '1px solid var(--border-subtle)', borderRadius: 6,
-                padding: '2px 6px', fontSize: 12, cursor: 'pointer',
-              }}
-            >
-              <option value={12}>12px</option>
-              <option value={16}>16px</option>
-              <option value={20}>20px</option>
-              <option value={28}>28px</option>
-              <option value={36}>36px</option>
-            </select>
-          )}
-        </div>,
-        document.body,
+        getDrawingPortalHost(),
       )}
     </>
   )

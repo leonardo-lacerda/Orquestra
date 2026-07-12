@@ -41,7 +41,10 @@ vi.mock('@xterm/xterm', () => {
       this.element = document.createElement('div')
       container.appendChild(this.element)
     }
-    write(s: string): void { this.writes.push(s) }
+    write(s: string, callback?: () => void): void {
+      this.writes.push(s)
+      callback?.()
+    }
     onData(): { dispose: () => void } { return { dispose: () => {} } }
     onResize(): { dispose: () => void } { return { dispose: () => {} } }
     onTitleChange(): { dispose: () => void } { return { dispose: () => {} } }

@@ -199,7 +199,11 @@ export function scheduleTuiWebglHeal(
   if (wantHard) tuiHardArmed = true
   if (!tuiHardArmed) return
 
-  if (tuiHardTimer !== null) clearTimeout(tuiHardTimer)
+  // Do not debounce the hard recovery forever. Interactive AI TUIs can emit a
+  // full-frame chunk more often than TUI_HARD_HEAL_MS; resetting on every chunk
+  // meant this rebuild never ran until output stopped or the panel was resized.
+  // The first full redraw now establishes a maximum wait; later frames coalesce.
+  if (tuiHardTimer !== null) return
   tuiHardTimer = setTimeout(() => {
     tuiHardTimer = null
     tuiHardArmed = false
