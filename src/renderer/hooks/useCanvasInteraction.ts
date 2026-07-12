@@ -452,6 +452,13 @@ export function useCanvasInteraction(
           return
         }
 
+        // Draw / annotation tool owns left-drag on the canvas (DrawingLayer).
+        // Starting a marquee here steals mousemove/mouseup and makes strokes
+        // look like "nothing appears" — leave the gesture to DrawingLayer.
+        if (useUIStore.getState().activeTool === 'draw') {
+          return
+        }
+
         // Left-click on canvas background (not on a node) => marquee selection or clear
         const target = e.target as HTMLElement
         const isOnNode = target.closest('[data-node-id]') !== null

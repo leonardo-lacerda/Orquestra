@@ -89,7 +89,23 @@ function useWorkspaceCanvasChildOwners(workspaceId: string): Map<string, string>
     // Recompute immediately on store-set change so we don't render one frame of
     // stale ids after switching workspaces.
     setOwners(compute())
-    const unsubs = stores.map((s) => s.subscribe(() => setOwners(compute())))
+    // Canvas stores also notify on drawings/zoom/etc. Owners only depend on
+    // nodes + dock layout — skip setState when the map is unchanged so drawing
+    // strokes don't re-render the whole panel tree on every addDrawing.
+    const mapsEqual = (a: Map<string, string>, b: Map<string, string>) => {
+      if (a === b) return true
+      if (a.size !== b.size) return false
+      for (const [k, v] of a) {
+        if (b.get(k) !== v) return false
+      }
+      return true
+    }
+    const unsubs = stores.map((s) =>
+      s.subscribe(() => {
+        const next = compute()
+        setOwners((prev) => (mapsEqual(prev, next) ? prev : next))
+      }),
+    )
     return () => {
       for (const fn of unsubs) fn()
     }

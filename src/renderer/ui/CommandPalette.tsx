@@ -76,7 +76,6 @@ const ReloadIcon = () => <ArrowsClockwise size={ICON_SIZE} />
 const DeleteRuntimeIcon = () => <Trash size={ICON_SIZE} />
 const TutorialIcon = () => <GraduationCap size={ICON_SIZE} />
 const SkillsIcon = () => <PuzzlePiece size={ICON_SIZE} />
-const AgentIcon = () => <OrquestraLogo size={ICON_SIZE} />
 const CloseIcon = () => <X size={ICON_SIZE} />
 const MinimapIcon = () => <MapTrifold size={ICON_SIZE} />
 const UndoIcon = () => <ArrowUUpLeft size={ICON_SIZE} />
@@ -160,7 +159,6 @@ export const CommandPalette: React.FC = () => {
       { id: 'newTerminal', title: t('palette.newTerminal'), icon: <TerminalIcon />, action: run('newTerminal') },
       { id: 'newBrowser', title: t('palette.newBrowser'), icon: <GlobeIcon />, action: run('newBrowser') },
       { id: 'newEditor', title: t('palette.newEditor'), icon: <FileTextIcon />, action: run('newEditor') },
-      { id: 'newAgent', title: t('palette.newAgent'), icon: <AgentIcon />, action: run('newAgent') },
       { id: 'newCanvas', title: t('palette.newCanvas'), icon: <LayoutIcon />, action: run('newCanvas') },
       { id: 'closePanel', title: t('palette.closePanel'), icon: <CloseIcon />, action: run('closePanel') },
       { id: 'saveFile', title: t('palette.saveFile'), icon: <SaveIcon />, action: run('saveFile') },

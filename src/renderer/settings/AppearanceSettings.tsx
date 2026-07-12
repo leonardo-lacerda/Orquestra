@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Trash, Upload, DownloadSimple, Sparkle } from '@phosphor-icons/react'
+import { Check, Trash, Upload, DownloadSimple } from '@phosphor-icons/react'
 import { Tooltip } from '../ui/Tooltip'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useTranslation } from '../i18n/useTranslation'
@@ -8,8 +8,6 @@ import type { Theme } from '../../shared/types'
 import { validateTheme } from '../../shared/theme'
 import { BASE_DARK, BASE_LIGHT, BUILT_IN_THEMES } from '../../shared/themes'
 import { errorMessage } from '../lib/errorMessage'
-
-const SKILL_GUIDE_URL = 'https://github.com/leonardo-lacerda/Orquestra/blob/main/skills/orquestra-theme/SKILL.md'
 
 const UI_SCALE_OPTIONS = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5].map((s) => ({
   value: String(s),
@@ -163,17 +161,6 @@ export function AppearanceSettings() {
           </SettingRow>
         </div>
       )}
-
-      {/* Create / get more themes */}
-      <button
-        onClick={() => window.electronAPI?.openExternalUrl(SKILL_GUIDE_URL)}
-        className="mt-4 flex w-full items-center gap-3 rounded-xl border border-subtle bg-surface-2 px-3.5 py-3 text-left hover:bg-surface-1"
-      >
-        <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-agent/15 text-focus-blue">
-          <Sparkle size={16} weight="fill" />
-        </div>
-        <h4 className="text-[13px] font-semibold text-primary">Create your own theme</h4>
-      </button>
       </SearchableBlock>
 
       <SettingRow label={t('appearance.uiScale')} description={t('appearance.uiScale.desc')}>

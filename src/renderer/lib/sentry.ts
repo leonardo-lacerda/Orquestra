@@ -5,13 +5,19 @@
 
 import * as Sentry from '@sentry/electron/renderer'
 
+declare const __SENTRY_DSN__: string
+
 let initialized = false
 
 export function initRendererSentry(): void {
   if (initialized) return
-  // The renderer SDK reads configured options (DSN, release, environment,
-  // beforeSend path scrubbing, etc.) from the main process via IPC and no-ops
-  // if main didn't initialize Sentry. We just wire up the global handlers.
+  // Keep this in lockstep with main/sentry.ts. In dev without a DSN the main
+  // SDK intentionally does not initialize, which means its sentry-ipc protocol
+  // is not registered. Initializing only the renderer in that state makes every
+  // captured interaction issue a failing fetch to sentry-ipc.
+  if (typeof __SENTRY_DSN__ !== 'string' || !__SENTRY_DSN__) return
+
+  // The renderer SDK reads release/environment and scope options from main.
   Sentry.init({})
   initialized = true
 }
@@ -22,6 +28,7 @@ export function captureRendererException(
   err: unknown,
   context?: Record<string, unknown>,
 ): void {
+  if (!initialized) return
   try {
     Sentry.captureException(err, context ? { extra: context } : undefined)
   } catch {

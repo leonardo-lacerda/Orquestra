@@ -1,5 +1,7 @@
 appId: com.orquestra.app
 productName: Orquestra
+# Stamp Windows exe ProductName/icon (signAndEditExecutable is false below).
+afterPack: scripts/afterPack-win.cjs
 directories:
   output: release
 # Development-only Maestro harness. Keep it out of app.asar/installers; the
@@ -122,8 +124,10 @@ mac:
 win:
   icon: build/icon.ico
   # Local/dev packaging without admin symlink privilege fails extracting
-  # winCodeSign (darwin dylib symlinks). Disable exe edit so NSIS/zip can
-  # finish; CI release still uses CSC_LINK for real signing when available.
+  # winCodeSign (darwin dylib symlinks). Disable electron-builder's own exe
+  # edit so NSIS/zip can finish; afterPack (scripts/afterPack-win.cjs) runs
+  # rcedit instead to set ProductName + icon so Windows Search isn't "Electron".
+  # CI release still uses CSC_LINK for real signing when available.
   signAndEditExecutable: false
   # Code signing is driven by CI env vars (CSC_LINK / CSC_KEY_PASSWORD), wired
   # from the WINDOWS_CERTS / WINDOWS_CERTS_PASSWORD repo secrets in
@@ -140,6 +144,10 @@ win:
     - target: zip
       arch:
         - x64
+nsis:
+  shortcutName: Orquestra
+  uninstallDisplayName: Orquestra
+  artifactName: ${productName} Setup ${version}.${ext}
 linux:
   icon: build/icon.png
   category: Development

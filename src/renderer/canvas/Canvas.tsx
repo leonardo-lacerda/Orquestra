@@ -87,6 +87,16 @@ function injectCanvasInteractingStyle(): void {
     body.connecting-terminal * {
       cursor: crosshair !important;
     }
+    /* Draw / annotation tool: crosshair on the canvas; keep panel chrome from
+       eating the first press of a stroke (same idea as hand-tool pass-through). */
+    .canvas-tool-draw [data-canvas-container] {
+      cursor: crosshair !important;
+    }
+    .canvas-tool-draw [data-node-id] [data-panel-content],
+    .canvas-tool-draw [data-grab-button],
+    .canvas-tool-draw [data-resize-overlay] {
+      pointer-events: none !important;
+    }
   `
   document.head.appendChild(style)
 }
@@ -188,7 +198,8 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
   // Idle cursor reflects the active tool (React owns idle; useCanvasInteraction
   // overrides to 'grabbing' during an active pan and hands control back on release).
   const handToolActive = useUIStore((s) => s.activeTool === 'hand')
-  const idleCursor = handToolActive ? 'grab' : 'default'
+  const drawToolActive = useUIStore((s) => s.activeTool === 'draw')
+  const idleCursor = handToolActive ? 'grab' : drawToolActive ? 'crosshair' : 'default'
   const showWorktreeTerritory = useSettingsStore((s) => s.showWorktreeTerritory)
 
   // While the Hand tool is active, neutralize interactive panel content so a
@@ -197,6 +208,12 @@ const Canvas: React.FC<CanvasProps> = ({ children, onCreateAtPoint, panelId }) =
     document.body.classList.toggle('canvas-tool-hand', handToolActive)
     return () => document.body.classList.remove('canvas-tool-hand')
   }, [handToolActive])
+
+  // Draw tool: crosshair + don't let panel content swallow strokes.
+  useEffect(() => {
+    document.body.classList.toggle('canvas-tool-draw', drawToolActive)
+    return () => document.body.classList.remove('canvas-tool-draw')
+  }, [drawToolActive])
 
 
   const {

@@ -20,7 +20,6 @@ import {
   Pen,
   TextT,
 } from '@phosphor-icons/react'
-import { OrquestraLogo } from '../ui/OrquestraLogo'
 import Minimap from './Minimap'
 import WorktreeToolbarMenu from './WorktreeToolbarMenu'
 import { useCanvasStoreApi } from '../stores/CanvasStoreContext'
@@ -45,7 +44,6 @@ interface CanvasToolbarProps {
   onNewTerminal: () => void
   onNewBrowser: () => void
   onNewEditor: () => void
-  onNewAgent: () => void
   onNewCanvas: () => void
   onZoomIn: () => void
   onZoomOut: () => void
@@ -200,7 +198,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onNewTerminal,
   onNewBrowser,
   onNewEditor,
-  onNewAgent,
   onNewCanvas,
   onZoomIn,
   onZoomOut,
@@ -345,9 +342,6 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </ToolbarButton>
             <ToolbarButton onClick={onNewEditor} title={t('canvas.toolbar.editor').replace('{key}', newEditorKey)} size="panel">
               <FileText size={18} />
-            </ToolbarButton>
-            <ToolbarButton onClick={onNewAgent} title={t('canvas.toolbar.agent')} size="panel">
-              <OrquestraLogo size={18} />
             </ToolbarButton>
 
             {/* Divider */}

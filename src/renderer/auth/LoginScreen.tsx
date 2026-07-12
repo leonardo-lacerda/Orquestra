@@ -180,15 +180,24 @@ export function LoginScreen({ onLogin, error: externalError }: LoginScreenProps)
           </form>
         </div>
 
-        {/* Register link */}
+        {/* Register link — opens the public site in the system browser */}
         <div style={{ fontSize: 13, color: '#8b8b95', textAlign: 'center' }}>
           {t('auth.login.noAccount')}{' '}
-          <span
-            onClick={() => window.open('https://www.orquestra.space', '_blank')}
+          <a
+            href="https://www.orquestra.space/register"
+            onClick={(e) => {
+              e.preventDefault()
+              const url = 'https://www.orquestra.space/register'
+              if (window.electronAPI?.openExternalUrl) {
+                window.electronAPI.openExternalUrl(url)
+              } else {
+                window.open(url, '_blank', 'noopener,noreferrer')
+              }
+            }}
             style={{ color: '#7c6ff0', cursor: 'pointer', textDecoration: 'none' }}
           >
             Cadastre-se
-          </span>
+          </a>
         </div>
       </div>
     </div>

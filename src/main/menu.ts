@@ -2,7 +2,7 @@
 // Application menu — standard macOS menu bar
 // =============================================================================
 
-import { BrowserWindow, Menu, shell, app } from 'electron'
+import { BrowserWindow, Menu, app } from 'electron'
 import { MENU_OPEN_SETTINGS, MENU_TRIGGER_ACTION, MENU_LOAD_LAYOUT, BROWSER_SHORTCUT } from '../shared/ipc-channels'
 import type { MenuActionId, BrowserShortcutAction } from '../shared/types'
 import { checkForUpdatesManually } from './auto-updater'
@@ -131,7 +131,6 @@ export function buildApplicationMenu(): void {
         { label: 'New Editor', accelerator: 'CmdOrCtrl+Shift+E', click: dispatch('newEditor') },
         { label: 'New Terminal', accelerator: 'CmdOrCtrl+T', click: dispatch('newTerminal') },
         { label: 'New Browser', accelerator: 'CmdOrCtrl+Shift+B', click: dispatch('newBrowser') },
-        { label: 'New Orquestra Agent', accelerator: 'CmdOrCtrl+Shift+A', click: dispatch('newAgent') },
         { label: 'New Canvas', accelerator: 'CmdOrCtrl+Shift+C', click: dispatch('newCanvas') },
         { type: 'separator' },
         { label: 'Open Folder...', accelerator: 'CmdOrCtrl+O', click: dispatch('openFolder') },
@@ -248,33 +247,6 @@ export function buildApplicationMenu(): void {
             }
           },
         },
-      ],
-    },
-    // Help menu
-    {
-      label: 'Help',
-      role: 'help',
-      submenu: [
-        {
-          label: 'Orquestra Documentation',
-          click: (): void => {
-            shell.openExternal('https://github.com/leonardo-lacerda/Orquestra')
-          },
-        },
-        {
-          label: 'Report Issue...',
-          click: (): void => {
-            shell.openExternal('https://github.com/leonardo-lacerda/Orquestra/issues')
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Check for Updates...',
-          click: (): void => {
-            checkForUpdatesManually()
-          },
-        },
-        { role: 'toggleDevTools' },
       ],
     },
   ]

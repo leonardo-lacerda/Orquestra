@@ -29,7 +29,9 @@ const PRESET_COLORS = [
 ]
 
 const DEFAULT_STYLE: DrawingStyle = {
-  strokeColor: '#ffffff',
+  // Blue is visible on both dark and light canvas backgrounds (pure white
+  // vanished on light themes and looked "broken").
+  strokeColor: '#4dabf7',
   strokeWidth: 2,
   fillColor: 'transparent',
   fontSize: 16,
@@ -68,12 +70,26 @@ const DrawingLayer: React.FC = () => {
   const [textInput, setTextInput] = useState<{ clientX: number; clientY: number; canvasX: number; canvasY: number } | null>(null)
   const textInputRef = useRef<HTMLInputElement>(null)
   const [style, setStyle] = useState<DrawingStyle>(DEFAULT_STYLE)
-  const svgRef = useRef<SVGSVGElement>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  /** Host canvas container for THIS DrawingLayer — set via svg callback ref so
+   *  multi-canvas windows don't all bind to document.querySelector's first hit. */
+  const [hostContainer, setHostContainer] = useState<Element | null>(null)
+  const setSvgNode = useCallback((node: SVGSVGElement | null) => {
+    svgRef.current = node
+    const next = node?.closest('[data-canvas-container]') ?? null
+    setHostContainer((prev) => (prev === next ? prev : next))
+  }, [])
   const activeTool = useUIStore((s) => s.activeTool)
   const activeDrawingTool = useUIStore((s) => s.activeDrawingTool)
 
-  const getCanvasPoint = useCallback((e: MouseEvent): { x: number; y: number } | null => {
-    const container = document.querySelector('[data-canvas-container]')
+  const resolveContainer = useCallback((): Element | null => {
+    return hostContainer
+      ?? svgRef.current?.closest('[data-canvas-container]')
+      ?? null
+  }, [hostContainer])
+
+  const getCanvasPoint = useCallback((e: MouseEvent | { clientX: number; clientY: number }): { x: number; y: number } | null => {
+    const container = resolveContainer()
     if (!container) return null
     const rect = container.getBoundingClientRect()
     const store = canvasApi.getState()
@@ -82,11 +98,58 @@ const DrawingLayer: React.FC = () => {
       store.zoomLevel,
       store.viewportOffset,
     )
-  }, [canvasApi])
+  }, [canvasApi, resolveContainer])
 
-  // ---- Task 1+3+5: Mousedown on canvas container (draw mode: create, select mode: move) ----
+  // Build a committed element from a drag (ghost, or a min-size fallback so a
+  // near-click still leaves something visible).
+  const commitFromDrag = useCallback((
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    tool: DrawingTool,
+    s: DrawingStyle,
+  ): DrawingElement | null => {
+    const minSpan = 8
+    if (tool === 'rect') {
+      let x = Math.min(startX, endX)
+      let y = Math.min(startY, endY)
+      let width = Math.abs(endX - startX)
+      let height = Math.abs(endY - startY)
+      if (width < minSpan && height < minSpan) {
+        width = 80
+        height = 48
+        x = startX
+        y = startY
+      } else {
+        width = Math.max(width, minSpan)
+        height = Math.max(height, minSpan)
+      }
+      return {
+        type: 'rect', id: generateId(),
+        x, y, width, height,
+        strokeColor: s.strokeColor, strokeWidth: s.strokeWidth, fill: s.fillColor,
+      }
+    }
+    if (tool === 'arrow' || tool === 'line') {
+      let x2 = endX
+      let y2 = endY
+      if (Math.hypot(endX - startX, endY - startY) < minSpan) {
+        x2 = startX + 60
+        y2 = startY
+      }
+      return {
+        type: tool, id: generateId(),
+        x1: startX, y1: startY, x2, y2,
+        strokeColor: s.strokeColor, strokeWidth: s.strokeWidth,
+      }
+    }
+    return null
+  }, [])
+
+  // ---- Mousedown on THIS canvas container (draw: create, select: deselect) ----
   useEffect(() => {
-    const container = document.querySelector('[data-canvas-container]')
+    const container = hostContainer
     if (!container) return
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -95,6 +158,11 @@ const DrawingLayer: React.FC = () => {
       // ---- Draw mode: create shapes ----
       if (currentActiveTool === 'draw') {
         if (e.button !== 0) return
+        // Ignore presses that started on UI chrome outside the canvas surface
+        // (style picker is portaled to body; toolbar is a sibling of Canvas).
+        const t = e.target as Element | null
+        if (t?.closest?.('[data-drawing-style-picker]')) return
+
         e.stopPropagation()
         e.preventDefault()
 
@@ -102,7 +170,7 @@ const DrawingLayer: React.FC = () => {
         const point = getCanvasPoint(e)
         if (!point) return
 
-        // Text tool
+        // Text tool — place an inline input at the click
         if (drawTool === 'text') {
           setTextInput({ clientX: e.clientX, clientY: e.clientY, canvasX: point.x, canvasY: point.y })
           return
@@ -122,7 +190,8 @@ const DrawingLayer: React.FC = () => {
             setGhost({
               type: 'rect', id,
               x: Math.min(startX, end.x), y: Math.min(startY, end.y),
-              width: Math.abs(end.x - startX), height: Math.abs(end.y - startY),
+              width: Math.max(Math.abs(end.x - startX), 1),
+              height: Math.max(Math.abs(end.y - startY), 1),
               strokeColor: s.strokeColor, strokeWidth: s.strokeWidth, fill: s.fillColor,
             })
           } else if (tool === 'arrow' || tool === 'line') {
@@ -134,14 +203,22 @@ const DrawingLayer: React.FC = () => {
           }
         }
 
-        const handleMouseUp = () => {
+        const handleMouseUp = (ev: MouseEvent) => {
           document.removeEventListener('mousemove', handleMouseMove)
           document.removeEventListener('mouseup', handleMouseUp)
-          setGhost((current) => {
-            if (current) addDrawing({ ...current, id: generateId() })
-            return null
-          })
+          const drag = dragRef.current
           dragRef.current = null
+          // Clear the preview first. Never call zustand setState (addDrawing)
+          // inside a React setState updater — that nested update path re-entered
+          // DrawingLayer + workspace panel tree subscribers and blew the max
+          // update depth (drawings never landed on the canvas).
+          setGhost(null)
+          if (!drag) return
+          const end = getCanvasPoint(ev) ?? { x: drag.startX, y: drag.startY }
+          const el = commitFromDrag(
+            drag.startX, drag.startY, end.x, end.y, drag.tool, drag.style,
+          )
+          if (el) addDrawing(el)
         }
 
         document.addEventListener('mousemove', handleMouseMove)
@@ -149,10 +226,8 @@ const DrawingLayer: React.FC = () => {
         return
       }
 
-      // ---- Select mode: click to select/deselect drawings ----
+      // ---- Select mode: click empty canvas to deselect drawings ----
       if (currentActiveTool === 'select' && e.button === 0) {
-        // Check if click is on a drawing element (handled by SVG click handlers)
-        // If not on a drawing, deselect
         const target = e.target as Element
         if (!target.closest('[data-drawing-id]')) {
           selectDrawing(null)
@@ -160,9 +235,10 @@ const DrawingLayer: React.FC = () => {
       }
     }
 
-    container.addEventListener('mousedown', handleMouseDown as EventListener)
-    return () => container.removeEventListener('mousedown', handleMouseDown as EventListener)
-  }, [getCanvasPoint, canvasApi, addDrawing, selectDrawing, style])
+    // Capture so we run before panel content / React marquee handlers.
+    container.addEventListener('mousedown', handleMouseDown as EventListener, true)
+    return () => container.removeEventListener('mousedown', handleMouseDown as EventListener, true)
+  }, [hostContainer, getCanvasPoint, addDrawing, selectDrawing, style, commitFromDrag])
 
   // ---- Task 2: Context menu for drawings (state-based, same pattern as Canvas.tsx) ----
   const [drawingContextMenuId, setDrawingContextMenuId] = useState<string | null>(null)
@@ -215,7 +291,7 @@ const DrawingLayer: React.FC = () => {
   useEffect(() => {
     if (textAnchorX === undefined || textAnchorY === undefined) return
     const syncScreenPos = (zoom: number, offset: { x: number; y: number }) => {
-      const container = document.querySelector('[data-canvas-container]')
+      const container = resolveContainer()
       if (!container) return
       const rect = container.getBoundingClientRect()
       const view = canvasToView({ x: textAnchorX, y: textAnchorY }, zoom, offset)
@@ -233,7 +309,7 @@ const DrawingLayer: React.FC = () => {
       if (state.zoomLevel === prev.zoomLevel && state.viewportOffset === prev.viewportOffset) return
       syncScreenPos(state.zoomLevel, state.viewportOffset)
     })
-  }, [textAnchorX, textAnchorY, canvasApi])
+  }, [textAnchorX, textAnchorY, canvasApi, resolveContainer])
 
   // ---- Task 7: Delete key ----
   useEffect(() => {
@@ -351,14 +427,15 @@ const DrawingLayer: React.FC = () => {
   return (
     <>
       <svg
-        ref={svgRef}
+        ref={setSvgNode}
+        data-drawing-layer
         style={{
-          // Sized 0×0 with overflow:visible so shapes at canvas coords paint
-          // outside the box. Parent is a 1×1 annotation world (no will-change);
-          // width/height 100% would collapse to 1px and reintroduce compositor
-          // paint-bound drift under pan when nested in a promoted GPU layer.
+          // Keep a non-zero SVG viewport. Chromium computes geometry for
+          // children of a 0×0 root SVG (so DOM/bounding-box tests pass) but can
+          // discard them during paint/compositing, making every annotation
+          // invisible. Overflow keeps canvas-space shapes visible beyond 1px.
           position: 'absolute', top: 0, left: 0,
-          width: 0, height: 0, overflow: 'visible',
+          width: 1, height: 1, overflow: 'visible',
           // Parent annotation world is pointer-events:none; re-enable here so
           // select/move/resize still hit shapes. Draw mode keeps none so the
           // canvas container receives mousedown for new shapes.
@@ -401,6 +478,7 @@ const DrawingLayer: React.FC = () => {
                 <rect
                   x={el.x} y={el.y} width={el.width} height={el.height}
                   fill={el.fill} stroke={el.strokeColor} strokeWidth={el.strokeWidth}
+                  vectorEffect="non-scaling-stroke"
                   rx={4} {...sharedProps}
                 />
                 {/* Task 4: Selection outline */}
@@ -439,12 +517,14 @@ const DrawingLayer: React.FC = () => {
                 <line
                   x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2}
                   stroke={el.strokeColor} strokeWidth={el.strokeWidth}
+                  vectorEffect="non-scaling-stroke"
                   markerEnd={`url(#ah-${el.id})`} {...sharedProps}
                 />
                 {isSelected && (
                   <line
                     x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2}
                     stroke="var(--focus-blue)" strokeWidth={el.strokeWidth + 4}
+                    vectorEffect="non-scaling-stroke"
                     opacity={0.3} style={{ pointerEvents: 'none' }}
                   />
                 )}
@@ -457,7 +537,9 @@ const DrawingLayer: React.FC = () => {
               <React.Fragment key={el.id}>
                 <line
                   x1={el.x1} y1={el.y1} x2={el.x2} y2={el.y2}
-                  stroke={el.strokeColor} strokeWidth={el.strokeWidth} {...sharedProps}
+                  stroke={el.strokeColor} strokeWidth={el.strokeWidth}
+                  vectorEffect="non-scaling-stroke"
+                  {...sharedProps}
                 />
                 {isSelected && (
                   <line
@@ -527,7 +609,9 @@ const DrawingLayer: React.FC = () => {
 
       {/* Style picker — visible in draw mode */}
       {activeTool === 'draw' && createPortal(
-        <div style={{
+        <div
+          data-drawing-style-picker
+          style={{
           position: 'fixed', bottom: 72, left: '50%', transform: 'translateX(-50%)',
           zIndex: 2147483000,
           display: 'flex', alignItems: 'center', gap: 8,
