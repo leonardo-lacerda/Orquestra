@@ -136,6 +136,8 @@ O script sobe os arquivos de `release/` para o bucket.
 
 Mensagem de sucesso esperada: `Upload complete` e o link do feed.
 
+> **💰 Limpeza:** R2 é pago por armazenamento. Após publicar, apague as pastas de versões antigas (ex.: v1.3.2) pelo dashboard do Cloudflare R2. Mantenha só as **2 versões mais recentes** (atual + anterior).
+
 ---
 
 ### Passo 4 — Conferir se o feed está público
@@ -226,9 +228,16 @@ Se mudar a URL pública do R2 no futuro:
 
 ## Arquivos no R2 — o que manter
 
-Os arquivos são organizados em pastas por versão no bucket:
+Bucket R2 é pago por armazenamento. **Mantenha só as 2 versões mais recentes** (atual + anterior).
+
+Estrutura recomendada:
 
 ```
+latest.yml
+v1.5.2/
+  Orquestra Setup 1.5.2.exe
+  Orquestra Setup 1.5.2.exe.blockmap
+  Orquestra-1.5.2-win.zip
 v1.5.1/
   Orquestra Setup 1.5.1.exe
   Orquestra Setup 1.5.1.exe.blockmap
@@ -237,7 +246,7 @@ v1.5.1/
 
 O `latest.yml` fica na raiz e aponta pra pasta da versão mais recente.
 
-**Dica de espaço:** apague pastas de versões antigas no bucket quando não precisar mais delas.
+**Após publicar uma nova versão,** apague as pastas das versões antigas (ex.: v1.3.2, v1.3.3, v1.3.4, v1.5.0) no bucket. Faça isso manualmente pelo dashboard do Cloudflare R2 ou com S3 CLI.
 
 ---
 

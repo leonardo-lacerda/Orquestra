@@ -52,6 +52,68 @@ import { ORQUESTRA_RELEASES_FEED_URL } from '../shared/releasesFeed'
 const RELEASES_URL = ORQUESTRA_RELEASES_FEED_URL
 const CHECK_INTERVAL_MS = 15 * 60 * 1000
 
+/** Join feed base + relative artifact path with correct percent-encoding. */
+export function joinReleaseUrl(base: string, relativePath: string): string {
+  const b = String(base || '').replace(/\/+$/, '')
+  const parts = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter(Boolean)
+    .map((p) => encodeURIComponent(p))
+  return `${b}/${parts.join('/')}`
+}
+
+/**
+ * Resolve a working installer download URL from latest.yml.
+ * Heals common feed bugs (double vX.Y.Z/ prefix, path vs actual object key).
+ */
+export async function resolveLatestInstallerDownloadUrl(
+  feedBase: string = RELEASES_URL,
+  platform: NodeJS.Platform = process.platform,
+): Promise<string | null> {
+  const base = String(feedBase || '').replace(/\/+$/, '')
+  if (!base) return null
+  const ymlName =
+    platform === 'darwin' ? 'latest-mac.yml'
+      : platform === 'linux' ? 'latest-linux.yml'
+        : 'latest.yml'
+  try {
+    const res = await fetch(`${base}/${ymlName}`, { cache: 'no-store' })
+    if (!res.ok) return null
+    const text = await res.text()
+    const version = text.match(/^\s*version:\s*['"]?([^\s'"]+)/m)?.[1]?.replace(/^v/i, '')
+    const pathField = text.match(/^\s*path:\s*(.+)\s*$/m)?.[1]?.trim()
+    const urlField = text.match(/^\s*-\s*url:\s*(.+)\s*$/m)?.[1]?.trim()
+    const primary = (pathField || urlField || '').replace(/^["']|["']$/g, '')
+    if (!primary && !version) return null
+
+    const fileName = primary.split(/[/\\]/).pop() || ''
+    const candidates = [
+      primary,
+      // Heal v1.5.2/v1.5.2/Setup.exe → v1.5.2/Setup.exe
+      primary.replace(/^(v\d+\.\d+\.\d+\/)\1+/i, '$1'),
+      version && fileName ? `v${version}/${fileName}` : '',
+      fileName,
+    ].filter((p, i, arr) => p && arr.indexOf(p) === i)
+
+    for (const rel of candidates) {
+      const url = joinReleaseUrl(base, rel)
+      try {
+        const head = await fetch(url, { method: 'HEAD', cache: 'no-store' })
+        if (head.ok) return url
+      } catch {
+        /* try next */
+      }
+    }
+    // Last resort: first candidate even if HEAD failed (some CDNs block HEAD).
+    return primary ? joinReleaseUrl(base, candidates[0] || primary) : null
+  } catch (err) {
+    log.warn('[auto-updater] resolve installer URL failed: %O', err)
+    return null
+  }
+}
+
 /** Persisted "what did we last stage, and how often has it failed to apply"
  *  record. Backs the install-loop detector. Hand-editable JSON under userData. */
 const updateStateStore = createJsonStateFile<UpdateRecord>({
@@ -184,23 +246,39 @@ async function checkLatestFromSupabaseFeed(): Promise<void> {
   }
 }
 
+/** Open the real installer (.exe / .dmg / …), never the bare feed root
+ *  (opening https://pub-….r2.dev/ alone is useless and confuses users). */
+async function openLatestInstallerDownload(): Promise<void> {
+  const installerUrl = await resolveLatestInstallerDownloadUrl()
+  if (installerUrl) {
+    log.info('[auto-updater] opening installer download: %s', installerUrl)
+    await shell.openExternal(installerUrl)
+    return
+  }
+  // Fall back to latest.yml so the user at least sees the release metadata,
+  // not an empty bucket listing.
+  const yml = `${RELEASES_URL.replace(/\/+$/, '')}/latest.yml`
+  log.warn('[auto-updater] installer URL unresolved — opening %s', yml)
+  await shell.openExternal(yml)
+}
+
 /** The manual-reinstall escape hatch. Shown when self-update genuinely cannot
  *  apply (translocated / not in /Applications, or repeated silent install
- *  failures). Offers the reliable path — download the latest from the website —
+ *  failures). Offers the reliable path — download the latest installer —
  *  and, when running from outside /Applications, a move into it. Once per launch. */
 async function promptManualReinstall(version: string, opts: { offerMove: boolean }): Promise<void> {
   if (manualPrompted) return
   manualPrompted = true
 
   const buttons = opts.offerMove
-    ? ['Download latest', 'Move to Applications', 'Later']
-    : ['Download latest', 'Later']
+    ? ['Download installer', 'Move to Applications', 'Later']
+    : ['Download installer', 'Retry automatic update', 'Later']
   const detail = opts.offerMove
     ? 'Orquestra is running from outside the Applications folder, so it can’t update itself ' +
-      '(macOS blocks self-updates there). Download the latest build, or move Orquestra into ' +
+      '(macOS blocks self-updates there). Download the latest installer, or move Orquestra into ' +
       'Applications to enable automatic updates. Your settings and sessions are preserved.'
-    : 'Orquestra couldn’t finish installing the update automatically. Download and install the ' +
-      'latest build to get the newest version. Your settings and sessions are preserved.'
+    : 'Orquestra couldn’t finish installing the update automatically. Download the installer ' +
+      'and run it (settings and sessions are preserved), or retry the in-app update.'
 
   let response = buttons.length - 1
   try {
@@ -218,13 +296,17 @@ async function promptManualReinstall(version: string, opts: { offerMove: boolean
   }
 
   if (response === 0) {
-    void shell.openExternal(RELEASES_URL)
+    void openLatestInstallerDownload()
   } else if (opts.offerMove && response === 1) {
     try {
       app.moveToApplicationsFolder() // moves the bundle and relaunches
     } catch (err) {
       log.error('[auto-updater] moveToApplicationsFolder failed: %O', err)
     }
+  } else if (!opts.offerMove && response === 1) {
+    // Retry electron-updater check+download (after feed path fixes, this often works).
+    manualPrompted = false
+    void runCheck(canSelfUpdate())
   }
 }
 

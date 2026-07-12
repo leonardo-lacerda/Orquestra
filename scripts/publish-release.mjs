@@ -95,6 +95,29 @@ function collectFiles(dir) {
   return result
 }
 
+/**
+ * Ensure path/url fields under latest.yml point at v{version}/artifact without
+ * doubling an existing version prefix.
+ * @param {string} content
+ * @param {string} version
+ */
+export function patchLatestYmlArtifactPaths(content, version) {
+  const v = String(version || '').replace(/^v/i, '')
+  if (!v) return content
+  const prefix = `v${v}/`
+  const fixRest = (rest) => {
+    let r = String(rest || '').trim()
+    // Collapse v1.5.2/v1.5.2/file → v1.5.2/file
+    const re = new RegExp(`^(?:v${v.replace(/\./g, '\\.')}/)+`)
+    r = r.replace(re, '')
+    if (/^v\d+\.\d+\.\d+\//.test(r)) return r // already versioned (other form)
+    return prefix + r
+  }
+  return content
+    .replace(/^(path:\s*)(.+)$/m, (_, p, rest) => `${p}${fixRest(rest)}`)
+    .replace(/^(\s+- url:\s*)(.+)$/m, (_, p, rest) => `${p}${fixRest(rest)}`)
+}
+
 async function loadS3() {
   try {
     return await import('@aws-sdk/client-s3')
@@ -181,18 +204,27 @@ async function main() {
     let body = readFileSync(e.absPath)
     let key = e.key
 
-    // latest.yml at root: patch internal path/url to point into the version
-    // folder, then upload to root so the updater finds it.
-    if (key === 'latest.yml') {
+    // latest.yml at root: ensure path/url live under v{version}/ when the
+    // release dir is flat, but NEVER double-prefix if the path is already
+    // versioned (upload key may already be v1.5.2/Setup.exe). Double prefix
+    // (v1.5.2/v1.5.2/…) 404s and kills electron-updater + "Download latest".
+    if (key === 'latest.yml' || key.endsWith('/latest.yml')) {
       const content = body.toString('utf-8')
       const version = content.match(/^version:\s*(\S+)/m)?.[1]
       if (version) {
-        body = Buffer.from(
-          content
-            .replace(/^(path:\s*)(.+)$/m, `$1v${version}/$2`)
-            .replace(/^(\s+- url:\s*)(.+)$/m, `$1v${version}/$2`),
-          'utf-8',
-        )
+        body = Buffer.from(patchLatestYmlArtifactPaths(content, version), 'utf-8')
+        // Always also publish a fixed copy at the feed root for the updater.
+        if (key !== 'latest.yml') {
+          await client.send(
+            new PutObjectCommand({
+              Bucket: BUCKET,
+              Key: 'latest.yml',
+              Body: body,
+              ContentType: 'text/yaml',
+            }),
+          )
+          console.log('   latest.yml (root, path-patched)')
+        }
       }
     }
 
