@@ -4,17 +4,50 @@ productName: Orquestra
 afterPack: scripts/afterPack-win.cjs
 directories:
   output: release
-# Development-only Maestro harness. Keep it out of app.asar/installers; the
-# packaged app receives only the runtime CLI assets explicitly listed below.
+# app.asar must stay LEAN. electron-builder defaults to "**/*" from the project
+# root — without aggressive excludes we shipped ~850MB asars (entire repo,
+# every historical dist-runtime/*.tgz, monaco dev maps, e2e, docs, src…).
+# Runtime daemon tarball is ONLY via extraResources (runtime-host*.tgz) below.
 files:
-  - "!scripts/maestro/maestro-test-runner.mjs"
-  - "!scripts/maestro/maestro-test-runner.test.mjs"
-  - "!scripts/maestro/test-maestro.sh"
-  - "!docs/maestro-headless-test.md"
-# The orquestra-runtime daemon is NOT bundled in the app. One self-contained
-# tarball per target is built in CI and uploaded to the GitHub release
-# `v<version>`; on connect the remote pulls its own tarball (with a client-side
-# fallback). See runtimeArtifacts.ts + .github/workflows/release.yml.
+  # Start from project files + production node_modules (electron-builder default
+  # still prunes devDependencies). Then strip bulk that has been bloating asars
+  # (~850MB → expect ~250–350MB compressed installer once dist-runtime is out).
+  - "**/*"
+  # --- whole trees that must never ship in app.asar ---
+  - "!dist-runtime{,/**/*}"
+  - "!release{,/**/*}"
+  - "!src{,/**/*}"
+  - "!e2e{,/**/*}"
+  - "!docs{,/**/*}"
+  - "!scripts{,/**/*}"
+  - "!mcps{,/**/*}"
+  - "!supabase{,/**/*}"
+  - "!registry{,/**/*}"
+  - "!test-results{,/**/*}"
+  - "!.git{,/**/*}"
+  - "!.github{,/**/*}"
+  - "!.claude{,/**/*}"
+  - "!.grok{,/**/*}"
+  # Repo chrome / build configs / logs
+  - "!**/*.{md,MD}"
+  - "!**/*.map"
+  - "!**/*.{test,spec}.{js,cjs,mjs,ts,tsx}"
+  - "!**/{test,tests,__tests__,coverage,fixtures,example,examples}/**"
+  - "!{eslint.config.*,vitest.config.*,vitest.live.config.*,playwright.config.*,tsconfig.json,tsconfig.*.json,electron.vite.config.*,postcss.config.*,tailwind.config.*,.nvmrc,.editorconfig,package-win-build.log,package-lock.json,AGENTS.md,CLAUDE.md,PUBLISH.md,CHANGELOG.md,CONTRIBUTING.md,LICENSE}"
+  # Monaco is already bundled into dist/renderer — keep only what any rare
+  # runtime require might need; drop dev + source maps (~40MB+).
+  - "!**/monaco-editor/dev{,/**/*}"
+  - "!**/monaco-editor/esm{,/**/*}"
+  - "!**/monaco-editor/min-maps{,/**/*}"
+  - "!**/monaco-editor/**/*.map"
+  - "!**/pdfjs-dist/**/*.map"
+  # Demo / marketing assets not required at runtime
+  - "!assets/demo-canvas.gif"
+  - "!assets/**/*.{gif,mp4,webm}"
+# The orquestra-runtime daemon is NOT inside app.asar. One host tarball is
+# staged as extraResources/runtime-host.tgz (see below). Historical
+# orquestra-runtime-*.tgz copies under dist-runtime/ must stay out of asar
+# (they alone were ~400MB of duplicate junk in 1.5.x builds).
 #
 # @earendil-works/pi-coding-agent (the agent runtime, ~271MB) is NO LONGER
 # bundled — it's a devDependency, shipped on demand as the orquestra-pi tarball and

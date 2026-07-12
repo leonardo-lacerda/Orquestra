@@ -197,6 +197,17 @@ async function main() {
     )
   }
 
+  // Discover version from latest.yml so flat release/ artifacts can be
+  // re-keyed under v{version}/ (matches path: in the feed).
+  let releaseVersion = null
+  const latestLocal = entries.find((e) => e.key === 'latest.yml')
+  if (latestLocal) {
+    try {
+      const raw = readFileSync(latestLocal.absPath, 'utf-8')
+      releaseVersion = raw.match(/^version:\s*(\S+)/m)?.[1]?.replace(/^v/i, '') || null
+    } catch { /* ignore */ }
+  }
+
   console.log('')
   console.log('\u2B06\uFE0F  Uploading\u2026')
 
@@ -204,10 +215,19 @@ async function main() {
     let body = readFileSync(e.absPath)
     let key = e.key
 
+    // Flat Setup/zip/blockmap at release root → also store under v{version}/
+    // so latest.yml path v1.5.3/Orquestra Setup….exe resolves (200).
+    if (
+      releaseVersion &&
+      !key.includes('/') &&
+      (key.endsWith('.exe') || key.endsWith('.zip') || key.endsWith('.blockmap') || key.endsWith('.dmg'))
+    ) {
+      key = `v${releaseVersion}/${key}`
+    }
+
     // latest.yml at root: ensure path/url live under v{version}/ when the
     // release dir is flat, but NEVER double-prefix if the path is already
-    // versioned (upload key may already be v1.5.2/Setup.exe). Double prefix
-    // (v1.5.2/v1.5.2/…) 404s and kills electron-updater + "Download latest".
+    // versioned. Double prefix (v1.5.2/v1.5.2/…) 404s and kills auto-update.
     if (key === 'latest.yml' || key.endsWith('/latest.yml')) {
       const content = body.toString('utf-8')
       const version = content.match(/^version:\s*(\S+)/m)?.[1]
