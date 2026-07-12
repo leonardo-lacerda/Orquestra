@@ -105,6 +105,11 @@ export interface Translations {
   'orchestration.group.delegation': string
   'orchestration.group.permissions': string
   'orchestration.group.completion': string
+  /** Crown button tooltips (terminal title bar). */
+  'maestro.crown.enable': string
+  'maestro.crown.disable': string
+  'maestro.crown.paused': string
+  'maestro.crown.settings': string
   'orchestration.mode': string
   'orchestration.mode.desc': string
   'orchestration.mode.manual': string
@@ -695,6 +700,12 @@ export const translations: Record<Language, Translations> = {
     'orchestration.group.delegation': 'Delegation',
     'orchestration.group.permissions': 'Permissions',
     'orchestration.group.completion': 'Completion',
+    'maestro.crown.enable':
+      'Enable Maestro · Turn the crown on before starting the AI agent',
+    'maestro.crown.disable': 'Disable Maestro',
+    'maestro.crown.paused':
+      'Maestro paused — terminal exited. Restart the shell, then re-enable if needed.',
+    'maestro.crown.settings': 'Maestro settings',
     'orchestration.mode': 'Orchestration mode',
     'orchestration.mode.desc': 'How actively Maestro may coordinate work across terminals.',
     'orchestration.mode.manual': 'Manual',
@@ -1286,6 +1297,12 @@ export const translations: Record<Language, Translations> = {
     'orchestration.group.delegation': 'Delega\u00E7\u00E3o',
     'orchestration.group.permissions': 'Permiss\u00F5es',
     'orchestration.group.completion': 'Conclus\u00E3o',
+    'maestro.crown.enable':
+      'Ativar Maestro · Ligue a coroa antes de iniciar a IA',
+    'maestro.crown.disable': 'Desativar Maestro',
+    'maestro.crown.paused':
+      'Maestro em pausa — o terminal encerrou. Reinicie o shell e reative se precisar.',
+    'maestro.crown.settings': 'Defini\u00E7\u00F5es do Maestro',
     'orchestration.mode': 'Modo de orquestra\u00E7\u00E3o',
     'orchestration.mode.desc': 'Qu\u00E3o ativamente o Maestro pode coordenar trabalho entre terminais.',
     'orchestration.mode.manual': 'Manual',

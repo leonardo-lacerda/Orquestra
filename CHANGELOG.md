@@ -4,7 +4,34 @@ All notable changes to Orquestra will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.5.0] - 2026-07-12
+
+### Added
+
+- **Maestro pool + task queue**: fixed worker pool (≤ `orchestrationMaxWorkers`, default 4) with reassign-first dispatch and overflow queue (`pool_queue`); recruit is rare, reassign is default.
+- **Multi-Maestro control plane**: N crowns on the same project tree, isolated by `runId` (commands/results/queue/inject); no cross-run worker steal.
+- **Packaged Maestro assets**: CLI (`orquestra.cjs` + bootstrap) and crown extension resolve from `extraResources` with fail-closed enable.
+- **Session re-arm**: crown re-arms when the Maestro PTY is live after restore; shell exit shows **Paused**, not a false Active.
+
+### Fixed
+
+- **CLI identity**: repo-root `orquestra.js` stays byte-identical to `scripts/maestro/orquestra.js` (shipped source of truth).
+- **Command-file demux**: unstamped commands under `runs/{runId}/commands` (or the sole live Maestro legacy dir) are accepted via folder trust; mismatched stamps still drop. E2E A1 writes the real CLI path (stamped run-scoped + dual-write legacy).
+- **Wait CLI multi-run**: `wait --run` only sees results under that run’s folder (same worker name on another run does not complete wait).
+- **Reassign with empty pool**: if the Maestro reassigns a name it does not own yet, Orquestra **opens that slot as recruit** (fallback) instead of only printing `Reassign failed` / `Workers: none`. Instructions also require recruit first when there are zero workers.
+- **False worker failures**: idle eligibility ignores “waiting for permission”; completion requires `ORQUESTRA_WORKER_DONE` when markers are expected; Maestro injects stay short one-liners.
+
+### Tests
+
+- E2E **A2b** `orchestration-wait-seeded`: command-file recruit ×2 → seed run-scoped results → CLI wait exit 0 (no LLM).
+- Auth gate unit tests for subscription statuses (`active` / `trialing` only).
+
+### Residual limits (honest)
+
+- Isolation is **control plane** only (not filesystem / worktree per Maestro).
+- Permission policy remains prompt-level (no OS sandbox V2).
+- Packaged GUI soak, live multi-agent 5/5 dogfood, and R2 publish are **release ops gates** — run the soak checklist on a Win installer before claiming Maestro 100% in the field.
+- Linux pack is not a soak gate. Code signing depends on `CSC_LINK` when available.
 
 ## [1.2.7] - 2026-06-09
 

@@ -33,6 +33,56 @@ export function dispositionOrquestraCommand(opts: {
 }
 
 /**
+ * When a command file lives under runs/{runId}/commands (or the sole live
+ * Maestro's legacy dir), missing stamps are filled from folder identity —
+ * agents that never received ORQUESTRA_RUN_ID still route correctly.
+ * Explicit mismatched stamps still drop.
+ */
+export function applyFolderTrustToDisposition(opts: {
+  disposition: OrquestraCommandDisposition
+  trustFolderIdentity: boolean
+  activeMaestroId: string
+  activeRunId?: string | null
+  payloadMaestroId?: string | null
+  payloadRunId?: string | null
+}): {
+  disposition: OrquestraCommandDisposition
+  maestroId: string
+  runId?: string
+} {
+  const activeMaestroId = (opts.activeMaestroId ?? '').trim()
+  const activeRunId = (opts.activeRunId ?? '').trim() || undefined
+  if (
+    opts.disposition !== 'drop_missing'
+    || !opts.trustFolderIdentity
+    || !activeMaestroId
+  ) {
+    return {
+      disposition: opts.disposition,
+      maestroId: activeMaestroId,
+      runId: activeRunId,
+    }
+  }
+  const stampedM = String(opts.payloadMaestroId ?? '').trim()
+  const stampedR = String(opts.payloadRunId ?? '').trim()
+  const contradicts =
+    (stampedM !== '' && stampedM !== activeMaestroId)
+    || (!!activeRunId && stampedR !== '' && stampedR !== activeRunId)
+  if (contradicts) {
+    return {
+      disposition: opts.disposition,
+      maestroId: activeMaestroId,
+      runId: activeRunId,
+    }
+  }
+  return {
+    disposition: 'accept',
+    maestroId: activeMaestroId,
+    runId: activeRunId,
+  }
+}
+
+/**
  * Only inject worker status into a PTY that is still a live Maestro.
  */
 export function shouldInjectToMaestro(

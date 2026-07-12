@@ -20,6 +20,10 @@ import { createClient, type SupabaseClient, type Session, type User } from '@sup
 import fsp from 'fs/promises'
 import path from 'path'
 import log from '../../main/logger'
+import {
+  desktopSubscriptionDenialReason,
+  isDesktopSubscriptionAuthorized,
+} from './subscriptionAccess'
 
 // ---------------------------------------------------------------------------
 // Config — embedded at build time (public anon key, same as web/mobile apps)
@@ -30,9 +34,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 /** The website's base URL — used for links in the login UI. */
 export const WEBSITE_URL = 'https://www.orquestra.space'
-
-/** Valid subscription statuses that grant desktop access. */
-const ACTIVE_STATUSES = ['active', 'trialing']
 
 /** How often to re-check the user's subscription status while the app runs. */
 const REVALIDATION_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes
@@ -241,13 +242,13 @@ export class ElectronAuth {
     if (!this.supabase) throw new Error('ElectronAuth not initialized')
 
     const subscription = await this.fetchSubscription(user.id)
-    const hasActive = subscription && ACTIVE_STATUSES.includes(subscription.status)
+    const hasActive = isDesktopSubscriptionAuthorized(subscription?.status)
 
     this._state = {
-      authorized: !!hasActive,
+      authorized: hasActive,
       user: { id: user.id, email: user.email ?? '' },
       subscription,
-      reason: hasActive ? undefined : 'Sua assinatura não está ativa. Acesse orquestra.space para assinar.',
+      reason: hasActive ? undefined : desktopSubscriptionDenialReason(subscription?.status),
     }
     return this._state
   }

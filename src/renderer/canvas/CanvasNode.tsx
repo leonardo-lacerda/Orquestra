@@ -736,10 +736,10 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
             maestroError
               ? maestroError
               : maestroPaused
-                ? 'Maestro paused — terminal exited. Restart shell or click to disable.'
+                ? t('maestro.crown.paused')
                 : maestroEnabled
-                  ? 'Disable Maestro'
-                  : 'Enable Maestro'
+                  ? t('maestro.crown.disable')
+                  : t('maestro.crown.enable')
           }
           onClick={(e) => { e.stopPropagation(); void handleToggleMaestro() }}
           color={
@@ -756,7 +756,7 @@ const CanvasNode: React.FC<CanvasNodeProps> = ({
         </GrabButton>
         {maestroEnabled && (
           <GrabButton
-            title="Maestro Settings"
+            title={t('maestro.crown.settings')}
             buttonRef={maestroSettingsButtonRef}
             onClick={(e) => {
               e.stopPropagation()

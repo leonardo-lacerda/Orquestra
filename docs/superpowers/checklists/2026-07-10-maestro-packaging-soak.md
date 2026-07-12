@@ -5,8 +5,8 @@ Run on a **packaged** install (`npm run package:win` / mac), not only `npm run d
 ## Asset resolution
 
 - [ ] Enable crown on a terminal in a real workspace
-- [ ] Workspace root contains `orquestra.js`
-- [ ] `.orquestra/crown.json` exists with `terminalPtyId`
+- [ ] Workspace root contains `orquestra.cjs` (and usually `orquestra.js` bootstrap)
+- [ ] `.orquestra/crown.json` exists with `terminalPtyId` (and/or `runs/{runId}/crown.json`)
 - [ ] `.orquestra/pi-agent/extensions/orquestra-maestro/index.ts` exists
 - [ ] `CLAUDE.local.md` contains Maestro instructions
 - [ ] Disable crown removes `crown.json` and `CLAUDE.local.md`

@@ -94,6 +94,104 @@ describe('shipped Maestro CLI wait/results', () => {
     expect(r.stdout).toContain('WORKER_RESULT:worker-2:DONE:')
   })
 
+  it('exits 0 for run-scoped results with --run (multi-Maestro path)', () => {
+    const cwd = makeWorkspace()
+    const runId = 'run-wait-scoped-1'
+    const resultsDir = path.join(cwd, '.orquestra', 'runs', runId, 'results')
+    fs.mkdirSync(resultsDir, { recursive: true })
+    fs.mkdirSync(path.join(cwd, '.orquestra'), { recursive: true })
+    fs.writeFileSync(
+      path.join(cwd, '.orquestra', 'registry.json'),
+      JSON.stringify({
+        version: 1,
+        runs: [{ runId, maestroPtyId: 'pty-a', createdAt: Date.now(), updatedAt: Date.now() }],
+      }),
+    )
+    for (const name of ['api', 'ui']) {
+      fs.writeFileSync(
+        path.join(resultsDir, `worker-${name}.json`),
+        JSON.stringify({
+          name,
+          workerName: name,
+          status: 'done',
+          exitCode: 0,
+          summary: `${name} ok`,
+          timestamp: Date.now(),
+          runId,
+        }),
+      )
+    }
+
+    const r = spawnSync(
+      process.execPath,
+      [
+        CLI_PATH,
+        'wait',
+        '--run',
+        runId,
+        '--workers',
+        'api,ui',
+        '--timeout',
+        '2',
+        '--poll',
+        '200',
+      ],
+      { cwd, encoding: 'utf-8', timeout: 8_000 },
+    )
+    expect(r.status ?? 1).toBe(0)
+    expect(r.stdout ?? '').toContain('WORKER_RESULT:api:DONE:')
+    expect(r.stdout ?? '').toContain('WORKER_RESULT:ui:DONE:')
+  })
+
+  it('does not see same worker name under another runId (multi isolation)', () => {
+    const cwd = makeWorkspace()
+    const runA = 'run-a'
+    const runB = 'run-b'
+    for (const runId of [runA, runB]) {
+      const resultsDir = path.join(cwd, '.orquestra', 'runs', runId, 'results')
+      fs.mkdirSync(resultsDir, { recursive: true })
+    }
+    fs.mkdirSync(path.join(cwd, '.orquestra'), { recursive: true })
+    fs.writeFileSync(
+      path.join(cwd, '.orquestra', 'registry.json'),
+      JSON.stringify({
+        version: 1,
+        runs: [
+          { runId: runA, maestroPtyId: 'pty-a', createdAt: 1, updatedAt: 1 },
+          { runId: runB, maestroPtyId: 'pty-b', createdAt: 2, updatedAt: 2 },
+        ],
+      }),
+    )
+    // Only run B has logger done
+    fs.writeFileSync(
+      path.join(cwd, '.orquestra', 'runs', runB, 'results', 'worker-logger.json'),
+      JSON.stringify({
+        name: 'logger',
+        status: 'done',
+        exitCode: 0,
+        summary: 'B only',
+        timestamp: Date.now(),
+        runId: runB,
+      }),
+    )
+
+    const waitA = spawnSync(
+      process.execPath,
+      [CLI_PATH, 'wait', '--run', runA, '--workers', 'logger', '--timeout', '1', '--poll', '200'],
+      { cwd, encoding: 'utf-8', timeout: 8_000 },
+    )
+    // A has no result → timeout/non-zero
+    expect(waitA.status ?? 1).not.toBe(0)
+
+    const waitB = spawnSync(
+      process.execPath,
+      [CLI_PATH, 'wait', '--run', runB, '--workers', 'logger', '--timeout', '2', '--poll', '200'],
+      { cwd, encoding: 'utf-8', timeout: 8_000 },
+    )
+    expect(waitB.status ?? 1).toBe(0)
+    expect(waitB.stdout ?? '').toContain('WORKER_RESULT:logger:DONE:')
+  })
+
   it('exits non-zero and reports partial failure without hanging', () => {
     const cwd = makeWorkspace()
     writeResult(cwd, 'ok-worker', 'done', { summary: 'ok' })

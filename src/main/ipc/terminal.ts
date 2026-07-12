@@ -48,6 +48,7 @@ import {
   inferAcceptFromRole,
 } from '../../shared/orchestration/accept'
 import {
+  applyFolderTrustToDisposition,
   dispositionOrquestraCommand,
   isMaestroBusy,
   shouldCascadeWorker,
@@ -363,25 +364,22 @@ export function startOrquestraWatcher(
         activeMaestroId,
         activeRunId,
       })
-      // Folder is authoritative for multi-Maestro when the agent shell never got
-      // ORQUESTRA_RUN_ID (stamp failed / agent started before crown). Missing stamps
-      // under the correct runs/{id}/commands dir should still route to that Maestro.
-      if (
-        disp === 'drop_missing'
-        && trustFolderIdentity
-        && activeRunId
-        && activeMaestroId
-      ) {
-        const stampedM = String(payload.maestroId ?? '').trim()
-        const stampedR = String(payload.runId ?? '').trim()
-        const contradicts =
-          (stampedM && stampedM !== activeMaestroId)
-          || (stampedR && stampedR !== activeRunId)
-        if (!contradicts) {
-          disp = 'accept'
-          payload.maestroId = activeMaestroId
-          payload.runId = activeRunId
-        }
+      // Folder is authoritative when the agent shell never got ORQUESTRA_RUN_ID
+      // (stamp failed / agent started before crown). Missing stamps under the
+      // correct runs/{id}/commands dir — or sole live Maestro legacy dir —
+      // still route to that Maestro. Explicit mismatched stamps still drop.
+      const trusted = applyFolderTrustToDisposition({
+        disposition: disp,
+        trustFolderIdentity,
+        activeMaestroId,
+        activeRunId,
+        payloadMaestroId: payload.maestroId,
+        payloadRunId: payload.runId,
+      })
+      disp = trusted.disposition
+      if (disp === 'accept') {
+        payload.maestroId = trusted.maestroId
+        if (trusted.runId) payload.runId = trusted.runId
       }
       if (disp !== 'accept') {
         log.warn(
@@ -472,7 +470,9 @@ export function startOrquestraWatcher(
         fallbackMaestro,
         fallbackRun,
         winId,
-        false,
+        // Sole live Maestro: unstamped legacy cmds (old agents / hand-written)
+        // are trusted — multi-Maestro already returned above when live ≠ 1.
+        true,
       )
     }
   }

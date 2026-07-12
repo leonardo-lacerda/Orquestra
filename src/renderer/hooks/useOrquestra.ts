@@ -902,6 +902,22 @@ export function resolveRunIdForMaestro(maestroPtyId: string): string | undefined
   return undefined
 }
 
+/**
+ * When the Maestro CLI calls reassign but this run has no owned panel with that
+ * name, fall back to recruit (open the slot) instead of hard-failing. Matches
+ * pool_queue "reassign-first" when the pool is still empty.
+ */
+export function shouldFallbackReassignToRecruit(opts: {
+  target: string | undefined | null
+  resolvedPanelId: string | null | undefined
+  role: string | undefined | null
+}): boolean {
+  if (opts.resolvedPanelId) return false
+  if (!String(opts.target ?? '').trim()) return false
+  if (!String(opts.role ?? '').trim()) return false
+  return true
+}
+
 export function formatWorkerListForTerminal(workers: OrquestraWorkerSummary[]): string {
   if (workers.length === 0) return '[orquestra] Workers: none'
   const lines = workers.map((worker) => {
@@ -1097,9 +1113,11 @@ export function useOrquestra(): void {
   useEffect(() => {
     if (!window.electronAPI?.onMaestroRecruit) return
 
-    const unsubs = [
-      // --- Recruit ---
-      window.electronAPI.onMaestroRecruit(async (maestroId, args) => {
+    // Shared recruit pipeline (also used as reassign→recruit fallback when no slot exists).
+    const handleMaestroRecruit = async (
+      maestroId: string,
+      args: { role: string; agent?: string; name?: string; runId?: string },
+    ): Promise<void> => {
         const store = useAppStore.getState()
         const settings = useSettingsStore.getState()
         const runStore = useOrchestrationRunStore.getState()
@@ -1536,6 +1554,12 @@ export function useOrquestra(): void {
           }
           setTimeout(() => startAgent(0), 1000)
         }
+    }
+
+    const unsubs = [
+      // --- Recruit ---
+      window.electronAPI.onMaestroRecruit((maestroId, args) => {
+        void handleMaestroRecruit(maestroId, args)
       }),
 
       // --- Dismiss ---
@@ -1622,6 +1646,28 @@ export function useOrquestra(): void {
           namesMap,
           runEntries,
         })
+        // Pool empty / wrong name: treat reassign as first recruit (LLM often skips recruit).
+        if (
+          shouldFallbackReassignToRecruit({
+            target: args.target,
+            resolvedPanelId: resolved?.panelId,
+            role: args.role,
+          })
+        ) {
+          const slot = String(args.target).trim()
+          writeToMaestro(
+            _maestroId,
+            `[orquestra] No open worker "${slot}" — opening as recruit (reassign fallback).`,
+          )
+          orq(`reassign→recruit ${slot}`)
+          await handleMaestroRecruit(_maestroId, {
+            name: slot,
+            role: args.role,
+            agent: (args as { agent?: string }).agent,
+            runId: (args as { runId?: string }).runId,
+          })
+          return
+        }
         if (!resolved) {
           writeToMaestro(
             _maestroId,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyFolderTrustToDisposition,
   dispositionOrquestraCommand,
   isMaestroBusy,
   shouldCascadeWorker,
@@ -52,6 +53,45 @@ describe('dispositionOrquestraCommand', () => {
         activeRunId: 'run-1',
       }),
     ).toBe('drop_stale')
+  })
+})
+
+describe('applyFolderTrustToDisposition', () => {
+  it('accepts unstamped cmd when folder trust is on (run-scoped or sole legacy)', () => {
+    const r = applyFolderTrustToDisposition({
+      disposition: 'drop_missing',
+      trustFolderIdentity: true,
+      activeMaestroId: 'pty-a',
+      activeRunId: 'run-1',
+      payloadMaestroId: undefined,
+      payloadRunId: undefined,
+    })
+    expect(r.disposition).toBe('accept')
+    expect(r.maestroId).toBe('pty-a')
+    expect(r.runId).toBe('run-1')
+  })
+
+  it('does not trust missing stamps when folder trust is off', () => {
+    const r = applyFolderTrustToDisposition({
+      disposition: 'drop_missing',
+      trustFolderIdentity: false,
+      activeMaestroId: 'pty-a',
+      activeRunId: 'run-1',
+    })
+    expect(r.disposition).toBe('drop_missing')
+  })
+
+  it('still drops explicit mismatched stamps under folder trust', () => {
+    const r = applyFolderTrustToDisposition({
+      disposition: 'drop_missing',
+      trustFolderIdentity: true,
+      activeMaestroId: 'pty-a',
+      activeRunId: 'run-1',
+      payloadMaestroId: 'pty-other',
+      payloadRunId: 'run-1',
+    })
+    // dispositionOrquestraCommand would return drop_stale; if already drop_missing with wrong stamp:
+    expect(r.disposition).toBe('drop_missing')
   })
 })
 

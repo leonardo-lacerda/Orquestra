@@ -41,7 +41,7 @@ export const Tooltip: React.FC<TooltipProps> = ({ label, placement = 'bottom', c
       {pos &&
         createPortal(
           <div
-            className="fixed z-[100] pointer-events-none px-1.5 py-0.5 rounded bg-surface-2 border border-subtle text-[11px] text-primary whitespace-nowrap shadow-lg"
+            className="fixed z-[100] pointer-events-none px-1.5 py-0.5 rounded bg-surface-2 border border-subtle text-[11px] text-primary shadow-lg max-w-[260px] whitespace-normal text-center leading-snug"
             style={{
               top: pos.top,
               left: pos.left,

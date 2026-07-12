@@ -1,8 +1,9 @@
 /**
- * E2E gate A1: real .orquestra-commands → watcher → recruit (canvas workers).
+ * E2E gate A1: real command file → watcher → recruit (canvas workers).
  *
- * Result-file writers are unit-tested separately (A2). This does not claim
- * full idle→wait E2E unless results appear without seeding.
+ * Mirrors CLI `orquestra.js send()`: write under runs/{runId}/commands with
+ * maestroId + runId stamps (and dual-write legacy for single-run). Result-file
+ * writers are unit-tested separately (A2).
  */
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs/promises'
@@ -30,27 +31,55 @@ test('command-file recruit creates worker nodes on canvas', async () => {
       window.__orquestraE2E!.enableMaestro(nodeId), maestroNodeId)
     expect(enabled).toBe(true)
 
+    // CLI bootstrap (orquestra.cjs and/or orquestra.js) must land in workspace
     await expect.poll(async () => {
       try {
-        await fs.access(path.join(root, 'orquestra.js'))
+        await fs.access(path.join(root, 'orquestra.cjs'))
         return true
       } catch {
-        return false
+        try {
+          await fs.access(path.join(root, 'orquestra.js'))
+          return true
+        } catch {
+          return false
+        }
       }
     }).toBe(true)
 
-    // Real command-file path (same as CLI send())
-    const cmdDir = path.join(root, '.orquestra-commands')
-    fsSync.mkdirSync(cmdDir, { recursive: true })
+    // Wait for multi-run registry (crown arm writes registry + runs/{id}/commands)
+    const registryPath = path.join(root, '.orquestra', 'registry.json')
+    await expect.poll(async () => {
+      try {
+        const reg = JSON.parse(await fs.readFile(registryPath, 'utf-8')) as {
+          runs?: Array<{ runId?: string; maestroPtyId?: string }>
+        }
+        return Boolean(reg.runs?.[0]?.runId && reg.runs?.[0]?.maestroPtyId)
+      } catch {
+        return false
+      }
+    }, { timeout: 15_000 }).toBe(true)
+
+    const reg = JSON.parse(await fs.readFile(registryPath, 'utf-8')) as {
+      runs: Array<{ runId: string; maestroPtyId: string }>
+    }
+    const run = reg.runs[0]
+    const runCmdDir = path.join(root, '.orquestra', 'runs', run.runId, 'commands')
+    fsSync.mkdirSync(runCmdDir, { recursive: true })
+
+    // Same shape as scripts/maestro/orquestra.js send()
     const cmdPayload = {
       cmd: 'recruit',
       args: { role: 'E2E HTML worker', agent: null, name: 'e2e-html' },
       timestamp: Date.now(),
+      maestroId: run.maestroPtyId,
+      runId: run.runId,
     }
-    fsSync.writeFileSync(
-      path.join(cmdDir, `cmd-${Date.now()}-e2e.json`),
-      JSON.stringify(cmdPayload),
-    )
+    const filename = `cmd-${Date.now()}-e2e.json`
+    fsSync.writeFileSync(path.join(runCmdDir, filename), JSON.stringify(cmdPayload))
+    // Dual-write legacy (CLI does this for single-run older watchers)
+    const legacyDir = path.join(root, '.orquestra-commands')
+    fsSync.mkdirSync(legacyDir, { recursive: true })
+    fsSync.writeFileSync(path.join(legacyDir, filename), JSON.stringify(cmdPayload))
 
     // Watcher polls ~500ms; wait for worker panel title
     await expect.poll(async () => {

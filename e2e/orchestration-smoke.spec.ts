@@ -58,12 +58,18 @@ test('orchestration smoke: recruit workers, seed results, wait succeeds', async 
       window.__orquestraE2E!.enableMaestro(nodeId), maestroNodeId)).toBe(true)
 
     // CLI should be copied into the workspace by terminalSetMaestro
+    // (orquestra.cjs always; orquestra.js may be thin bootstrap)
     await expect.poll(async () => {
       try {
-        await fs.access(path.join(root, 'orquestra.js'))
+        await fs.access(path.join(root, 'orquestra.cjs'))
         return true
       } catch {
-        return false
+        try {
+          await fs.access(path.join(root, 'orquestra.js'))
+          return true
+        } catch {
+          return false
+        }
       }
     }).toBe(true)
 

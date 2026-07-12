@@ -2,8 +2,9 @@
 // =============================================================================
 // orquestra — CLI for Maestro mode terminals (canonical copy).
 //
-// Copied into the workspace root when Maestro is enabled (see terminalSetMaestro).
-// Keep this file in sync with repo-root orquestra.js.
+// Copied into the workspace as orquestra.cjs when Maestro is enabled
+// (see installOrquestraCliToWorkspace). Keep in sync with repo-root orquestra.js.
+// .cjs avoids breakage when the workspace package.json sets "type":"module".
 //
 // IPC commands write JSON to .orquestra-commands/ (watched by Orquestra main).
 // Local commands (wait / status) poll .orquestra-results/worker-<name>.json.

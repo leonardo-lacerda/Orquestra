@@ -11,6 +11,7 @@ import {
   normalizeWorkerFunctionId,
   resolveReusableWorkerPanel,
   resolveOwnedWorkerPanel,
+  shouldFallbackReassignToRecruit,
   resolveQueueKeyForMaestro,
   flattenRoleForTerminalInject,
   formatWorkerListForTerminal,
@@ -618,6 +619,37 @@ describe('useOrquestra helpers', () => {
    * Empty namesMap + foreign panel titled "logger" must NOT resolve
    * (would close/inject Maestro A's worker when B dismisses/reassigns "logger").
    */
+  it('shouldFallbackReassignToRecruit: empty pool + name+role → open via recruit', () => {
+    expect(
+      shouldFallbackReassignToRecruit({
+        target: 'w1',
+        resolvedPanelId: null,
+        role: 'Build the counter',
+      }),
+    ).toBe(true)
+    expect(
+      shouldFallbackReassignToRecruit({
+        target: 'w1',
+        resolvedPanelId: 'panel-1',
+        role: 'next task',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFallbackReassignToRecruit({
+        target: 'w1',
+        resolvedPanelId: null,
+        role: '',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFallbackReassignToRecruit({
+        target: '',
+        resolvedPanelId: null,
+        role: 'task',
+      }),
+    ).toBe(false)
+  })
+
   it('resolveOwnedWorkerPanel: dismiss/reassign does NOT hit foreign run panel by title', () => {
     const panels = {
       'panel-a-logger': { id: 'panel-a-logger', title: 'logger' },
