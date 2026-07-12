@@ -1,9 +1,12 @@
 // =============================================================================
-// publish-release.mjs — upload Windows/mac/linux artifacts to Cloudflare R2
+// publish-release.mjs — upload artifacts to Cloudflare R2
 // for electron-updater (generic provider).
 //
-// Organizes files by version into folders (v{version}/) on the bucket, keeping
-// latest.yml at the root with its path/url pointing into the version folder.
+// Mirrors the local release/ directory structure to the R2 bucket. If your
+// local release/ has version subdirectories (v1.5.1/...), they are preserved
+// on the bucket. The latest.yml at root gets its path/url auto-patched to
+// point into the version folder even when electron-builder generates flat
+// paths.
 //
 // Usage:
 //   # Required env (R2 API token with Object Read & Write on the bucket):
@@ -24,7 +27,7 @@
 // =============================================================================
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join, relative, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -44,8 +47,15 @@ const RELEASE_DIR =
     ? process.argv[dirFlag + 1]
     : join(ROOT, 'release')
 
-// Matches version numbers in filenames: Orquestra Setup 1.5.1.exe, Orquestra-1.5.1-win.zip
-const VERSION_RE = /Orquestra(?: Setup)?[- ](\d+\.\d+\.\d+)/
+// Directories and files to skip during upload.
+const SKIP_NAMES = new Set([
+  'win-unpacked',
+  'mac-unpacked',
+  'linux-unpacked',
+  'builder-debug.yml',
+  '__MACOSX',
+  '.DS_Store',
+])
 
 function die(msg) {
   console.error(`\u274C ${msg}`)
@@ -63,6 +73,26 @@ function mimeType(filePath) {
   if (name.endsWith('.deb')) return 'application/vnd.debian.binary-package'
   if (name.endsWith('.tar.gz') || name.endsWith('.tgz')) return 'application/gzip'
   return 'application/octet-stream'
+}
+
+/**
+ * Recursively collect all files under a directory, returning their paths
+ * relative to the base directory.
+ */
+function collectFiles(dir) {
+  const result = []
+  const entries = readdirSync(dir)
+  for (const entry of entries) {
+    if (SKIP_NAMES.has(entry)) continue
+    const fullPath = join(dir, entry)
+    const stat = statSync(fullPath)
+    if (stat.isDirectory()) {
+      result.push(...collectFiles(fullPath))
+    } else if (stat.isFile()) {
+      result.push(fullPath)
+    }
+  }
+  return result
 }
 
 async function loadS3() {
@@ -104,26 +134,22 @@ async function main() {
     die(`Release dir not found: ${RELEASE_DIR}\n   Run: npm run package:win`)
   }
 
-  // Collect all files, grouped by version
-  const entries = readdirSync(RELEASE_DIR).filter((f) => {
-    if (f === 'builder-debug.yml' || f.endsWith('.json')) return false
-    const p = join(RELEASE_DIR, f)
-    return statSync(p).isFile()
-  })
-  if (entries.length === 0) {
-    die('No artifacts in release/. Run npm run package:win first.')
+  // Recursively collect all files
+  const allPaths = collectFiles(RELEASE_DIR)
+  if (allPaths.length === 0) {
+    die('No files found in release/. Run npm run package:win first.')
   }
 
-  // Group files: latest.yml is special; version files go to folders; others skip.
-  const latestEntry = entries.find((f) => f === 'latest.yml')
-  const versionFiles = entries.filter((f) => f !== 'latest.yml' && VERSION_RE.test(f))
+  // Convert absolute paths to S3 keys (relative to RELEASE_DIR)
+  const entries = allPaths.map((p) => ({
+    absPath: p,
+    key: relative(RELEASE_DIR, p).replace(/\\/g, '/'),
+  }))
 
-  console.log(`\uD83D\uDCE6 ${entries.length} entries found:`)
-  for (const f of entries) {
-    const match = f.match(VERSION_RE)
-    const tag = match ? `v${match[1]}/` : f === 'latest.yml' ? '(root)' : '(skip)'
-    const size = statSync(join(RELEASE_DIR, f)).size
-    console.log(`   - ${tag}${f} (${(size / 1024 / 1024).toFixed(1)} MB)`)
+  console.log(`\uD83D\uDCE6 ${entries.length} files found:`)
+  for (const e of entries) {
+    const size = statSync(e.absPath).size
+    console.log(`   - ${e.key} (${(size / 1024 / 1024).toFixed(1)} MB)`)
   }
   console.log('')
 
@@ -151,40 +177,32 @@ async function main() {
   console.log('')
   console.log('\u2B06\uFE0F  Uploading\u2026')
 
-  // Upload version-specific files to v{version}/ folder
-  for (const f of versionFiles) {
-    const filePath = join(RELEASE_DIR, f)
-    const body = readFileSync(filePath)
-    const version = f.match(VERSION_RE)[1]
-    const key = `v${version}/${f}`
+  for (const e of entries) {
+    let body = readFileSync(e.absPath)
+    let key = e.key
+
+    // latest.yml at root: patch internal path/url to point into the version
+    // folder, then upload to root so the updater finds it.
+    if (key === 'latest.yml') {
+      const content = body.toString('utf-8')
+      const version = content.match(/^version:\s*(\S+)/m)?.[1]
+      if (version) {
+        body = Buffer.from(
+          content
+            .replace(/^(path:\s*)(.+)$/m, `$1v${version}/$2`)
+            .replace(/^(\s+- url:\s*)(.+)$/m, `$1v${version}/$2`),
+          'utf-8',
+        )
+      }
+    }
+
     console.log(`   ${key} (${(body.length / 1024 / 1024).toFixed(1)} MB)`)
     await client.send(
       new PutObjectCommand({
         Bucket: BUCKET,
         Key: key,
         Body: body,
-        ContentType: mimeType(filePath),
-      }),
-    )
-  }
-
-  // Upload latest.yml to root with updated path/url pointing to version folder
-  if (latestEntry) {
-    const filePath = join(RELEASE_DIR, latestEntry)
-    let content = readFileSync(filePath, 'utf-8')
-    const version = content.match(/^version:\s*(\S+)/m)?.[1]
-    if (version) {
-      content = content
-        .replace(/^(path:\s*)(.+)$/m, `$1v${version}/$2`)
-        .replace(/^(\s+- url:\s*)(.+)$/m, `$1v${version}/$2`)
-    }
-    console.log(`   latest.yml (root, version=${version || '?'})`)
-    await client.send(
-      new PutObjectCommand({
-        Bucket: BUCKET,
-        Key: 'latest.yml',
-        Body: content,
-        ContentType: 'text/yaml',
+        ContentType: mimeType(e.absPath),
       }),
     )
   }
@@ -194,14 +212,7 @@ async function main() {
   console.log(`   Feed URL: ${PUBLIC_URL}/`)
   console.log(`   Check:    ${PUBLIC_URL}/latest.yml`)
   console.log('')
-  console.log('Your releases are now organised by version on the bucket:')
-  console.log('   v{version}/')
-  console.log('     Orquestra Setup {version}.exe')
-  console.log('     Orquestra Setup {version}.exe.blockmap')
-  console.log('     Orquestra-{version}-win.zip')
-  console.log('   latest.yml  (points to the latest version folder)')
-  console.log('')
-  console.log('\uD83D\uDCCB electron-builder publish.url and ORQUESTRA_RELEASES_URL must match this feed.')
+  console.log('Your local release/ directory structure is mirrored to the bucket.')
   console.log('')
 }
 
