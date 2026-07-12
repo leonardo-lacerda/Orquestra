@@ -24,6 +24,7 @@ import {
   type RegistryEntry,
 } from './registryState'
 import { scheduleTuiWebglHeal, looksLikeTuiFullRedraw } from './terminalDom'
+import { registerTerminalDataHandler, registerTerminalExitHandler } from './terminalDataBus'
 import {
   getTerminalFontFamily,
   getTerminalBaseFontSize,
@@ -207,37 +208,37 @@ export function wireTerminalListeners(args: {
   const spawnedAt = Date.now()
   let sawOutput = false
 
-  // PTY -> xterm: incoming data
-  const removeDataListener = electronAPI.onTerminalData((id: string, data: string) => {
-    if (id === ptyId) {
-      sawOutput = true
-      const hardHeal = looksLikeTuiFullRedraw(data)
-      // xterm.write is asynchronous: parsing and rendering are queued. Healing
-      // before its callback races the active TUI frame and can clear/recreate
-      // the renderer while that frame is still being committed.
-      terminal.write(data, () => {
-        try {
-          scheduleTuiWebglHeal({ hard: hardHeal, reason: 'output' })
-        } catch { /* ignore mid-dispose */ }
-      })
-      if (outputShowsBodySpinner(data)) noteAgentSpinnerByte(ptyId)
-    }
+  // PTY -> xterm: incoming data (multiplexed bus — one IPC listener for all PTYs)
+  const removeDataListener = registerTerminalDataHandler(ptyId, (data: string) => {
+    sawOutput = true
+    // AI agent TUIs (Claude/Verboo/Grok) emit full-frame redraws constantly.
+    // Hard WebGL rebuild of EVERY terminal on those frames destroyed FPS at
+    // ~8–12 open agents. Soft heal only (shared atlas clear + refresh), and
+    // only when the chunk actually looks like a full redraw — not every write.
+    const needsSoftHeal = looksLikeTuiFullRedraw(data)
+    terminal.write(data, () => {
+      if (!needsSoftHeal) return
+      try {
+        // hard:false — full rebuildAllWebglRenderers is reserved for focus /
+        // zoom / attach, not the streaming path.
+        scheduleTuiWebglHeal({ hard: false, reason: 'output' })
+      } catch { /* ignore mid-dispose */ }
+    })
+    if (outputShowsBodySpinner(data)) noteAgentSpinnerByte(ptyId)
   })
   cleanupListeners.push(removeDataListener)
 
   // PTY exit notification — mark the entry dead so registry membership no
   // longer implies a live PTY (the entry lingers so its buffer stays readable
   // and the exit line is visible until the panel is disposed).
-  const removeExitListener = electronAPI.onTerminalExit((id: string, exitCode: number) => {
-    if (id === ptyId) {
-      const e = registry.get(panelId)
-      if (e) e.alive = false
-      terminal.write(
-        `\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`,
-      )
-      if (freshSpawn && exitCode === 0 && !sawOutput && Date.now() - spawnedAt < INSTANT_EXIT_THRESHOLD_MS) {
-        terminal.write(INSTANT_EXIT_HINT)
-      }
+  const removeExitListener = registerTerminalExitHandler(ptyId, (exitCode: number) => {
+    const e = registry.get(panelId)
+    if (e) e.alive = false
+    terminal.write(
+      `\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`,
+    )
+    if (freshSpawn && exitCode === 0 && !sawOutput && Date.now() - spawnedAt < INSTANT_EXIT_THRESHOLD_MS) {
+      terminal.write(INSTANT_EXIT_HINT)
     }
   })
   cleanupListeners.push(removeExitListener)

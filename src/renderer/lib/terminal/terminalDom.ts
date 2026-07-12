@@ -49,12 +49,67 @@ export function forceWebglRepaint(): void {
   }
 }
 
+/**
+ * Chromium throttles / thrashs when many WebGL contexts are live. Each xterm
+ * WebglAddon is a full GL context. Cap concurrent contexts so 10+ canvas
+ * terminals stay usable; overflow falls back to the canvas renderer.
+ * Focused/preferred panels still get WebGL (see ensureWebglBudget).
+ */
+export const MAX_WEBGL_TERMINALS = 6
+
+/** One visibilitychange → one forceWebglRepaint (not one per terminal). */
+let visibilityRepaintInstalled = false
+function ensureVisibilityRepaintListener(): void {
+  if (visibilityRepaintInstalled || typeof document === 'undefined') return
+  visibilityRepaintInstalled = true
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') forceWebglRepaint()
+  })
+}
+
+function countLiveWebgl(): number {
+  let n = 0
+  for (const e of registry.values()) {
+    if (e.webglAddon) n++
+  }
+  return n
+}
+
+/** Drop WebGL on least-critical entries until under budget (keep `preferPanelId`). */
+function ensureWebglBudget(preferPanelId: string): void {
+  if (countLiveWebgl() < MAX_WEBGL_TERMINALS) return
+  const candidates: Array<{ panelId: string; entry: RegistryEntry; score: number }> = []
+  for (const [panelId, entry] of registry.entries()) {
+    if (!entry.webglAddon || panelId === preferPanelId) continue
+    const el = (entry.terminal as unknown as { element?: HTMLElement }).element
+    // Prefer demoting detached / disconnected first (already off-screen).
+    const connected = el?.isConnected ? 1 : 0
+    candidates.push({ panelId, entry, score: connected })
+  }
+  candidates.sort((a, b) => a.score - b.score)
+  for (const c of candidates) {
+    if (countLiveWebgl() < MAX_WEBGL_TERMINALS) break
+    try { c.entry.webglAddon?.dispose() } catch { /* ignore */ }
+    c.entry.webglAddon = null
+  }
+}
+
+/** Dispose WebGL only (leave terminal on canvas renderer). */
+export function disposeWebglAddon(entry: RegistryEntry): void {
+  if (!entry.webglAddon) return
+  try { entry.webglAddon.dispose() } catch { /* ignore */ }
+  entry.webglAddon = null
+}
+
 /** Dispose + recreate the WebGL addon for one entry (fresh GPU canvas). */
 function reloadWebglAddon(panelId: string, entry: RegistryEntry): void {
   if (entry.webglAddon) {
     try { entry.webglAddon.dispose() } catch { /* ignore */ }
     entry.webglAddon = null
   }
+  ensureWebglBudget(panelId)
+  // Still over budget (prefer held all slots?) — canvas fallback
+  if (countLiveWebgl() >= MAX_WEBGL_TERMINALS) return
   try {
     const newWebgl = new WebglAddon()
     newWebgl.onContextLoss(() => {
@@ -177,13 +232,18 @@ export function looksLikeTuiFullRedraw(data: string): boolean {
 
 /**
  * Debounced WebGL recovery after TUI output / focus. Soft clear first; if the
- * chunk looked like a full redraw (or caller asked hard), rebuild every
- * WebGL addon — same end state as "I resized and it fixed itself".
+ * caller asked hard (focus/attach only — never the streaming output path),
+ * rebuild every WebGL addon — same end state as "I resized and it fixed itself".
+ *
+ * PERF: reason==='output' forces soft-only. Streaming AI agents emit full-frame
+ * redraws continuously; hard rebuild of all terminals every ~520ms destroyed
+ * canvas FPS with ~10 open workers.
  */
 export function scheduleTuiWebglHeal(
   opts?: { hard?: boolean; reason?: 'output' | 'focus' | 'title' | 'attach' },
 ): void {
-  const wantHard = opts?.hard === true
+  // Streaming path must never arm hard rebuilds (see wireTerminalListeners).
+  const wantHard = opts?.hard === true && opts?.reason !== 'output'
 
   if (tuiSoftTimer !== null) clearTimeout(tuiSoftTimer)
   tuiSoftTimer = setTimeout(() => {
@@ -365,21 +425,10 @@ export function attach(panelId: string, container: HTMLDivElement): void {
     }
   }
 
-  // Repaint when the window becomes visible. A detached window is created
-  // hidden (show:false) and revealed on ready-to-show; if the WebGL renderer
-  // initialized while the window was still hidden, its drawing buffer never
-  // painted and its atlas was built against a stale DPR — leaving the terminal
-  // blank or garbled until something forces a redraw. The same blank-buffer
-  // race happens on minimize/restore. Force an atlas rebuild + refresh on every
-  // visible transition. Registered once per entry (survives re-attach cycles).
-  if (!entry.hasVisibilityListener) {
-    const onVisible = (): void => {
-      if (document.visibilityState === 'visible') forceWebglRepaint()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    entry.cleanupListeners.push(() => document.removeEventListener('visibilitychange', onVisible))
-    entry.hasVisibilityListener = true
-  }
+  // Single document-level visibility listener (module singleton). N per-entry
+  // listeners used to call forceWebglRepaint N times on one minimize/restore.
+  ensureVisibilityRepaintListener()
+  entry.hasVisibilityListener = true
 
   // Force layout reflow so the browser has calculated the new container size
   // before we resize the terminal / WebGL canvas.
@@ -434,18 +483,11 @@ export function attach(panelId: string, container: HTMLDivElement): void {
       }
     } catch { /* ignore */ }
 
-    // Rebuild the WebGL atlas + redraw now that we have run post-show with a
-    // real container size, then again on the next two frames. A detached
-    // window opens hidden and only paints once shown; its renderer initialized
-    // while hidden against a stale DPR/size, so the first paint can be blank or
-    // garbled until the atlas is rebuilt at the live DPR. The extra frames
-    // cover a window still settling its size/DPR on the first painted frame.
-    // Always full-window: atlas is shared across terminals (see forceWebglRepaint).
+    // Rebuild shared WebGL atlas once after fit, then one rAF follow-up for
+    // windows still settling DPR. (Was three full-window repaints — expensive
+    // with many terminals + IntersectionObserver re-attach cycles.)
     forceWebglRepaint()
-    requestAnimationFrame(() => {
-      forceWebglRepaint()
-      requestAnimationFrame(() => forceWebglRepaint())
-    })
+    requestAnimationFrame(() => forceWebglRepaint())
 
     // Now that the xterm is sized to its real container, replay captured
     // scrollback and release the main-side PTY buffer. Order matters:
@@ -555,6 +597,10 @@ export function detach(panelId: string, fromContainer?: HTMLElement): void {
   // this snapshot a dock tab switch (unmount → remount) loses the position and
   // the re-shown terminal jumps to the top.
   captureViewport(entry)
+
+  // Free a WebGL context slot while off-screen (IntersectionObserver hide /
+  // dock tab). attach() reloads WebGL within the concurrent budget.
+  disposeWebglAddon(entry)
 
   el.parentElement.removeChild(el)
 }

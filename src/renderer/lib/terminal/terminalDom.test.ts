@@ -43,7 +43,7 @@ describe('TUI WebGL healing', () => {
     vi.useRealTimers()
   })
 
-  it('hard-heals within the maximum wait even when full redraws keep arriving', () => {
+  it('hard-heals within the maximum wait even when full redraws keep arriving (focus path)', () => {
     const element = document.createElement('div')
     document.body.appendChild(element)
     const originalWebgl = new FakeWebgl()
@@ -55,15 +55,36 @@ describe('TUI WebGL healing', () => {
       webglAddon: originalWebgl,
     } as never)
 
-    scheduleTuiWebglHeal({ hard: true, reason: 'output' })
+    // focus/attach may arm hard rebuild; streaming output must not (see below).
+    scheduleTuiWebglHeal({ hard: true, reason: 'focus' })
     vi.advanceTimersByTime(400)
     // Previously this reset the 520 ms timer, so a continuously repainting AI
     // TUI could postpone recovery forever.
-    scheduleTuiWebglHeal({ hard: true, reason: 'output' })
+    scheduleTuiWebglHeal({ hard: true, reason: 'focus' })
     vi.advanceTimersByTime(120)
 
     expect(originalWebgl.dispose).toHaveBeenCalledOnce()
     expect(loadAddon).toHaveBeenCalledOnce()
     expect(refresh).toHaveBeenCalled()
+  })
+
+  it('output path never hard-rebuilds even if hard:true is passed', () => {
+    const element = document.createElement('div')
+    document.body.appendChild(element)
+    const originalWebgl = new FakeWebgl()
+    const loadAddon = vi.fn()
+    const refresh = vi.fn()
+
+    registry.set('panel-stream', {
+      terminal: { element, rows: 24, loadAddon, refresh },
+      webglAddon: originalWebgl,
+    } as never)
+
+    scheduleTuiWebglHeal({ hard: true, reason: 'output' })
+    vi.advanceTimersByTime(800)
+
+    // Soft heal may refresh; hard dispose+reload must not run for streaming.
+    expect(originalWebgl.dispose).not.toHaveBeenCalled()
+    expect(loadAddon).not.toHaveBeenCalled()
   })
 })
