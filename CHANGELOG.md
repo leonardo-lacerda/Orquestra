@@ -4,6 +4,12 @@ All notable changes to Orquestra will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.6] - 2026-07-12
+
+### Fixed
+
+- **Maestro crown arm stamp**: short one-line ready message via `echo` / `Write-Host` / `printf` (cmd-safe). Removed the long system rant and demo-product blacklist from the terminal.
+
 ## [1.5.5] - 2026-07-12
 
 ### Performance
