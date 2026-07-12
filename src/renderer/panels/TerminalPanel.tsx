@@ -288,6 +288,36 @@ export default function TerminalPanel({
       resizeObserverRef.current = resizeObserver
     }
 
+    function clearFreezeDom(): void {
+      const img = renderBox?.querySelector('[data-terminal-freeze]')
+      if (img) img.remove()
+    }
+
+    /** Show last painted frame so off-screen detach is invisible while panning. */
+    function showFreezeDom(): void {
+      if (!renderBox) return
+      const url = terminalRegistry.getFreezeFrameUrl(panelId)
+      if (!url) return
+      let img = renderBox.querySelector('[data-terminal-freeze]') as HTMLImageElement | null
+      if (!img) {
+        img = document.createElement('img')
+        img.setAttribute('data-terminal-freeze', '1')
+        img.alt = ''
+        img.draggable = false
+        Object.assign(img.style, {
+          position: 'absolute',
+          inset: '0',
+          width: '100%',
+          height: '100%',
+          objectFit: 'fill',
+          pointerEvents: 'none',
+          zIndex: '0',
+        } as CSSStyleDeclaration)
+        renderBox.appendChild(img)
+      }
+      img.src = url
+    }
+
     function detachAndDisconnect(): void {
       if (fitRafRef.current !== null) {
         cancelAnimationFrame(fitRafRef.current)
@@ -302,7 +332,12 @@ export default function TerminalPanel({
         resizeObserverRef.current.disconnect()
         resizeObserverRef.current = null
       }
+      showFreezeDom()
     }
+
+    // Hysteresis: delay hide so quick pan across a node doesn't thrash attach.
+    const HIDE_DEBOUNCE_MS = 420
+    let hideTimer: ReturnType<typeof setTimeout> | null = null
 
     // 1. Ensure the terminal + PTY exist in the registry (no-op if already live)
     terminalRegistry
@@ -313,27 +348,40 @@ export default function TerminalPanel({
       })
       .then((entry) => {
         if (cancelled) return
+        clearFreezeDom()
         attachAndObserve(entry)
 
-        // IntersectionObserver: detach WebGL/ResizeObserver when hidden, re-attach when visible.
-        // Also notify main so it can SIGSTOP the PTY after it has been hidden + silent
-        // for IDLE_SUSPEND_MS (see src/main/ipc/terminal.ts).
+        // IntersectionObserver: detach WebGL when off-screen (keep freeze frame),
+        // re-attach when visible. rootMargin keeps near-edge panels live during pan.
+        // Also notify main so it can SIGSTOP after hidden + silent (IDLE_SUSPEND_MS).
         const intersectionObserver = new IntersectionObserver(
           (entries) => {
             if (cancelled) return
             const isVisible = entries[0]?.isIntersecting ?? false
             if (isVisible) {
+              if (hideTimer !== null) {
+                clearTimeout(hideTimer)
+                hideTimer = null
+              }
+              clearFreezeDom()
               if (!resizeObserverRef.current) {
                 attachAndObserve(entry)
               }
+              terminalRegistry.markTerminalHot(panelId)
             } else {
-              detachAndDisconnect()
+              if (hideTimer !== null) clearTimeout(hideTimer)
+              hideTimer = setTimeout(() => {
+                hideTimer = null
+                if (cancelled) return
+                detachAndDisconnect()
+              }, HIDE_DEBOUNCE_MS)
             }
             if (entry.ptyId) {
               window.electronAPI.terminalSetVisibility(entry.ptyId, isVisible).catch(() => { /* noop */ })
             }
           },
-          { threshold: 0 },
+          // Expand hit-box so panels near the edge stay attached while panning.
+          { threshold: 0, rootMargin: '80px' },
         )
         intersectionObserver.observe(renderBox!)
         ;(renderBox as any).__intersectionObserver = intersectionObserver
@@ -346,6 +394,10 @@ export default function TerminalPanel({
     // Cleanup on unmount: detach DOM, disconnect observer — do NOT kill PTY
     return () => {
       cancelled = true
+      if (hideTimer !== null) {
+        clearTimeout(hideTimer)
+        hideTimer = null
+      }
 
       const io = (renderBox as any).__intersectionObserver as IntersectionObserver | undefined
       if (io) {
@@ -388,11 +440,16 @@ export default function TerminalPanel({
         }
         if (!scrollRestored) {
           scrollRestored = true
+          terminalRegistry.markTerminalHot(panelId)
           terminalRegistry.restoreScroll(panelId)
           requestAnimationFrame(() => terminalRegistry.restoreScroll(panelId))
           // Focus often follows a garbled TUI frame (user clicks the panel to
-          // "fix" it). Heal WebGL the same way a manual resize would.
-          terminalRegistry.scheduleTuiWebglHeal({ hard: true, reason: 'focus' })
+          // "fix" it). Heal WebGL preferring this panel for the GPU budget.
+          terminalRegistry.scheduleTuiWebglHeal({
+            hard: true,
+            reason: 'focus',
+            preferPanelId: panelId,
+          })
         }
         // Re-check for ~500ms after first success to survive a detach/reattach
         // race from the IntersectionObserver right after mount.

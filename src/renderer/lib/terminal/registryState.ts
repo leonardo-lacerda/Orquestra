@@ -73,6 +73,16 @@ export interface RegistryEntry {
    * dimensions are known. Cleared once finalized.
    */
   pendingReconnect?: { ptyId: string; scrollback?: string }
+  /**
+   * Last time this terminal was focused / attached / written to while preferred.
+   * Used for silent WebGL budget (keep hot terminals on GPU).
+   */
+  lastUsedAt?: number
+  /**
+   * data-URL of the last painted WebGL/canvas frame, captured on detach so the
+   * panel can show a freeze frame while off-screen (invisible to the user).
+   */
+  freezeFrameUrl?: string
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,13 @@ All notable changes to Orquestra will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.5.5] - 2026-07-12
+
+### Performance
+
+- **20+ terminals scale path** (invisible to normal use): viewport hysteresis + freeze-frame when off-screen, WebGL budget prefers focused/hot panels, adaptive PTY→renderer coalesce under load, throttled agent title/spinner store updates, isolated multiplexed terminal data bus.
+- Soft WebGL heal only on streaming TUI frames (hard rebuild reserved for focus/zoom).
+
 ## [1.5.4] - 2026-07-12
 
 ### Changed

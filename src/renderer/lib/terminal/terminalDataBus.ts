@@ -23,7 +23,11 @@ function ensureDataListener(): void {
   const api = window.electronAPI
   if (!api?.onTerminalData) return
   dataUnsub = api.onTerminalData((id: string, data: string) => {
-    dataHandlers.get(id)?.(data)
+    try {
+      dataHandlers.get(id)?.(data)
+    } catch {
+      /* isolate a single PTY handler failure from the shared bus */
+    }
   })
 }
 
@@ -32,7 +36,11 @@ function ensureExitListener(): void {
   const api = window.electronAPI
   if (!api?.onTerminalExit) return
   exitUnsub = api.onTerminalExit((id: string, exitCode: number) => {
-    exitHandlers.get(id)?.(exitCode)
+    try {
+      exitHandlers.get(id)?.(exitCode)
+    } catch {
+      /* isolate handler failure */
+    }
   })
 }
 

@@ -29,6 +29,35 @@ import { clearActivePanelIfMatches } from '../../lib/activePanel'
 import { recordRecentFile } from '../../lib/fs/recentFiles'
 import { disableMaestroForPanel } from '../../lib/maestro/disableMaestroForPanel'
 
+/** Coalesce OSC agent titles so 20 agents don't re-render canvas chrome every frame. */
+const AGENT_TITLE_THROTTLE_MS = 150
+const agentTitleThrottle = new Map<string, {
+  at: number
+  pending: string | null
+  timer: ReturnType<typeof setTimeout> | null
+}>()
+
+function applyAgentTitle(
+  set: AppSet,
+  workspaceId: string,
+  panelId: string,
+  title: string,
+): void {
+  // Disambiguation needs every sibling panel's current title, so resolve the
+  // final (numbered) title against the whole workspace rather than via
+  // setPanelField's single-panel updater.
+  set((state) => ({
+    workspaces: state.workspaces.map((ws) => {
+      if (ws.id !== workspaceId) return ws
+      const panel = ws.panels[panelId]
+      if (!panel || panel.titleUserOverridden) return ws
+      const final = disambiguateTitle(title, panelId, ws.panels)
+      if (panel.title === final) return ws
+      return { ...ws, panels: { ...ws.panels, [panelId]: { ...panel, title: final } } }
+    }),
+  }))
+}
+
 type PanelSliceActions = Pick<
   AppStoreActions,
   | 'createTerminal'
@@ -261,19 +290,28 @@ export function createPanelSlice(set: AppSet, get: AppGet): PanelSliceActions {
     },
 
     updatePanelTitleFromAgent(workspaceId, panelId, title) {
-      // Disambiguation needs every sibling panel's current title, so resolve the
-      // final (numbered) title against the whole workspace rather than via
-      // setPanelField's single-panel updater.
-      set((state) => ({
-        workspaces: state.workspaces.map((ws) => {
-          if (ws.id !== workspaceId) return ws
-          const panel = ws.panels[panelId]
-          if (!panel || panel.titleUserOverridden) return ws
-          const final = disambiguateTitle(title, panelId, ws.panels)
-          if (panel.title === final) return ws
-          return { ...ws, panels: { ...ws.panels, [panelId]: { ...panel, title: final } } }
-        }),
-      }))
+      // Throttle agent OSC title updates — many agents rewrite titles several
+      // times per second; committing each to Zustand re-renders canvas chrome.
+      const key = `${workspaceId}:${panelId}`
+      const now = Date.now()
+      const prev = agentTitleThrottle.get(key)
+      if (prev && now - prev.at < AGENT_TITLE_THROTTLE_MS) {
+        prev.pending = title
+        if (!prev.timer) {
+          prev.timer = setTimeout(() => {
+            const entry = agentTitleThrottle.get(key)
+            if (!entry?.pending) return
+            const t = entry.pending
+            entry.pending = null
+            entry.timer = null
+            entry.at = Date.now()
+            applyAgentTitle(set, workspaceId, panelId, t)
+          }, AGENT_TITLE_THROTTLE_MS)
+        }
+        return
+      }
+      agentTitleThrottle.set(key, { at: now, pending: null, timer: null })
+      applyAgentTitle(set, workspaceId, panelId, title)
     },
 
     renamePanelByUser(workspaceId, panelId, title) {

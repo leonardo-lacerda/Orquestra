@@ -546,7 +546,7 @@ export interface OrquestraWorkerStatusEvent {
 const responseQueues: Map<string, WorkerResponse[]> = new Map()
 
 // Map: worker ptyId → tracking for idle/exit result files
-const workerTracking: Map<string, {
+type WorkerTracking = {
   orchestratorId: string
   /** Control-plane run; scopes results/cascade so multi-Maestro does not cross. */
   runId: string
@@ -563,7 +563,13 @@ const workerTracking: Map<string, {
   roleFileText: string | null
   /** When the task was submitted to the worker PTY. */
   roleInjectedAt: number | null
-}> = new Map()
+  /** Last idle-eligibility evaluation (throttle under high-frequency streams). */
+  lastIdleEvalAt?: number
+  /** Coalesced pending re-eval after throttle window. */
+  idleEvalPending?: boolean
+}
+
+const workerTracking: Map<string, WorkerTracking> = new Map()
 
 const WORKER_OUTPUT_LIMIT = 100  // keep last 100 lines
 /** Quiet period after eligibility before idle→done (KD6). */
@@ -983,18 +989,22 @@ export function listTrackedWorkers(orchestratorId?: string): OrquestraWorkerSumm
     }))
 }
 
+/** Min gap between full idle-eligibility re-evals under high-frequency streams. */
+const WORKER_IDLE_EVAL_THROTTLE_MS = 80
+
 /** Feed worker output for tracking. Call this from onData. */
 export function feedWorkerOutput(workerId: string, data: string): void {
   const tracking = workerTracking.get(workerId)
   if (!tracking) return
 
-  tracking.lastActivity = Date.now()
+  const now = Date.now()
+  tracking.lastActivity = now
 
   // Buffer cleaned lines
   const cleaned = stripAnsi(data)
   const lines = cleaned.split(new RegExp(String.fromCharCode(13, 10), "g")).filter((l: string) => l.trim())
   if (lines.length > 0 && tracking.firstOutputAt == null) {
-    tracking.firstOutputAt = Date.now()
+    tracking.firstOutputAt = now
   }
   tracking.outputBuffer.push(...lines)
 
@@ -1003,7 +1013,27 @@ export function feedWorkerOutput(workerId: string, data: string): void {
     tracking.outputBuffer = tracking.outputBuffer.slice(-WORKER_OUTPUT_LIMIT)
   }
 
-  // Reset idle timer only when eligible (KD6); otherwise keep waiting for more output
+  // Throttle eligibility re-eval: agents spit many chunks/s; re-running the
+  // full idle policy every chunk is pure CPU when 10–20 workers are tracked.
+  const lastEval = tracking.lastIdleEvalAt ?? 0
+  if (now - lastEval < WORKER_IDLE_EVAL_THROTTLE_MS) {
+    // Keep a pending re-check so we don't miss completion right after a burst.
+    if (!tracking.idleEvalPending) {
+      tracking.idleEvalPending = true
+      setTimeout(() => {
+        const still = workerTracking.get(workerId)
+        if (!still) return
+        still.idleEvalPending = false
+        scheduleWorkerIdleEval(workerId, still)
+      }, WORKER_IDLE_EVAL_THROTTLE_MS)
+    }
+    return
+  }
+  scheduleWorkerIdleEval(workerId, tracking)
+}
+
+function scheduleWorkerIdleEval(workerId: string, tracking: WorkerTracking): void {
+  tracking.lastIdleEvalAt = Date.now()
   if (tracking.idleTimer) clearTimeout(tracking.idleTimer)
   const { eligible, timeoutMs } = isWorkerIdleEligible(tracking)
   if (!eligible) return
@@ -1011,10 +1041,7 @@ export function feedWorkerOutput(workerId: string, data: string): void {
     const still = workerTracking.get(workerId)
     if (!still) return
     const again = isWorkerIdleEligible(still)
-    if (!again.eligible) {
-      // Re-evaluate on next feed
-      return
-    }
+    if (!again.eligible) return
     onWorkerIdle(workerId)
   }, timeoutMs)
 }
@@ -1515,17 +1542,24 @@ async function spawnTerminal(
   let sawData = false
   let resolvedShell = ''
 
-  // Per-terminal output coalescing (16ms) → owner window. Owner is read at flush
-  // time so a cross-window transfer reroutes in-flight output. The PTY only ever
-  // invokes onData with this terminal's own id, so the id captured on first data
-  // is the one used at flush.
+  // Per-terminal output coalescing → owner window. Delay scales with how many
+  // PTYs are live so 15–20 streaming agents don't flood the renderer IPC.
+  // Owner is read at flush so cross-window transfer reroutes in-flight output.
   let terminalId = ''
-  const dispatcher = createStringDispatcher(16, (dataBuffer) => {
-    const windowId = terminalOwners.get(terminalId)
-    if (windowId != null) {
-      try { sendToWindow(windowId, TERMINAL_DATA, terminalId, dataBuffer) } catch { /* window gone */ }
-    }
-  })
+  const dispatcher = createStringDispatcher(
+    () => {
+      const n = terminalRuntime.size
+      if (n >= 16) return 32
+      if (n >= 10) return 24
+      return 16
+    },
+    (dataBuffer) => {
+      const windowId = terminalOwners.get(terminalId)
+      if (windowId != null) {
+        try { sendToWindow(windowId, TERMINAL_DATA, terminalId, dataBuffer) } catch { /* window gone */ }
+      }
+    },
+  )
 
   const onData = (id: string, data: string): void => {
     if (shuttingDown) return

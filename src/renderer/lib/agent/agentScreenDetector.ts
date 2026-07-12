@@ -109,9 +109,39 @@ function commit(terminalId: string, state: AgentState, notify: boolean): void {
   }
 }
 
-function recompute(terminalId: string): void {
+/**
+ * Body-spinner frames can fire ~10–60 Hz per agent. While already `running`,
+ * recompute is a no-op on commit — still cap the resolve loop under 20 agents.
+ * Title/presence always force immediate recompute (settle/exit correctness).
+ */
+const SPINNER_RECOMPUTE_MIN_MS = 100
+const pendingSpinnerRecompute = new Map<string, ReturnType<typeof setTimeout>>()
+const lastSpinnerRecomputeAt = new Map<string, number>()
+
+function recompute(terminalId: string, opts?: { force?: boolean }): void {
   const t = trackers.get(terminalId)
   if (!t || !started) return
+
+  if (!opts?.force) {
+    const now = Date.now()
+    const last = lastSpinnerRecomputeAt.get(terminalId) ?? 0
+    if (now - last < SPINNER_RECOMPUTE_MIN_MS) {
+      if (!pendingSpinnerRecompute.has(terminalId)) {
+        const wait = SPINNER_RECOMPUTE_MIN_MS - (now - last)
+        pendingSpinnerRecompute.set(
+          terminalId,
+          setTimeout(() => {
+            pendingSpinnerRecompute.delete(terminalId)
+            recompute(terminalId, { force: true })
+          }, Math.max(0, wait)),
+        )
+      }
+      return
+    }
+    lastSpinnerRecomputeAt.set(terminalId, now)
+  } else {
+    lastSpinnerRecomputeAt.set(terminalId, Date.now())
+  }
 
   const raw = resolveAgentState({
     present: t.present,
@@ -150,21 +180,23 @@ function recompute(terminalId: string): void {
 export function noteAgentTitle(terminalId: string, running: boolean): void {
   const t = trackerFor(terminalId)
   t.titleSpinner = running
-  recompute(terminalId)
+  recompute(terminalId, { force: true })
 }
 
 /** A braille spinner frame was seen in the terminal body (e.g. pi's
  *  "⠋ Working…" line). Marks the agent running until the frames stop. */
 export function noteAgentSpinnerByte(terminalId: string): void {
   const t = trackerFor(terminalId)
+  const rising = !t.bodySpinner
   t.bodySpinner = true
   if (t.bodyTimer) clearTimeout(t.bodyTimer)
   t.bodyTimer = setTimeout(() => {
     t.bodyTimer = null
     t.bodySpinner = false
-    recompute(terminalId)
+    recompute(terminalId, { force: true })
   }, BODY_SPINNER_TIMEOUT_MS)
-  recompute(terminalId)
+  // Rising edge (idle→spinning) must apply immediately; steady frames throttle.
+  recompute(terminalId, { force: rising })
 }
 
 /** Main's process scan reported whether the agent CLI is present. The agent
@@ -174,7 +206,7 @@ export function noteAgentPresence(terminalId: string, present: boolean): void {
   const t = trackerFor(terminalId)
   t.wasPresent = t.present
   t.present = present
-  recompute(terminalId)
+  recompute(terminalId, { force: true })
 }
 
 /** Drop a terminal's tracker (wire into statusStore.unregisterTerminal). */
@@ -182,6 +214,12 @@ export function forgetAgentTracker(terminalId: string): void {
   const t = trackers.get(terminalId)
   if (t) clearTimers(t)
   trackers.delete(terminalId)
+  const pending = pendingSpinnerRecompute.get(terminalId)
+  if (pending) {
+    clearTimeout(pending)
+    pendingSpinnerRecompute.delete(terminalId)
+  }
+  lastSpinnerRecomputeAt.delete(terminalId)
 }
 
 export function startAgentScreenDetector(): void {

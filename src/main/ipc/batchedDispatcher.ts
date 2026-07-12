@@ -66,12 +66,17 @@ export function createKeyedDispatcher<TValue>(
 const MAX_STRING_BUFFER = 1024 * 1024 // 1MB cap to prevent heap exhaustion
 
 export function createStringDispatcher(
-  delayMs: number,
+  delayMs: number | (() => number),
   onBatch: (data: string) => void,
 ): BatchedDispatcher<string> {
   let buffer = ''
   let bufferBytes = 0
   let flushTimer: ReturnType<typeof setTimeout> | null = null
+
+  const resolveDelay = (): number => {
+    const d = typeof delayMs === 'function' ? delayMs() : delayMs
+    return Math.max(0, Math.min(100, Number(d) || 0))
+  }
 
   const push = (data: string): void => {
     buffer += data
@@ -87,7 +92,7 @@ export function createStringDispatcher(
         if (buffer) onBatch(buffer)
         buffer = ''
         bufferBytes = 0
-      }, delayMs)
+      }, resolveDelay())
     }
   }
 

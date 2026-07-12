@@ -55,6 +55,7 @@ export function forceWebglRepaint(): void {
  * terminals stay usable; overflow falls back to the canvas renderer.
  * Focused/preferred panels still get WebGL (see ensureWebglBudget).
  */
+/** Concurrent WebGL contexts — enough for focused + a few visible, not 20. */
 export const MAX_WEBGL_TERMINALS = 6
 
 /** One visibilitychange → one forceWebglRepaint (not one per terminal). */
@@ -75,6 +76,41 @@ function countLiveWebgl(): number {
   return n
 }
 
+/** Mark a terminal as recently used so WebGL budget prefers it. */
+export function markTerminalHot(panelId: string): void {
+  const entry = registry.get(panelId)
+  if (entry) entry.lastUsedAt = Date.now()
+}
+
+/**
+ * Capture the current xterm canvas as a freeze-frame data URL (before detach
+ * disposes WebGL). Best-effort; no-op if no canvas is available.
+ */
+export function captureFreezeFrame(panelId: string): string | undefined {
+  const entry = registry.get(panelId)
+  if (!entry) return undefined
+  try {
+    const el = (entry.terminal as unknown as { element?: HTMLElement }).element
+    if (!el) return undefined
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement | null
+    if (!canvas || canvas.width < 2 || canvas.height < 2) return undefined
+    const url = canvas.toDataURL('image/jpeg', 0.72)
+    entry.freezeFrameUrl = url
+    return url
+  } catch {
+    return undefined
+  }
+}
+
+export function getFreezeFrameUrl(panelId: string): string | undefined {
+  return registry.get(panelId)?.freezeFrameUrl
+}
+
+export function clearFreezeFrame(panelId: string): void {
+  const entry = registry.get(panelId)
+  if (entry) entry.freezeFrameUrl = undefined
+}
+
 /** Drop WebGL on least-critical entries until under budget (keep `preferPanelId`). */
 function ensureWebglBudget(preferPanelId: string): void {
   if (countLiveWebgl() < MAX_WEBGL_TERMINALS) return
@@ -82,11 +118,13 @@ function ensureWebglBudget(preferPanelId: string): void {
   for (const [panelId, entry] of registry.entries()) {
     if (!entry.webglAddon || panelId === preferPanelId) continue
     const el = (entry.terminal as unknown as { element?: HTMLElement }).element
-    // Prefer demoting detached / disconnected first (already off-screen).
-    const connected = el?.isConnected ? 1 : 0
-    candidates.push({ panelId, entry, score: connected })
+    // Higher score = demote first. Detached first, then least recently used.
+    const connected = el?.isConnected ? 0 : 1000
+    const age = Date.now() - (entry.lastUsedAt ?? 0)
+    candidates.push({ panelId, entry, score: connected + age })
   }
-  candidates.sort((a, b) => a.score - b.score)
+  // Demote highest score first (detached / coldest)
+  candidates.sort((a, b) => b.score - a.score)
   for (const c of candidates) {
     if (countLiveWebgl() < MAX_WEBGL_TERMINALS) break
     try { c.entry.webglAddon?.dispose() } catch { /* ignore */ }
@@ -131,8 +169,16 @@ function reloadWebglAddon(panelId: string, entry: RegistryEntry): void {
  * new WebglAddon (or a real panel resize) reliably restores glyphs. No PTY
  * resize / SIGWINCH — cols×rows stay put.
  */
-export function rebuildAllWebglRenderers(): void {
-  for (const [panelId, entry] of registry.entries()) {
+export function rebuildAllWebglRenderers(preferPanelId?: string): void {
+  // Hottest first so WebGL budget fills with focused / recent terminals.
+  const ordered = [...registry.entries()].sort((a, b) => {
+    if (preferPanelId) {
+      if (a[0] === preferPanelId) return -1
+      if (b[0] === preferPanelId) return 1
+    }
+    return (b[1].lastUsedAt ?? 0) - (a[1].lastUsedAt ?? 0)
+  })
+  for (const [panelId, entry] of ordered) {
     try {
       // Only touch terminals that are currently in the DOM.
       const el = (entry.terminal as unknown as { element?: HTMLElement }).element
@@ -239,11 +285,18 @@ export function looksLikeTuiFullRedraw(data: string): boolean {
  * redraws continuously; hard rebuild of all terminals every ~520ms destroyed
  * canvas FPS with ~10 open workers.
  */
+let tuiHardPreferPanelId: string | undefined
+
 export function scheduleTuiWebglHeal(
-  opts?: { hard?: boolean; reason?: 'output' | 'focus' | 'title' | 'attach' },
+  opts?: {
+    hard?: boolean
+    reason?: 'output' | 'focus' | 'title' | 'attach'
+    preferPanelId?: string
+  },
 ): void {
   // Streaming path must never arm hard rebuilds (see wireTerminalListeners).
   const wantHard = opts?.hard === true && opts?.reason !== 'output'
+  if (opts?.preferPanelId) tuiHardPreferPanelId = opts.preferPanelId
 
   if (tuiSoftTimer !== null) clearTimeout(tuiSoftTimer)
   tuiSoftTimer = setTimeout(() => {
@@ -267,12 +320,14 @@ export function scheduleTuiWebglHeal(
   tuiHardTimer = setTimeout(() => {
     tuiHardTimer = null
     tuiHardArmed = false
+    const prefer = tuiHardPreferPanelId
+    tuiHardPreferPanelId = undefined
     if (typeof document !== 'undefined' && document.body.classList.contains('canvas-interacting')) {
       scheduleZoomWebglRepaint()
       return
     }
-    // Hard path: dispose+recreate WebGL canvases (matches resize recovery).
-    rebuildAllWebglRenderers()
+    // Hard path: dispose+recreate WebGL canvases (prefer focused for budget).
+    rebuildAllWebglRenderers(prefer)
   }, TUI_HARD_HEAL_MS)
 }
 
@@ -287,6 +342,7 @@ export function cancelScheduledTuiWebglHeal(): void {
     tuiHardTimer = null
   }
   tuiHardArmed = false
+  tuiHardPreferPanelId = undefined
 }
 
 /**
@@ -433,6 +489,10 @@ export function attach(panelId: string, container: HTMLDivElement): void {
   // Force layout reflow so the browser has calculated the new container size
   // before we resize the terminal / WebGL canvas.
   void container.offsetHeight
+
+  // Preferred for WebGL budget (focused / visible attach).
+  markTerminalHot(panelId)
+  clearFreezeFrame(panelId)
 
   // Reload the WebGL addon — its internal canvas buffers are tied to the old
   // container dimensions and cannot survive a DOM reparent reliably.
@@ -597,6 +657,9 @@ export function detach(panelId: string, fromContainer?: HTMLElement): void {
   // this snapshot a dock tab switch (unmount → remount) loses the position and
   // the re-shown terminal jumps to the top.
   captureViewport(entry)
+
+  // Freeze frame BEFORE disposing WebGL (needs the live canvas pixels).
+  captureFreezeFrame(panelId)
 
   // Free a WebGL context slot while off-screen (IntersectionObserver hide /
   // dock tab). attach() reloads WebGL within the concurrent budget.
