@@ -785,6 +785,66 @@ const recruitPendingByMaestro = new Map<string, number>()
 /** Recent recruit name|role stamps for dedupe window. */
 const recruitRecentByMaestro = new Map<string, Map<string, number>>()
 
+/**
+ * Gap between opening NEW worker panels (createTerminal / createAgent).
+ * Reassign / reuse skip this — only cold opens are staggered so a burst of
+ * recruits does not spawn 10 PTYs in the same frame.
+ */
+export const WORKER_OPEN_STAGGER_MS = 5_000
+
+type WorkerOpenQueue = {
+  /** Resolvers waiting for their turn to open a panel. */
+  waiters: Array<() => void>
+  /** True while a slot is held (open in progress or post-open stagger). */
+  busy: boolean
+}
+
+const workerOpenQueueByMaestro = new Map<string, WorkerOpenQueue>()
+
+function getWorkerOpenQueue(maestroId: string): WorkerOpenQueue {
+  let q = workerOpenQueueByMaestro.get(maestroId)
+  if (!q) {
+    q = { waiters: [], busy: false }
+    workerOpenQueueByMaestro.set(maestroId, q)
+  }
+  return q
+}
+
+/** Wait until this maestro may open another NEW worker panel. */
+export function acquireWorkerOpenSlot(maestroId: string): Promise<void> {
+  const q = getWorkerOpenQueue(maestroId)
+  if (!q.busy && q.waiters.length === 0) {
+    q.busy = true
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    q.waiters.push(resolve)
+  })
+}
+
+/**
+ * Release the open slot and, after WORKER_OPEN_STAGGER_MS, admit the next waiter.
+ * Call from `finally` after createTerminal/createAgent (success or fail).
+ */
+export function releaseWorkerOpenSlot(maestroId: string, staggerMs = WORKER_OPEN_STAGGER_MS): void {
+  const q = getWorkerOpenQueue(maestroId)
+  const admitNext = () => {
+    const next = q.waiters.shift()
+    if (next) {
+      q.busy = true
+      next()
+    } else {
+      q.busy = false
+      if (q.waiters.length === 0) workerOpenQueueByMaestro.delete(maestroId)
+    }
+  }
+  if (staggerMs <= 0) {
+    admitNext()
+    return
+  }
+  setTimeout(admitNext, staggerMs)
+}
+
 function getRecruitRecentMap(maestroId: string): Map<string, number> {
   let m = recruitRecentByMaestro.get(maestroId)
   if (!m) {
@@ -809,6 +869,7 @@ export function getRecruitPendingCount(maestroId: string): number {
 export function resetRecruitPoolStateForTests(): void {
   recruitPendingByMaestro.clear()
   recruitRecentByMaestro.clear()
+  workerOpenQueueByMaestro.clear()
 }
 
 /** Bind workspace FS for queue ops (load/save under per-key lock). */
@@ -1413,6 +1474,29 @@ export function useOrquestra(): void {
           return
         }
 
+        // Stagger NEW panel opens (5s). First free slot runs immediately; the
+        // next waits WORKER_OPEN_STAGGER_MS after the previous create returns.
+        // Reassign/reuse paths above never reach here.
+        {
+          const qPeek = getWorkerOpenQueue(maestroId)
+          if (qPeek.busy || qPeek.waiters.length > 0) {
+            writeToMaestro(
+              maestroId,
+              `[orquestra] Staggering worker opens (${WORKER_OPEN_STAGGER_MS / 1000}s between new panels)…`,
+            )
+          }
+        }
+        await acquireWorkerOpenSlot(maestroId)
+        // Re-check workspace still valid after possible multi-second wait.
+        const wsAfterWait =
+          useAppStore.getState().workspaces.find((w) => w.id === ws.id)
+          ?? useAppStore.getState().workspaces[0]
+        if (!wsAfterWait) {
+          bumpRecruitPending(maestroId, -1)
+          releaseWorkerOpenSlot(maestroId, 0)
+          return
+        }
+
         const panelType = resolveAgentPanelType(args.agent, settings)
         const count = (recruitCountRef.current.get(maestroId) || 0) + 1
         recruitCountRef.current.set(maestroId, count)
@@ -1431,25 +1515,31 @@ export function useOrquestra(): void {
         let panelId: string | null = null
         try {
           if (panelType === 'agent') {
-            panelId = store.createAgent(ws.id, position)
+            panelId = store.createAgent(wsAfterWait.id, position)
           } else {
-            panelId = store.createTerminal(ws.id, undefined, position)
+            panelId = store.createTerminal(wsAfterWait.id, undefined, position)
           }
         } finally {
           bumpRecruitPending(maestroId, -1)
+          releaseWorkerOpenSlot(maestroId)
         }
 
         if (panelId) {
           workerPanelIds.add(panelId)
           namesMap.set(panelId, name)
-          store.updatePanelTitle(ws.id, panelId, name)
+          store.updatePanelTitle(wsAfterWait.id, panelId, name)
           runStore.noteRecruit({
             maestroPtyId: maestroId,
             panelId,
             name,
             role: args.role || '',
           })
-          void persistOrchestrationSnapshot(ws.rootPath || '', ws.id, maestroId, namesMap)
+          void persistOrchestrationSnapshot(
+            wsAfterWait.rootPath || '',
+            wsAfterWait.id,
+            maestroId,
+            namesMap,
+          )
           orq(`+ ${name} (${panelType})`)
 
           // Add visual orchestration arrow: maestro → worker
@@ -1488,10 +1578,10 @@ export function useOrquestra(): void {
             const roleFileBody = args.role
               ? buildWorkerRoleFileContent(name, args.role)
               : ''
-            if (ws.rootPath && roleFileBody) {
-              const absRole = ws.rootPath.replace(/[/\\]+$/, '')
+            if (wsAfterWait.rootPath && roleFileBody) {
+              const absRole = wsAfterWait.rootPath.replace(/[/\\]+$/, '')
                 + '/' + roleFileRel.replace(/\\/g, '/')
-              void window.electronAPI?.fsWriteFile?.(absRole, roleFileBody, ws.id).catch(() => {
+              void window.electronAPI?.fsWriteFile?.(absRole, roleFileBody, wsAfterWait.id).catch(() => {
                 // best-effort
               })
             }
