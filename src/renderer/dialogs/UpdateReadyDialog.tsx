@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { ArrowClockwise } from '@phosphor-icons/react'
 import type { UpdateStatus } from '../../shared/electron-api'
 import { OrquestraLogo } from '../ui/OrquestraLogo'
-import headerImg from '../assets/welcome-header.jpg'
 import { useTranslation } from '../i18n/useTranslation'
 
 // In-app "update ready" modal. Shown once electron-updater has downloaded an
@@ -77,22 +76,16 @@ export function UpdateReadyDialog() {
       <div
         className={`relative w-[420px] max-w-[92vw] rounded-xl overflow-hidden border border-strong bg-surface-2/95 backdrop-blur-xl shadow-[0_24px_64px_rgba(0,0,0,0.55)] transition-all duration-300 ease-out ${entered ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.98] translate-y-1'}`}
       >
-        {/* Header image — blurred and fading out, visible only at the very top. */}
-        <img
-          src={headerImg}
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 w-full h-[200px] object-cover select-none"
+        {/* Header background — solid dark gradient. */}
+        <div className="pointer-events-none absolute top-0 left-0 w-full h-[200px] select-none"
           style={{
-            filter: 'blur(2.5px)',
-            opacity: 0.85,
-            transform: 'scale(1.06)',
+            background: 'linear-gradient(180deg, #1e1e24 0%, #141418 100%)',
             WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.72) 28%, rgba(0,0,0,0.42) 52%, rgba(0,0,0,0.16) 74%, transparent 100%)',
             maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.72) 28%, rgba(0,0,0,0.42) 52%, rgba(0,0,0,0.16) 74%, transparent 100%)',
           }}
         />
 
-        {/* Header content over the image. */}
+        {/* Header content. */}
         <div className="relative flex flex-col items-center pt-9 pb-6">
           <div
             className="relative w-16 h-16 rounded-[18px] flex items-center justify-center"
