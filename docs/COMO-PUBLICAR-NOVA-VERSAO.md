@@ -246,7 +246,7 @@ v1.5.1/
 
 O `latest.yml` fica na raiz e aponta pra pasta da versão mais recente.
 
-**Após publicar uma nova versão,** apague as pastas das versões antigas (ex.: v1.3.2, v1.3.3, v1.3.4, v1.5.0) no bucket. Faça isso manualmente pelo dashboard do Cloudflare R2 ou com S3 CLI.
+O script `npm run publish:release` **já faz a limpeza**: após o upload, apaga tudo no R2 que não seja `latest.yml` + as **2 pastas de versão mais recentes** (atual + backup). Artefatos antigos ficam só no GitHub (tags/releases).
 
 ---
 
