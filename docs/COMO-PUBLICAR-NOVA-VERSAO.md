@@ -13,18 +13,34 @@ O repositório GitHub pode ficar **privado**. Só os arquivos de release (`.exe`
 2. Gera o .exe / .zip (package:win)
 3. Envia os arquivos para o Cloudflare R2 (publish:release)
 4. O app dos usuários lê latest.yml no R2 e oferece a atualização
+5. O site (orquestra.space/dashboard) lê o MESMO latest.yml → botão Download
 ```
 
 | Quem | O que usa |
 |------|-----------|
-| Usuário novo | Baixa `Orquestra Setup x.y.z.exe` (você manda o link ou o arquivo) |
+| Usuário novo | Botão **Baixar** no dashboard → link direto no R2 |
 | Usuário que já tem o app | Auto-update + botão **Verificar atualizações** na sidebar |
+| Site orquestra.space | **Não** hospeda o `.exe`. Só aponta para o R2 |
 
 **Feed público (não é segredo):**  
 https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev
 
-Arquivo que o updater consulta:  
+Arquivo que o updater **e o site** consultam:  
 https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev/latest.yml
+
+### Site (orquestra-website) — não precisa redeploy a cada versão
+
+O dashboard busca `latest.yml` no R2 (cache ~5 min). Depois do `publish:release`:
+
+1. O botão **Instalador (.exe)** / **Portable (.zip)** já aponta para a versão nova  
+2. **Não** é necessário alterar `NEXT_PUBLIC_APP_VERSION` nem fazer deploy do site  
+3. Só configure uma vez no Vercel/host:
+
+```text
+NEXT_PUBLIC_RELEASES_URL=https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev
+```
+
+(Código: `orquestra-website/src/lib/releases.ts` + `DownloadCard` no dashboard.)
 
 ---
 
@@ -132,15 +148,13 @@ $env:ORQUESTRA_RELEASES_URL = "https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.d
 npm run publish:release
 ```
 
-O script sobe os arquivos de `release/` para o bucket.
+O script sobe **só a versão atual** (+ anterior como backup) e **apaga o resto** do R2 (máx. 2 pastas + `latest.yml`).
 
-Mensagem de sucesso esperada: `Upload complete` e o link do feed.
-
-> **💰 Limpeza:** R2 é pago por armazenamento. Após publicar, apague as pastas de versões antigas (ex.: v1.3.2) pelo dashboard do Cloudflare R2. Mantenha só as **2 versões mais recentes** (atual + anterior).
+Mensagem de sucesso esperada: `Upload complete`, prune com pastas mantidas, e o link do feed.
 
 ---
 
-### Passo 4 — Conferir se o feed está público
+### Passo 4 — Conferir feed + botão do site
 
 No navegador, abra:
 
@@ -151,23 +165,32 @@ https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev/latest.yml
 Deve mostrar algo como:
 
 ```yaml
-version: 1.3.3
+version: 1.5.7
 files:
-  - url: Orquestra Setup 1.3.3.exe
+  - url: v1.5.7/Orquestra Setup 1.5.7.exe
     ...
+path: v1.5.7/Orquestra Setup 1.5.7.exe
 ```
 
-- **404 / Access Denied** → público desligado no bucket ou arquivo não subiu.  
+Checklist:
+
+- [ ] `latest.yml` com a versão publicada
+- [ ] Instalador responde 200: `…/vX.Y.Z/Orquestra%20Setup%20X.Y.Z.exe`
+- [ ] https://www.orquestra.space/dashboard → card **Baixar Orquestra** com `vX.Y.Z` (cache do site ~5 min)
+- [ ] **Não** precisa redeploy do website só por causa da versão do app
+
+- **404 / Access Denied** → público desligado no bucket ou arquivo não subiu.
 - **version errada** → subiu build antigo; rode de novo o passo 2 e 3.
+- **Site ainda na versão antiga** → espere o revalidate (~5 min) ou confira `NEXT_PUBLIC_RELEASES_URL` no Vercel.
 
 ---
 
 ### Passo 5 — Distribuir e testar update
 
 **Instalação nova (usuário sem o app):**  
-Envie o arquivo:
+Link do dashboard ou direto no R2:
 
-`release\Orquestra Setup 1.3.3.exe`
+`https://pub-1fcb183da34e46ba9cbbfa5cda797554.r2.dev/vX.Y.Z/Orquestra%20Setup%20X.Y.Z.exe`
 
 **Quem já tem versão antiga (ex.: 1.3.2):**
 
