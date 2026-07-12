@@ -82,7 +82,7 @@ import {
   installOrquestraCliToWorkspace,
   resolveMaestroCliDir,
 } from '../maestro/maestroAssets'
-import { buildOrquestraRunIdExport } from '../maestro/shellEnvStamp'
+import { buildMaestroArmSystemNote } from '../maestro/shellEnvStamp'
 import {
   mergeMaestroIntoClaudeLocal,
   removeMaestroFromClaudeLocal,
@@ -2020,19 +2020,13 @@ export function registerHandlers(): void {
           .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
           .catch(() => { /* non-fatal */ })
 
-        // Stamp ORQUESTRA_RUN_ID into THIS Maestro's shell (correct cmd/ps/bash dialect).
-        // Repeat after short delays so agents already mid-session still pick it up when
-        // the shell processes the line (and first stamp is not lost in banner noise).
+        // Tell the agent the run id WITHOUT pasting a shell `set/export` line.
+        // Agent TUIs (Verboo/Claude/Grok) treat PTY keystrokes as a user turn —
+        // stamping `set ORQUESTRA_RUN_ID=…` made the model "complete" that turn
+        // and then invent a multi-worker plan (calculator/html+css+js) from the
+        // workspace with no real user request. System note: idle until next human msg.
         try {
-          const shellPath = terminalShellById.get(terminalId) || process.env.COMSPEC || process.env.SHELL
-          const exportLine = buildOrquestraRunIdExport(runId, shellPath)
-          writeTerminal(terminalId, exportLine)
-          setTimeout(() => {
-            try { writeTerminal(terminalId, exportLine) } catch { /* gone */ }
-          }, 800)
-          setTimeout(() => {
-            try { writeTerminal(terminalId, exportLine) } catch { /* gone */ }
-          }, 2500)
+          writeTerminal(terminalId, buildMaestroArmSystemNote(runId))
         } catch { /* non-fatal */ }
 
         // 8. Start or rebind workspace demux watcher

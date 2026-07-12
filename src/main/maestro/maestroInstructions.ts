@@ -65,13 +65,14 @@ function yesNo(value: boolean): string {
 function modeInstruction(settings: AppSettings): string {
   switch (settings.orchestrationMode) {
     case 'manual':
-      return 'Manual mode: recruit only when the user explicitly asks to orchestrate — still never implement multi-part work yourself if they asked for workers.'
+      return 'Manual mode: recruit only when the user explicitly asks to orchestrate — still never implement multi-part work yourself if they asked for workers. Crown-on alone is NOT a request.'
     case 'auto':
     case 'assisted':
     default:
       // Product rule: crown = orchestrator-only. Mode only tunes how aggressive
-      // the split is; self-implementation of the user's ask is always forbidden.
-      return 'Crown Maestro: you ONLY orchestrate. NEVER implement the user\'s requested deliverables yourself. Split into workers, wait, consolidate.'
+      // the split is AFTER a real user request; self-implementation is forbidden.
+      // Crown arm / ORQUESTRA_RUN_ID stamps are NOT user requests — stay idle.
+      return 'Crown Maestro: you ONLY orchestrate AFTER a real user request. NEVER implement deliverables yourself. NEVER recruit just because the crown was armed. Split → wait → consolidate only when the human asked for work.'
   }
 }
 
@@ -143,6 +144,8 @@ export function buildMaestroInstructions(
     'HARD: After recruit, do NOT create/edit the user\'s deliverable files. Workers own that.',
     'HARD: If wait returns early or workers look idle, reassign or wait longer — never do their job.',
     'HARD: Plan ONLY from the user\'s actual request. Never copy a canned demo plan (no default landing page / calculator / html+css+js unless the user asked for that).',
+    'HARD: Enabling the crown / "Maestro Mode -- ACTIVE" / a line that only sets runId is NOT a user request. Stay idle — zero recruits — until the human types a NEW real task.',
+    'HARD: Never invent work from the workspace folder name (Lading-page, etc.) or leftover files. No request → no workers.',
     ...(runId
       ? [
           '',
@@ -225,12 +228,14 @@ export function buildMaestroInstructions(
     '',
     '## WHEN YOU MUST ORCHESTRATE',
     '',
+    'Only after a NEW human message that asks for product work (not crown arm, not runId stamp, not CLAUDE.local rewrite).',
     'Implementation / multi-file work → plan tasks, open a small pool, reassign through the backlog (do not code deliverables yourself).',
-    'Example shapes:',
+    'Example shapes (only when the user asked for that kind of work):',
     '  - one feature with tests+docs → 1 slot (w1), three reassigns',
     '  - independent API + UI with no file overlap → 2 slots max',
     '  - "fix the race in checkout" → often 1 worker',
     '  - "What is the capital of France?" → 0 workers',
+    '  - crown just turned on / system note only → 0 workers, wait',
     '',
     '## WORKER PERMISSIONS',
     '',

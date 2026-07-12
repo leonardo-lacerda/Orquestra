@@ -648,15 +648,16 @@ export function workerRoleWithPolicy(
   const fileHint = roleFilePath?.trim()
     ? ` Full brief: ${roleFilePath.trim()}.`
     : ''
-  // Function id first; pure task second; explicit "start now / use tools".
+  // Keep inject SHORT. Long "You are the worker-html worker. Create a full
+  // calculator…" dumps look like broken skill injection and flood the agent.
+  // Full brief stays in ROLE.md when roleFilePath is provided.
   const head = fn
-    ? `You are the "${fn}" worker. Do this job now: ${task}.${fileHint}`
-    : `Do this job now: ${task}.${fileHint}`
+    ? `[ORQUESTRADOR→WORKER] slot=${fn}. Job: ${task}.${fileHint}`
+    : `[ORQUESTRADOR→WORKER] Job: ${task}.${fileHint}`
 
   const bits: string[] = [
     head,
-    'Start immediately. Use your tools to write the files or complete the work — do not only plan or echo the task.',
-    'Do not wait for other workers.',
+    'Start now with tools. Do not only plan. Do not wait for other workers.',
   ]
   if (!settings.orchestrationAllowNestedWorkers) {
     bits.push('Do not recruit other workers.')

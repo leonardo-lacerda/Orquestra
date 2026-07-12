@@ -125,10 +125,10 @@ describe('useOrquestra helpers', () => {
       '.orquestra/workers/html/ROLE.md',
     )
 
-    expect(role).toContain('You are the "html" worker')
-    expect(role).toContain('Do this job now: Create only index.html structure')
-    expect(role).toContain('Start immediately')
-    expect(role).toContain('Use your tools')
+    expect(role).toContain('[ORQUESTRADOR→WORKER]')
+    expect(role).toContain('slot=html')
+    expect(role).toContain('Job: Create only index.html structure')
+    expect(role).toContain('Start now with tools')
     expect(role).toContain('Do not recruit other workers')
     expect(role).toContain('.orquestra/workers/html/ROLE.md')
     // CRITICAL: inject must NOT contain the completion token (false idle / 19s wait).
@@ -136,7 +136,6 @@ describe('useOrquestra helpers', () => {
     expect(role).not.toContain('ORQUESTRA_WORKER_DONE')
     // Must stay single-line and free of the old policy wall.
     expect(role).not.toContain('\n')
-    expect(role).not.toContain('[ORQUESTRADOR->WORKER]')
     expect(role).not.toContain('no network')
     expect(role).not.toContain('.orquestra-results')
   })
@@ -448,8 +447,9 @@ describe('useOrquestra helpers', () => {
       'html',
       '.orquestra/workers/html/ROLE.md',
     )
-    expect(text).toContain('You are the "html" worker')
-    expect(text).toContain('Do this job now: Create only index.html structure')
+    expect(text).toContain('[ORQUESTRADOR→WORKER]')
+    expect(text).toContain('slot=html')
+    expect(text).toContain('Job: Create only index.html structure')
     expect(text).toContain('.orquestra/context/panel-m/latest.md')
     expect(text).not.toContain('linked scratch content')
     expect(text).not.toContain('\n')

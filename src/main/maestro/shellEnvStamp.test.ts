@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildOrquestraRunIdExport, shellFamilyFromPath } from './shellEnvStamp'
+import {
+  buildMaestroArmSystemNote,
+  buildOrquestraRunIdExport,
+  shellFamilyFromPath,
+} from './shellEnvStamp'
 
 describe('shellFamilyFromPath', () => {
   it('detects cmd, powershell, bash', () => {
@@ -40,5 +44,21 @@ describe('buildOrquestraRunIdExport', () => {
     const line = buildOrquestraRunIdExport("run'; rm -rf /", 'cmd.exe', 'win32')
     expect(line).not.toContain(';')
     expect(line).toMatch(/ORQUESTRA_RUN_ID=run/)
+  })
+})
+
+describe('buildMaestroArmSystemNote', () => {
+  it('is clearly not a product request and forbids inventing work', () => {
+    const note = buildMaestroArmSystemNote('run-abc123')
+    expect(note).toContain('[ORQUESTRA SYSTEM')
+    expect(note).toContain('run-abc123')
+    expect(note).toMatch(/--run run-abc123/)
+    expect(note).toMatch(/Do NOT recruit/i)
+    expect(note).toMatch(/Waiting for your request/i)
+    expect(note).not.toMatch(/^set /)
+    expect(note).not.toContain('$env:')
+    expect(note).not.toContain('export ORQUESTRA')
+    // Mentions forbidden demo products only as "do not invent …"
+    expect(note).toMatch(/Do NOT invent a calculator/i)
   })
 })
