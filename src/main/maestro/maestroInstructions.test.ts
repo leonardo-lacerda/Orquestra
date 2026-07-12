@@ -51,7 +51,7 @@ describe('maestroInstructions', () => {
     expect(instructions).toContain('node .orquestra/cli/orquestra.cjs dismiss')
     expect(instructions).toMatch(/Preferred pool loop|recruit --name w1/i)
     expect(instructions).toMatch(/do not invent new names to bypass|do not bypass with a new --name/i)
-    expect(instructions).toMatch(/NEVER default to html\/css\/js|canned demo plan/i)
+    expect(instructions).toMatch(/NEVER invent a stack or product|Plan ONLY from the user's actual request/i)
     expect(instructions).toContain('Dispatch mode: pool_queue')
     expect(instructions).toContain('Auto-drain queue when a worker finishes: yes')
     expect(instructions).toMatch(/Max worker --role length.*1000/)

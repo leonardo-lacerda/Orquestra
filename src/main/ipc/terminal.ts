@@ -2082,13 +2082,13 @@ export function registerHandlers(): void {
           .then((m) => m.reapplyLinkedContextClaudeInstructionsLocal(workspacePath!))
           .catch(() => { /* non-fatal */ })
 
-        // Tell the agent the run id WITHOUT pasting a shell `set/export` line.
-        // Agent TUIs (Verboo/Claude/Grok) treat PTY keystrokes as a user turn —
-        // stamping `set ORQUESTRA_RUN_ID=…` made the model "complete" that turn
-        // and then invent a multi-worker plan (calculator/html+css+js) from the
-        // workspace with no real user request. System note: idle until next human msg.
+        // Short shell-safe ready line (echo/Write-Host/printf) — not a wall of
+        // "system" text cmd.exe tries to execute, and not a product request.
         try {
-          writeTerminal(terminalId, buildMaestroArmSystemNote(runId))
+          writeTerminal(
+            terminalId,
+            buildMaestroArmSystemNote(runId, terminalShellById.get(terminalId)),
+          )
         } catch { /* non-fatal */ }
 
         // 8. Start or rebind workspace demux watcher

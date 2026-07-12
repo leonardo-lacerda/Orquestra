@@ -48,17 +48,23 @@ describe('buildOrquestraRunIdExport', () => {
 })
 
 describe('buildMaestroArmSystemNote', () => {
-  it('is clearly not a product request and forbids inventing work', () => {
-    const note = buildMaestroArmSystemNote('run-abc123')
-    expect(note).toContain('[ORQUESTRA SYSTEM')
+  it('is a short ready line with runId (not a product request / demo rant)', () => {
+    const note = buildMaestroArmSystemNote('run-abc123', 'cmd.exe', 'win32')
+    expect(note).toMatch(/^echo /)
     expect(note).toContain('run-abc123')
     expect(note).toMatch(/--run run-abc123/)
-    expect(note).toMatch(/Do NOT recruit/i)
-    expect(note).toMatch(/Waiting for your request/i)
+    expect(note).toMatch(/Maestro ready/i)
+    expect(note).toMatch(/Idle until your next request/i)
+    // Never dump the old wall-of-text or demo-product blacklist into the shell
+    expect(note).not.toMatch(/calculator/i)
+    expect(note).not.toMatch(/landing page/i)
+    expect(note).not.toMatch(/\[ORQUESTRA SYSTEM/i)
     expect(note).not.toMatch(/^set /)
     expect(note).not.toContain('$env:')
-    expect(note).not.toContain('export ORQUESTRA')
-    // Mentions forbidden demo products only as "do not invent …"
-    expect(note).toMatch(/Do NOT invent a calculator/i)
+  })
+
+  it('uses Write-Host on powershell and printf on bash', () => {
+    expect(buildMaestroArmSystemNote('run-1', 'powershell.exe', 'win32')).toMatch(/^Write-Host /)
+    expect(buildMaestroArmSystemNote('run-1', '/bin/zsh', 'darwin')).toMatch(/^printf /)
   })
 })

@@ -60,20 +60,38 @@ export function buildOrquestraRunIdExport(
 }
 
 /**
- * Text written to the Maestro agent PTY when the crown is armed.
+ * Short line written to the Maestro PTY when the crown is armed.
  *
- * CRITICAL: must NOT look like a product request. Pasting `set ORQUESTRA_RUN_ID=…`
- * into an agent TUI is treated as a user turn — the model "runs" it then invents
- * a demo plan (calculator / html+css+js) from the workspace. This note only
- * announces the run id and forbids any recruit until a NEW real user message.
+ * Goals:
+ * - Tell the agent (if any) the runId and to stay idle until a real user message
+ * - Not look like a product request that triggers recruits
+ * - Be safe when the PTY is still a plain shell (cmd.exe must not try to "run"
+ *   a multi-line English paragraph as a command — that produced the infamous
+ *   `'[ORQUESTRA' não é reconhecido…` spam)
  */
-export function buildMaestroArmSystemNote(runId: string): string {
+export function buildMaestroArmSystemNote(
+  runId: string,
+  shellPath?: string | null,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const safe = sanitizeRunId(runId)
-  return (
-    `[ORQUESTRA SYSTEM — not a user task] Maestro crown armed. Your runId is ${safe}. ` +
-    `On every CLI call pass --run ${safe} (example: node .orquestra/cli/orquestra.cjs wait --run ${safe} --workers w1 --timeout 300). ` +
-    `Do NOT recruit, reassign, plan a backlog, invent workers, or start any product work from this message. ` +
-    `Do NOT invent a calculator, landing page, or html/css/js split from the folder name. ` +
-    `Stay idle until the human sends a NEW real request after this line. Reply with one short line only: "Maestro ready (run ${safe}). Waiting for your request."\r`
-  )
+  // One short professional line — no demos, no "don't invent a calculator".
+  const msg =
+    `Maestro ready (run ${safe}). Pass --run ${safe} on CLI. Idle until your next request.`
+
+  const family =
+    platform === 'win32'
+      ? shellFamilyFromPath(shellPath || process.env.COMSPEC || 'cmd.exe')
+      : shellFamilyFromPath(shellPath || process.env.SHELL || 'bash')
+
+  switch (family) {
+    case 'cmd':
+      // echo so cmd never treats the note as a command name
+      return `echo ${msg}\r\n`
+    case 'powershell':
+      return `Write-Host '${msg.replace(/'/g, "''")}'\r`
+    case 'bash':
+    default:
+      return `printf '%s\\n' '${msg.replace(/'/g, `'\\''`)}'\n`
+  }
 }

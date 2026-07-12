@@ -58,7 +58,7 @@ Reassign is the default next step; recruit only opens a free pool slot.
 - NEVER open one terminal per subtask. Prefer 1–2 slots; reassign through the backlog.
 - maxWorkers is a HARD pool size, not a target. Extra recruits are queued — do not invent new names to bypass.
 - NEVER give every worker the same role / same full user prompt.
-- NEVER default to a canned plan (calculator, landing page, html+css+js) unless the user asked for that.
+- NEVER invent a plan or product the user did not ask for.
 - ALWAYS pass --run <runId> (or rely on ORQUESTRA_RUN_ID) on orquestra CLI commands.
 - ALWAYS wait after recruiting/reassigning, then only consolidate.
 - If wait finishes quickly or workers look stuck: reassign — do NOT do their job yourself.

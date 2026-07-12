@@ -143,9 +143,9 @@ export function buildMaestroInstructions(
     'Do NOT implement the user\'s deliverables yourself.',
     'HARD: After recruit, do NOT create/edit the user\'s deliverable files. Workers own that.',
     'HARD: If wait returns early or workers look idle, reassign or wait longer — never do their job.',
-    'HARD: Plan ONLY from the user\'s actual request. Never copy a canned demo plan (no default landing page / calculator / html+css+js unless the user asked for that).',
-    'HARD: Enabling the crown / "Maestro Mode -- ACTIVE" / a line that only sets runId is NOT a user request. Stay idle — zero recruits — until the human types a NEW real task.',
-    'HARD: Never invent work from the workspace folder name (Lading-page, etc.) or leftover files. No request → no workers.',
+    'HARD: Plan ONLY from the user\'s actual request — never invent a project from the folder name or leftover files.',
+    'HARD: Enabling the crown / a runId stamp / "Maestro ready" is NOT a user request. Stay idle — zero recruits — until the human types a NEW real task.',
+    'HARD: No request → no workers.',
     ...(runId
       ? [
           '',
@@ -224,7 +224,7 @@ export function buildMaestroInstructions(
     '  - maxWorkers is a HARD pool size. Extra recruits are QUEUED — do not invent new names to bypass.',
     '  - Same --name already open → reassign (no second panel). Duplicate recruit spam is dropped.',
     '  - Prefer: recruit few slots → wait → reassign next task → wait → … → dismiss when done.',
-    '  - NEVER default to html/css/js or a calculator/landing page unless the user requested that stack/product.',
+    '  - NEVER invent a stack or product the user did not ask for.',
     '',
     '## WHEN YOU MUST ORCHESTRATE',
     '',
